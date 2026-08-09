@@ -1,4 +1,4 @@
-const key = "[SILICONFLOW-KEY-REDACTED]";
+const key = "process.env.SILICONFLOW_API_KEY";
 const url = "https://api.deepseek.com/v1/chat/completions";
 (async () => {
   const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${key}` },
