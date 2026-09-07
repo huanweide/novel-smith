@@ -5,11 +5,14 @@ const prismaMock = vi.hoisted(() => ({
   project: { findUnique: vi.fn() },
   storyNode: { findUnique: vi.fn(), update: vi.fn() },
 }));
-const reviewMock = vi.hoisted(() => ({ runEditorApply: vi.fn() }));
+const reviewMock = vi.hoisted(() => ({ runEditorApply: vi.fn(), runEditorLocate: vi.fn() }));
 const versionsMock = vi.hoisted(() => ({ snapshotRevision: vi.fn() }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/core/editor/review", () => ({ runEditorApply: reviewMock.runEditorApply }));
+vi.mock("@/core/editor/review", () => ({
+  runEditorApply: reviewMock.runEditorApply,
+  runEditorLocate: reviewMock.runEditorLocate,
+}));
 vi.mock("@/lib/versions", () => ({ snapshotRevision: versionsMock.snapshotRevision }));
 vi.mock("next/server", () => ({
   NextResponse: {
@@ -40,6 +43,8 @@ describe("POST /api/projects/[id]/editor-apply", () => {
     });
     prismaMock.storyNode.update.mockResolvedValue({ id: "n1", wordCount: 210 });
     reviewMock.runEditorApply.mockResolvedValue("改写后的正文".repeat(50));
+    // 默认给不出可用锚点 → 回退整章改写（保持本文件既有用例的原语义）
+    reviewMock.runEditorLocate.mockResolvedValue([]);
     versionsMock.snapshotRevision.mockResolvedValue(undefined);
   });
 
@@ -102,5 +107,44 @@ describe("POST /api/projects/[id]/editor-apply", () => {
     );
     expect(res.payload.summary.failed).toBe(1);
     expect(res.payload.summary.ok).toBe(1);
+  });
+
+  it("按位置局部替换：锚点命中则只改那一处，不重写全文", async () => {
+    reviewMock.runEditorLocate.mockResolvedValue([
+      { anchor: "原文正", replacement: "改后" },
+    ]);
+    const res: any = await POST(makeReq({ items: [{ nodeId: "n1", suggestions: SUG }] }), makeParams("p1"));
+
+    expect(res.payload.applied[0].mode).toBe("patch");
+    expect(res.payload.applied[0].hit).toBe(1);
+    expect(res.payload.applied[0].total).toBe(1);
+    // 走的是局部替换，整章改写不该被调用
+    expect(reviewMock.runEditorApply).not.toHaveBeenCalled();
+
+    const data = prismaMock.storyNode.update.mock.calls[0][0].data;
+    expect(data.content.startsWith("改后")).toBe(true); // 锚点处被替换
+    expect(data.content).toContain("原文正文"); // 其余原文一字未动
+    expect(data.content.length).toBeGreaterThan(190); // 篇幅基本不变（只动了一小段）
+  });
+
+  it("锚点全部未命中：自动回退整章改写", async () => {
+    reviewMock.runEditorLocate.mockResolvedValue([
+      { anchor: "正文里根本不存在的片段", replacement: "x" },
+    ]);
+    const res: any = await POST(makeReq({ items: [{ nodeId: "n1", suggestions: SUG }] }), makeParams("p1"));
+
+    expect(res.payload.applied[0].mode).toBe("rewrite");
+    expect(res.payload.applied[0].hit).toBe(0);
+    expect(reviewMock.runEditorApply).toHaveBeenCalledOnce();
+    expect(res.payload.summary.ok).toBe(1);
+  });
+
+  it("定位阶段报错：不中断，静默回退整章改写", async () => {
+    reviewMock.runEditorLocate.mockRejectedValue(new Error("LLM 不可用"));
+    const res: any = await POST(makeReq({ items: [{ nodeId: "n1", suggestions: SUG }] }), makeParams("p1"));
+
+    expect(res.payload.applied[0].mode).toBe("rewrite");
+    expect(res.payload.applied[0].ok).toBe(true);
+    expect(reviewMock.runEditorApply).toHaveBeenCalledOnce();
   });
 });

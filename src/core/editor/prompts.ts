@@ -9,6 +9,7 @@
  */
 
 import type { PublishPlatform } from "@/core/publish/pipeline";
+import { applyTargetedFixReplacement } from "@/lib/targeted-fix";
 
 export type EditorRoleId = "fanqie" | "qidian" | "jjwxc" | "wechat" | "reader" | "custom";
 
@@ -281,4 +282,120 @@ ${content}
 ${items}
 
 请输出改写后的完整正文：`;
+}
+
+// ─── 定位 + 局部替换：让 LLM 给出「原文锚点 + 替换片段」而非重写全文 ───
+
+export interface LocatePatch {
+  /** 原文中要被替换的精确片段（需与正文逐字一致，用于子串精确匹配） */
+  anchor: string;
+  /** 替换后的新文本 */
+  replacement: string;
+}
+
+/**
+ * 组装「定位要改的那一小段」的提示词。
+ *
+ * 为什么要这一步：让模型整章重写，会把「没要求改的地方」一起改掉，且长章易被截断。
+ * 改为先让模型指出「要改的那一小段原文」（anchor，必须与正文逐字一致），
+ * 再由后端用子串精确匹配做局部替换——其余内容一字不动，风险最小。
+ */
+export function buildLocatePrompt(
+  content: string,
+  suggestions: Array<{ location?: string; issue?: string; suggestion?: string; rewriteHint?: string }>,
+): string {
+  const items = suggestions
+    .map((s, i) => {
+      const parts = [`位置：${s.location || "（按上下文判断）"}`, `问题：${s.issue || "—"}`, `改法：${s.suggestion || "—"}`];
+      if (s.rewriteHint) parts.push(`微调指令：${s.rewriteHint}`);
+      return `${i + 1}. ${parts.join("；")}`;
+    })
+    .join("\n");
+
+  return `你是精准改写执行编辑。下面是某一章的正文，以及针对它的几条审稿意见。
+请为每条意见，在正文中定位「需要改动的那一小段原文」，并给出替换后的新文本。
+
+要求（违反即不合格）：
+- anchor：必须是正文中**逐字完全一致**的一小段原文，长度以 20-120 字为宜，确保它在本章里只出现一次；严禁自己改写 anchor、严禁添字漏字换标点。
+- replacement：只写「替换掉 anchor 之后」的新文本；文风、人称、视角必须与前后文一致。
+- 严禁重写全文、严禁输出 anchor 与 replacement 之外的任何正文内容。
+- 某条意见不需要改动正文（或你在正文里找不到对应位置）就不要输出该条，不要硬凑。
+- 直接输出严格 JSON，不要 markdown 代码块、不要解释。
+
+【正文】
+${content}
+
+【审稿意见】
+${items}
+
+请严格只输出如下 JSON：
+{
+  "patches": [
+    {"anchor": "正文中与上面逐字一致的片段", "replacement": "替换后的文本"}
+  ]
+}`;
+}
+
+/** 解析定位结果；畸形/空内容一律返回空数组（由调用方决定是否回退整章改写） */
+export function parseLocateJson(raw: string): LocatePatch[] {
+  let text = (raw || "").trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first >= 0 && last > first) text = text.slice(first, last + 1);
+
+  let obj: any = {};
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    return [];
+  }
+
+  const arr = Array.isArray(obj.patches) ? obj.patches : [];
+  return arr
+    .filter((p: any) => p && typeof p.anchor === "string" && p.anchor.trim())
+    .map((p: any) => ({
+      anchor: String(p.anchor),
+      replacement: String(p.replacement ?? ""),
+    }));
+}
+
+/**
+ * 把定位到的补丁按「原文出现位置倒序」应用到正文。
+ *
+ * 为什么倒序：从后往前替换，前面的改动不会影响尚未处理的锚点在原文中的下标，
+ * 避免多处修改时索引错位（正序替换会让后面的 anchor 位置整体偏移）。
+ *
+ * @returns 命中并成功替换的条数、总条数、替换后的正文
+ */
+export function applyPatches(
+  content: string,
+  patches: LocatePatch[],
+): { content: string; hit: number; total: number; missed: string[] } {
+  const src = content || "";
+  const total = patches.length;
+  if (total === 0) return { content: src, hit: 0, total: 0, missed: [] };
+
+  // 先在「原文」上算下标，过滤掉未命中的
+  const located: Array<{ index: number; len: number; replacement: string }> = [];
+  const missed: string[] = [];
+  for (const p of patches) {
+    const idx = src.indexOf(p.anchor);
+    if (idx === -1) {
+      missed.push(p.anchor.slice(0, 20));
+      continue;
+    }
+    located.push({ index: idx, len: p.anchor.length, replacement: p.replacement });
+  }
+
+  // 倒序应用
+  located.sort((a, b) => b.index - a.index);
+  let out = src;
+  for (const l of located) {
+    const fix = applyTargetedFixReplacement(out, out.slice(l.index, l.index + l.len), l.replacement);
+    if (fix.ok && fix.content) out = fix.content;
+  }
+
+  return { content: out, hit: located.length, total, missed };
 }

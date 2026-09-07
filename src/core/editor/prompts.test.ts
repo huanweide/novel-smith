@@ -15,6 +15,9 @@ import {
   parseReviewJson,
   buildPromptForTune,
   buildApplyUserPrompt,
+  buildLocatePrompt,
+  parseLocateJson,
+  applyPatches,
   type ReviewChapterInput,
 } from "./prompts";
 
@@ -128,5 +131,89 @@ describe("buildApplyUserPrompt", () => {
     expect(p).toContain("合并两句");
     expect(p).toContain("不要重写全文");
     expect(p).toContain("完整章节正文");
+  });
+});
+
+describe("buildLocatePrompt", () => {
+  it("要求模型给原文锚点 + 替换片段，且明令禁止重写全文", () => {
+    const p = buildLocatePrompt("正文内容", [{ location: "第2段", issue: "拖沓", suggestion: "精简" }]);
+    expect(p).toContain("正文内容");
+    expect(p).toContain("第2段");
+    expect(p).toContain('"patches"');
+    expect(p).toContain("anchor");
+    expect(p).toContain("逐字完全一致");
+    expect(p).toContain("严禁重写全文");
+  });
+});
+
+describe("parseLocateJson", () => {
+  it("脱掉围栏并解析出 patches", () => {
+    const raw =
+      "```json\n" +
+      JSON.stringify({ patches: [{ anchor: "原文片段", replacement: "新文本" }] }) +
+      "\n```";
+    const patches = parseLocateJson(raw);
+    expect(patches).toHaveLength(1);
+    expect(patches[0].anchor).toBe("原文片段");
+    expect(patches[0].replacement).toBe("新文本");
+  });
+
+  it("畸形 JSON 返回空数组（由调用方回退整章改写）", () => {
+    expect(parseLocateJson("不是json")).toEqual([]);
+    expect(parseLocateJson("")).toEqual([]);
+  });
+
+  it("过滤掉 anchor 为空的无效补丁", () => {
+    const raw = JSON.stringify({
+      patches: [{ anchor: "  ", replacement: "x" }, { anchor: "有效", replacement: "y" }],
+    });
+    expect(parseLocateJson(raw)).toHaveLength(1);
+  });
+});
+
+describe("applyPatches", () => {
+  it("单处替换：只改锚点那一段，其余一字不动", () => {
+    const src = "开头内容。中间要改的这段很长。结尾内容。";
+    const r = applyPatches(src, [{ anchor: "中间要改的这段很长", replacement: "改好了" }]);
+    expect(r.hit).toBe(1);
+    expect(r.total).toBe(1);
+    expect(r.content).toBe("开头内容。改好了。结尾内容。");
+  });
+
+  it("多处替换：倒序应用，索引不错位，两处都改到", () => {
+    const src = "AAAA BBBB CCCC";
+    const r = applyPatches(src, [
+      { anchor: "AAAA", replacement: "1111" },
+      { anchor: "CCCC", replacement: "3333" },
+    ]);
+    expect(r.hit).toBe(2);
+    expect(r.content).toBe("1111 BBBB 3333");
+  });
+
+  it("锚点未命中：记录 missed 且不改动正文", () => {
+    const src = "原文不动";
+    const r = applyPatches(src, [{ anchor: "压根不存在的片段", replacement: "x" }]);
+    expect(r.hit).toBe(0);
+    expect(r.total).toBe(1);
+    expect(r.missed).toHaveLength(1);
+    expect(r.content).toBe(src);
+  });
+
+  it("部分命中：命中的改，没命中的保留", () => {
+    const src = "AAA 中间 BBB";
+    const r = applyPatches(src, [
+      { anchor: "AAA", replacement: "111" },
+      { anchor: "不存在", replacement: "222" },
+    ]);
+    expect(r.hit).toBe(1);
+    expect(r.missed).toHaveLength(1);
+    expect(r.content).toBe("111 中间 BBB");
+  });
+
+  it("空补丁列表：原样返回", () => {
+    const src = "什么都不改";
+    const r = applyPatches(src, []);
+    expect(r.hit).toBe(0);
+    expect(r.content).toBe(src);
   });
 });
