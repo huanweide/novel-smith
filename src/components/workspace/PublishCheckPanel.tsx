@@ -40,6 +40,7 @@ const SCOPE_OPTIONS: { id: string; label: string; count?: number }[] = [
   { id: "recent3", label: "最近 3 章", count: 3 },
   { id: "recent10", label: "最近 10 章", count: 10 },
   { id: "all", label: "全部章节（按预算自动裁剪）" },
+  { id: "single", label: "指定单章…" },
 ];
 
 const CUSTOM_PROMPT_KEY = "ns-editor-custom-prompt";
@@ -106,6 +107,9 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyResult, setApplyResult] = useState<{ ok: number; failed: number; details: string[] } | null>(null);
   const [tuneCopied, setTuneCopied] = useState(false);
+  // 「指定单章」下拉用的轻量章节清单（懒加载，不带正文）
+  const [chapterList, setChapterList] = useState<Array<{ id: string; title: string; words: number }>>([]);
+  const [singleNodeId, setSingleNodeId] = useState("");
 
   const platformLabel = PLATFORM_LABEL[platform] ?? platform;
 
@@ -220,6 +224,17 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
   };
 
   // ── 模拟编辑审稿 ──
+  const loadChapters = async () => {
+    if (chapterList.length) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/chapters`);
+      const json = await res.json().catch(() => ({}));
+      setChapterList(Array.isArray(json.chapters) ? json.chapters : []);
+    } catch {
+      setChapterList([]);
+    }
+  };
+
   const runReview = async () => {
     if (reviewLoading) return;
     setReviewLoading(true);
@@ -228,6 +243,11 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
     setSelected(new Set());
     setApplyResult(null);
     const scopeOpt = SCOPE_OPTIONS.find((s) => s.id === scope) ?? SCOPE_OPTIONS[0];
+    if (scopeOpt.id === "single" && !singleNodeId) {
+      setReviewLoading(false);
+      setReviewError("请先选择要审的那一章");
+      return;
+    }
     try {
       const res = await fetch(`/api/projects/${projectId}/editor-review`, {
         method: "POST",
@@ -236,7 +256,10 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
           platform,
           role,
           systemPrompt,
-          scope: { mode: scopeOpt.id === "all" ? "all" : "recent", count: scopeOpt.count },
+          scope:
+            scopeOpt.id === "single"
+              ? { mode: "single", nodeId: singleNodeId }
+              : { mode: scopeOpt.id === "all" ? "all" : "recent", count: scopeOpt.count },
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -309,9 +332,21 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || `请求失败（${res.status}）`);
-      const details = (json.applied || []).map(
-        (a: any) => `${a.ok ? "✓" : "✗"} ${a.nodeId}${a.error ? "：" + a.error : ""}`,
-      );
+      // 结果说人话：UUID 换成章节名，并标明是「局部替换命中几处」还是「整章改写」
+      const titleById = new Map<string, string>();
+      for (const s of review.suggestions || []) {
+        if (s.nodeId) titleById.set(s.nodeId, s.chapterTitle || s.chapterRef || s.nodeId);
+      }
+      const details = (json.applied || []).map((a: any) => {
+        const name = titleById.get(a.nodeId) || a.nodeId;
+        const modeTxt =
+          a.mode === "patch"
+            ? `局部替换（命中 ${a.hit ?? 0}/${a.total ?? 0} 处）`
+            : a.mode === "rewrite"
+              ? "整章改写"
+              : "";
+        return `${a.ok ? "✓" : "✗"} ${name}${a.ok && modeTxt ? "：" + modeTxt : ""}${a.error ? "：" + a.error : ""}`;
+      });
       setApplyResult({ ok: json.summary?.ok ?? 0, failed: json.summary?.failed ?? 0, details });
     } catch (e) {
       setReviewError(String(e));
@@ -412,7 +447,13 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
               setRole(v);
             }}
             scope={scope}
-            setScope={setScope}
+            setScope={(v: string) => {
+              setScope(v);
+              if (v === "single") void loadChapters();
+            }}
+            chapterList={chapterList}
+            singleNodeId={singleNodeId}
+            setSingleNodeId={setSingleNodeId}
             systemPrompt={systemPrompt}
             setSystemPrompt={(v: string) => {
               setPromptTouched(true);
@@ -707,6 +748,9 @@ function ReviewTab({
   setRole,
   scope,
   setScope,
+  chapterList,
+  singleNodeId,
+  setSingleNodeId,
   systemPrompt,
   setSystemPrompt,
   customSaved,
@@ -766,6 +810,24 @@ function ReviewTab({
             ))}
           </select>
         </div>
+
+        {scope === "single" && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">选择章节</span>
+            <select
+              value={singleNodeId}
+              onChange={(e) => setSingleNodeId(e.target.value)}
+              className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+            >
+              <option value="">{chapterList.length ? "请选择要审的那一章…" : "正在加载章节…"}</option>
+              {chapterList.map((c: { id: string; title: string; words: number }) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}（{c.words} 字）
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">

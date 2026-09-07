@@ -16,6 +16,9 @@ import {
   buildPromptForTune,
   buildApplySystem,
   buildApplyUserPrompt,
+  buildLocatePrompt,
+  parseLocateJson,
+  type LocatePatch,
   type ReviewChapterInput,
   type ReviewResult,
   type ReviewSuggestion,
@@ -57,6 +60,32 @@ export async function runEditorApply(opts: {
     maxTokens,
   });
   return raw.trim();
+}
+
+/**
+ * 定位「要改的那一小段原文」——为局部替换提供锚点。
+ *
+ * 不重写全文，只让模型指出 anchor（正文逐字片段）+ replacement（替换文本），
+ * 交由 applyPatches 做精确子串替换。失败（模型没给出可用锚点）返回空数组，
+ * 由调用方决定是否回退整章改写。
+ */
+export async function runEditorLocate(opts: {
+  content: string;
+  suggestions: Array<{ location?: string; issue?: string; suggestion?: string; rewriteHint?: string }>;
+  temperature?: number;
+}): Promise<LocatePatch[]> {
+  const user = buildLocatePrompt(opts.content, opts.suggestions);
+  const raw = await completeText(
+    "你是精准改写执行编辑：只定位需要改动的那一小段原文并给出替换文本，严禁重写全文、严禁输出正文之外的任何内容。",
+    user,
+    {
+      json: true,
+      role: "editor-locate",
+      temperature: opts.temperature ?? 0.3,
+      maxTokens: 3000,
+    },
+  );
+  return parseLocateJson(raw);
 }
 
 export type { ReviewChapterInput, ReviewResult, ReviewSuggestion };
