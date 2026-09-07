@@ -141,7 +141,7 @@ describe("buildLocatePrompt", () => {
     expect(p).toContain("第2段");
     expect(p).toContain('"patches"');
     expect(p).toContain("anchor");
-    expect(p).toContain("逐字完全一致");
+    expect(p).toContain("逐字一致");
     expect(p).toContain("严禁重写全文");
   });
 });
@@ -215,5 +215,48 @@ describe("applyPatches", () => {
     const r = applyPatches(src, []);
     expect(r.hit).toBe(0);
     expect(r.content).toBe(src);
+  });
+
+  it("正则弱匹配：吸收空格/换行差异（长文下模型 anchor 常见误差）", () => {
+    const src = "苏决推开柴门。\n\n他望向废剑冢，铁锈味扑面而来， footsteps 在雪地里响起。";
+    // 模型给的 anchor 把换行/空格弄丢了，但仍逐字连续
+    const r = applyPatches(src, [
+      { anchor: "推开柴门。 他望向废剑冢", replacement: "推开柴门，径直望向废剑冢" },
+    ]);
+    expect(r.hit).toBe(1);
+    expect(r.content).toContain("推开柴门，径直望向废剑冢");
+    expect(r.content).toContain("铁锈味扑面而来"); // 其余一字不动
+  });
+
+  it("弱匹配失败（anchor 被改写而非复制）仍回退未命中", () => {
+    const src = "主角叫苏决，他捡到一柄锈剑。";
+    const r = applyPatches(src, [{ anchor: "苏决捡到了剑", replacement: "x" }]);
+    expect(r.hit).toBe(0);
+    expect(r.content).toBe(src);
+  });
+
+  it("长文多锚点：倒序 + 每步重定位，互不干扰", () => {
+    const src = "第一段很长的内容AAAA。中间BBBB过渡。最后CCCC收尾。";
+    const r = applyPatches(src, [
+      { anchor: "AAAA", replacement: "1111" },
+      { anchor: "BBBB", replacement: "2222" },
+      { anchor: "CCCC", replacement: "3333" },
+    ]);
+    expect(r.hit).toBe(3);
+    expect(r.content).toBe("第一段很长的内容1111。中间2222过渡。最后3333收尾。");
+  });
+});
+
+describe("parseLocateJson 截断愈合", () => {
+  it("maxTokens 截断（缺收尾括号）时尝试补全并解析", () => {
+    // 模拟被截断：对象未闭合
+    const truncated = '{"patches":[{"anchor":"原文片段","replacement":"新文本"}';
+    const patches = parseLocateJson(truncated);
+    expect(patches.length).toBeGreaterThanOrEqual(1);
+    expect(patches[0].anchor).toBe("原文片段");
+  });
+
+  it("完全不可愈合的残缺 JSON 返回空数组", () => {
+    expect(parseLocateJson('{"patches":[{"anchor":')).toEqual([]);
   });
 });

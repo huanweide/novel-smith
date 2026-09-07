@@ -9,7 +9,6 @@
  */
 
 import type { PublishPlatform } from "@/core/publish/pipeline";
-import { applyTargetedFixReplacement } from "@/lib/targeted-fix";
 
 export type EditorRoleId = "fanqie" | "qidian" | "jjwxc" | "wechat" | "reader" | "custom";
 
@@ -315,12 +314,13 @@ export function buildLocatePrompt(
   return `你是精准改写执行编辑。下面是某一章的正文，以及针对它的几条审稿意见。
 请为每条意见，在正文中定位「需要改动的那一小段原文」，并给出替换后的新文本。
 
-要求（违反即不合格）：
-- anchor：必须是正文中**逐字完全一致**的一小段原文，长度以 20-120 字为宜，确保它在本章里只出现一次；严禁自己改写 anchor、严禁添字漏字换标点。
-- replacement：只写「替换掉 anchor 之后」的新文本；文风、人称、视角必须与前后文一致。
-- 严禁重写全文、严禁输出 anchor 与 replacement 之外的任何正文内容。
-- 某条意见不需要改动正文（或你在正文里找不到对应位置）就不要输出该条，不要硬凑。
-- 直接输出严格 JSON，不要 markdown 代码块、不要解释。
+要求（违反即失败，会退化为整章重写，请务必遵守）：
+- anchor：必须是正文中**直接复制粘贴**的一段连续原文，长度 15-80 字，确保在本章里只出现一次。
+- anchor 必须与正文**逐字一致**：严禁改写、严禁增删任何字（包括标点、空格、换行）；哪怕只差一个标点，子串匹配就会失败。建议从原文里选中那段文字原样粘过来。
+- 若意见是「压缩/删除某段」，请把 anchor 设为那段将被压缩的原文，replacement 设为压缩后的版本（保留核心信息，砍掉冗余铺垫）。
+- replacement：只写替换掉 anchor 之后的新文本，文风/人称/视角与前后文一致；不要输出 anchor 与 replacement 之外的任何正文。
+- 严禁重写全文。某条意见在正文里找不到对应位置，就**不要输出该条**，不要硬凑。
+- 直接输出严格 JSON，不要 markdown 代码块、不要任何解释。
 
 【正文】
 ${content}
@@ -349,7 +349,21 @@ export function parseLocateJson(raw: string): LocatePatch[] {
   try {
     obj = JSON.parse(text);
   } catch {
-    return [];
+    // 容错：输出可能被 maxTokens 截断（差一两个收尾括号），尝试补全后再解一次
+    for (const tail of ["", "}", "]}", "]"]) {
+      try {
+        const healed = JSON.parse(text + tail);
+        if (healed && (Array.isArray(healed.patches) || typeof healed === "object")) {
+          obj = healed;
+          break;
+        }
+      } catch {
+        /* 仍解析失败则继续尝试下一个收尾 */
+      }
+    }
+    if (!obj || (typeof obj === "object" && !Array.isArray((obj as any).patches) && Object.keys(obj).length === 0)) {
+      return [];
+    }
   }
 
   const arr = Array.isArray(obj.patches) ? obj.patches : [];
@@ -362,10 +376,38 @@ export function parseLocateJson(raw: string): LocatePatch[] {
 }
 
 /**
+ * 在原文中定位 anchor 的位置。
+ *
+ * 匹配策略（从强到弱）：
+ * 1. 精确子串匹配（最快、最准）。
+ * 2. 去首尾空白后精确匹配。
+ * 3. 正则弱匹配：把 anchor 内部所有空白序列归一为 \s+，吸收「多空格 / 换行 / 全半角空白」
+ *    等差异——长文下模型给的 anchor 往往只差一个空格或换行，精确匹配会失配导致整章回退重写，
+ *    弱匹配能救回绝大多数这类情况。锚点越短（15-80 字）误命中概率越低。
+ *
+ * @returns 命中位置与匹配到的实际长度（弱匹配时长度可能 ≠ anchor.length），未命中返回 null
+ */
+function locateAnchor(src: string, anchor: string): { index: number; len: number } | null {
+  if (!anchor || !anchor.trim()) return null;
+  const a = anchor.trim();
+  let idx = src.indexOf(a);
+  if (idx !== -1) return { index: idx, len: a.length };
+  try {
+    const pat = a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const m = new RegExp(pat).exec(src);
+    if (m) return { index: m.index, len: m[0].length };
+  } catch {
+    /* 非法正则降级为未命中 */
+  }
+  return null;
+}
+
+/**
  * 把定位到的补丁按「原文出现位置倒序」应用到正文。
  *
- * 为什么倒序：从后往前替换，前面的改动不会影响尚未处理的锚点在原文中的下标，
- * 避免多处修改时索引错位（正序替换会让后面的 anchor 位置整体偏移）。
+ * 为什么倒序 + 每步重定位：从后往前处理，处理某条时它右侧（已处理过的）在其右边不影响它左侧，
+ * 因此可在「当前正文」上用 locateAnchor 重新定位，得到正确的当下下标，避免多处替换时索引漂移
+ * （正序替换会让后面的 anchor 位置整体偏移，导致替换错位）。
  *
  * @returns 命中并成功替换的条数、总条数、替换后的正文
  */
@@ -377,24 +419,28 @@ export function applyPatches(
   const total = patches.length;
   if (total === 0) return { content: src, hit: 0, total: 0, missed: [] };
 
-  // 先在「原文」上算下标，过滤掉未命中的
-  const located: Array<{ index: number; len: number; replacement: string }> = [];
+  // 先在「原文」上算下标，过滤掉完全失配的；保留 anchor 文本供重定位
+  const located: Array<{ index: number; anchor: string; replacement: string }> = [];
   const missed: string[] = [];
   for (const p of patches) {
-    const idx = src.indexOf(p.anchor);
-    if (idx === -1) {
+    const cur = locateAnchor(src, p.anchor);
+    if (!cur) {
       missed.push(p.anchor.slice(0, 20));
       continue;
     }
-    located.push({ index: idx, len: p.anchor.length, replacement: p.replacement });
+    located.push({ index: cur.index, anchor: p.anchor, replacement: p.replacement });
   }
 
-  // 倒序应用
+  // 按原文位置倒序（保证循环时每步在当前正文上重定位仍正确）
   located.sort((a, b) => b.index - a.index);
   let out = src;
   for (const l of located) {
-    const fix = applyTargetedFixReplacement(out, out.slice(l.index, l.index + l.len), l.replacement);
-    if (fix.ok && fix.content) out = fix.content;
+    const cur = locateAnchor(out, l.anchor);
+    if (!cur) {
+      missed.push(l.anchor.slice(0, 20));
+      continue;
+    }
+    out = out.slice(0, cur.index) + l.replacement + out.slice(cur.index + cur.len);
   }
 
   return { content: out, hit: located.length, total, missed };

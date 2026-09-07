@@ -75,6 +75,8 @@ export async function runEditorLocate(opts: {
   temperature?: number;
 }): Promise<LocatePatch[]> {
   const user = buildLocatePrompt(opts.content, opts.suggestions);
+  // 长文 + 多建议时，返回的 patches JSON 可能较长；预算随正文长度动态放大，避免被截断后整体回退整章重写
+  const maxTokens = Math.min(6000, Math.max(3000, Math.ceil((opts.content.length || 1000) * 0.6)));
   const raw = await completeText(
     "你是精准改写执行编辑：只定位需要改动的那一小段原文并给出替换文本，严禁重写全文、严禁输出正文之外的任何内容。",
     user,
@@ -82,7 +84,7 @@ export async function runEditorLocate(opts: {
       json: true,
       role: "editor-locate",
       temperature: opts.temperature ?? 0.3,
-      maxTokens: 3000,
+      maxTokens,
     },
   );
   return parseLocateJson(raw);

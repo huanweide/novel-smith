@@ -16,14 +16,14 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.90 |
+| 包名 / 版本 | `novel-smith` v3.1.91 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
 
 | 路径 | 是什么 | 状态 |
 |---|---|---|
-| `C:\c\Users\...\2026-07-25-14-19-44\novel-forge` | 同名旧镜像 | 停在 v3.1.53，remote 还是旧名 novel-forge，**落后 5 个版本** |
+| `C:\c\Users\...\2026-07-25-14-19-44\novel-forge` | 同名旧镜像 | 停在 v3.1.53，remote 还是旧名 novel-forge，**落后数十个版本** |
 | `C:\Users\Administrator\Projects\novel-forge` | 很老的克隆 | 停在 v0.26，分支 master |
 | `C:\Users\Administrator\Desktop\Projects\novel-forge-ours` | 很老的克隆 | 停在 v0.26，分支 master |
 | `C:\Users\Administrator\Desktop\Projects\novel-forge-github(.bak)` | **竞品** RhythmicWave/NovelForge 的克隆 | 只用来做竞品调研，不是我们的 |
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.90 应用修改升级为「按位置局部替换」+ 审稿支持指定单章——只改那一处不再重写全文，想审哪章就审哪章（TARGETED-PATCH-AND-SINGLE-CHAPTER）`（2026-09-07，Latest） |
+| 最新 Release | `v3.1.91 长文局部替换加固——真实长章下「应用修改」不再退化成整章重写（LONG-CHAP-PATCH-HARDEN）`（2026-09-07，Latest） |
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -99,6 +99,12 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.91 — 2026-09-07 — 长文局部替换加固（LONG-CHAP-PATCH-HARDEN）
+- **问题**：v3.1.90 的局部替换只在 181 字短章验证（87.8% 保留），真实 5000 字长章（实测生成 3086 字）走完整流程时锚点频繁失配、应用修改退化成整章重写（命中 0/1）。
+- **根因**：`applyPatches` 用 `indexOf` 精确匹配，长文锚点稍有空格/换行/标点差异即失配；`runEditorLocate` 输出预算仅 3000 token，长文多建议时 patches JSON 易被截断。
+- **修复**：①`applyPatches` 加正则弱匹配容错（空白归一 `\s+` 重定位）+ 基于精确下标的切片替换与每步重定位的倒序处理；②`buildLocatePrompt` 强化锚点约束（复制粘贴、15-80 字、唯一）；③`runEditorLocate` 预算随正文动态放大（最高 6000）；④`parseLocateJson` 截断愈合。
+- **实测逆转**：同长章应用一条意见，从 `rewrite`（0/1、保留 84%）变为 `patch`（1/1、保留 97.5%）。门禁：tsc 0 错、vitest 1524 全绿（新增 5 条）、build 通过；端到端真长章实测通过，临时项目自动清理。
 
 ### v3.1.90 — 2026-09-07 — 应用修改升级为「按位置局部替换」+ 审稿支持指定单章（TARGETED-PATCH-AND-SINGLE-CHAPTER）
 
