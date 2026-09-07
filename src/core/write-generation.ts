@@ -33,6 +33,7 @@ import { buildRecallBlock } from "@/core/babylore/loop";
 import { selectCodex, formatCodexAttentionBlock } from "@/core/pipeline/codex-selector";
 import { planChapterStoryline, applyChapterPlanToStorylines } from "@/core/pipeline/plan-chapter";
 import { applyRegexRules } from "@/core/post-process/regex";
+import { stripProtocolLeak } from "@/core/post-process/sanitize";
 import { STATUS_COMPLETED, STATUS_DRAFTING, STATUS_OUTLINE_ONLY } from "@/core/story-status";
 import { classifyTruncation } from "@/core/finish-reason";
 import { sseError } from "@/lib/sse-error";
@@ -266,7 +267,7 @@ export async function runWriteGeneration(
     // 检查未完成草稿
     const partialDraft =
       data.currentNode.status === STATUS_DRAFTING && data.currentNode.content
-        ? data.currentNode.content.replace(/\[PARTIAL_DRAFT\]/g, "").trim()
+        ? stripProtocolLeak(data.currentNode.content.replace(/\[PARTIAL_DRAFT\]/g, "")).trim()
         : "";
 
     // Phase 1: 流式生成
@@ -330,7 +331,7 @@ export async function runWriteGeneration(
         saveCounter += chunk.content.length;
         if (saveCounter >= 300) {
           saveCounter = 0;
-          const combined = partialDraft + newContent;
+          const combined = stripProtocolLeak(partialDraft) + stripProtocolLeak(newContent);
           try {
             if (draftConflicted) {
               // 已检测到并发编辑，停止用部分草稿覆盖，交由最终写回做乐观校验
