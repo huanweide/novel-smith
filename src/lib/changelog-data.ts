@@ -25,12 +25,14 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.96";
+export const LATEST_VERSION = "v3.1.97";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "架构: quality-analyzer，quality-thresholds",
-  "测试: 质量相关单测随文件迁移，tsc 0 错",
+  "架构: 全库 29 处手写 LLM-JSON 解析收口到 lib/json-parser（parseAIJson/safeParseAIJson/parseAIArray/safeParseAIArray）",
+  "测试: json-parser 单测扩至 26 例覆盖脏输出；tsc 0 错、vitest 全绿",
+  "去除重复: 删除 import/parse 路由内联 repairJSON/parseJSON 私有实现",
+  "健壮: AI 返回格式变化只需改一处，消除「某一路崩」",
 ];
 
 /**
@@ -85,6 +87,28 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.97",
+    date: "2026-09-08",
+    title: "架构复盘 P1·JSON 解析全量收敛（R1）",
+    sections: [
+      {
+        label: "全库手写 JSON 解析收口到统一解析器",
+        items: [
+          "把散布在 15 个文件共 29 处手写的 indexOf(\"{\") / lastIndexOf(\"}\") 括号提取 + JSON.parse 全部替换为 src/lib/json-parser.ts 的 parseAIJson / safeParseAIJson / parseAIArray / safeParseAIArray。",
+          "删除 src/app/api/import/parse/route.ts 内联的 repairJSON / parseJSON 私有实现，3 个调用点统一走 json-parser。",
+          "保留各调用点原有的字段校验 / 归一化 / 正则兜底逻辑，只替换「提取 + 解析」环节，行为零变化。",
+        ],
+      },
+      {
+        label: "测试与门禁",
+        items: [
+          "json-parser.test.ts 扩充 parseAIArray / safeParseAIArray 共 10 例（标准数组、BOM、```json 围栏、尾逗号、缺 ]、夹杂散文、控制字符、对象入参抛错、safe 变体），总数 26 例全绿。",
+          "类型检查 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.94",
     date: "2026-09-08",

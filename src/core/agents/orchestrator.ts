@@ -42,6 +42,7 @@ import type { TieredMemory } from "@/lib/memory-classifier";
 import { toolRegistry } from "./tool-registry";
 import type { ToolSchema, ToolContext, ToolResult } from "./tool-registry";
 import { formatStorylines, filterActiveStorylines } from "@/core/pipeline/outline-context";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 // ─── Prompt 模板 ─────────────────────────────────────────────
 
@@ -463,13 +464,8 @@ ${generatedContent}
   private parseReviewResponse(response: string, nodeOutline: string): ReviewLog {
     // 尝试 JSON 解析
     try {
-      let s = response.trim();
-      const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (md) s = md[1].trim();
-      const a = s.indexOf("{"), b = s.lastIndexOf("}");
-      if (a >= 0 && b > a) s = s.slice(a, b + 1);
-
-      const parsed = JSON.parse(s) as Record<string, unknown>;
+      const parsed = safeParseAIJson(response) as Record<string, unknown> | null;
+      if (!parsed || Array.isArray(parsed)) throw new Error("AI 审稿返回非对象 JSON");
       const passed = parsed.passed === true;
       const rawIssues = Array.isArray(parsed.issues) ? parsed.issues as Record<string, unknown>[] : [];
 
@@ -570,25 +566,21 @@ ${generatedContent}
       lastJsonStr = jsonMatch[1].trim();
     }
     if (lastJsonStr) {
-      try {
-        const parsed = JSON.parse(lastJsonStr);
+      const parsed = safeParseAIJson(lastJsonStr) as any;
+      if (parsed && !Array.isArray(parsed)) {
         if (Array.isArray(parsed.threadProgress)) threadProgress = parsed.threadProgress;
         if (Array.isArray(parsed.unresolvedQuestions)) unresolvedQuestions = parsed.unresolvedQuestions;
         if (typeof parsed.impactScore === "number") impactScore = parsed.impactScore;
         if (typeof parsed.chapterTitle === "string") chapterTitle = parsed.chapterTitle;
-      } catch { /* ignore parse failure */ }
+      }
     } else {
-      // 2) 回退：尝试从响应末尾提取 {} 对象
-      const lastBrace = response.lastIndexOf("{");
-      const endBrace = response.lastIndexOf("}");
-      if (lastBrace >= 0 && endBrace > lastBrace) {
-        try {
-          const fallback = JSON.parse(response.slice(lastBrace, endBrace + 1));
-          if (Array.isArray(fallback.threadProgress)) threadProgress = fallback.threadProgress;
-          if (Array.isArray(fallback.unresolvedQuestions)) unresolvedQuestions = fallback.unresolvedQuestions;
-          if (typeof fallback.impactScore === "number") impactScore = fallback.impactScore;
+      // 2) 回退：尝试从响应整体提取 JSON 对象
+      const fallback = safeParseAIJson(response) as any;
+      if (fallback && !Array.isArray(fallback)) {
+        if (Array.isArray(fallback.threadProgress)) threadProgress = fallback.threadProgress;
+        if (Array.isArray(fallback.unresolvedQuestions)) unresolvedQuestions = fallback.unresolvedQuestions;
+        if (typeof fallback.impactScore === "number") impactScore = fallback.impactScore;
         if (typeof fallback.chapterTitle === "string") chapterTitle = fallback.chapterTitle;
-        } catch { /* ignore fallback failure */ }
       }
     }
 

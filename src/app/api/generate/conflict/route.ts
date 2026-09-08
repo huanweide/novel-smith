@@ -15,24 +15,12 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig, createLLMClient, buildProjectOverrides } from "@/core/llm/client";
 import { safeJoin } from "@/lib/utils";
+import { safeParseAIArray } from "@/lib/json-parser";
 
 export const maxDuration = 60;
 
 function jsonArrayFrom(raw: string): any[] | null {
-  let s = raw.trim();
-  // 去掉可能的 ```json 围栏
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
-  // 截取第一个 [ 到最后一个 ]
-  const start = s.indexOf("[");
-  const end = s.lastIndexOf("]");
-  if (start >= 0 && end > start) s = s.slice(start, end + 1);
-  try {
-    const parsed = JSON.parse(s);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  return safeParseAIArray(raw) as any[] | null;
 }
 
 export async function POST(request: Request) {

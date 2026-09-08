@@ -22,6 +22,7 @@ import { completeText } from "@/core/llm/client";
 import { getCompletedMainIds, isRehangTargetActiveMain } from "@/core/pipeline/outline-context";
 import { storylineStyleDesc } from "@/core/storyline/generate";
 import { deriveMainElements } from "@/core/storyline/complete";
+import { parseAIJson } from "@/lib/json-parser";
 
 export async function runStorylineGeneration(bodyJson: any) {
   try {
@@ -149,12 +150,7 @@ ${
 
       let parsed: Record<string, unknown>;
       try {
-        let s = raw.trim();
-        const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (md) s = md[1].trim();
-        const a = s.indexOf("{"), b = s.lastIndexOf("}");
-        if (a >= 0 && b > a) s = s.slice(a, b + 1);
-        parsed = JSON.parse(s) as Record<string, unknown>;
+        parsed = parseAIJson(raw);
       } catch {
         return NextResponse.json({ error: "AI 返回格式解析失败", raw: raw.slice(0, 500) }, { status: 502 });
       }

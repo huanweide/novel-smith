@@ -1,6 +1,7 @@
 import { jsonError } from "@/lib/api-error";
 import { NextResponse } from "next/server";
 import { createLLMClientFromSettings, getEffectiveConfig } from "@/core/llm/client";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 /**
  * POST /api/presets/enrich  { type, description }
@@ -81,25 +82,9 @@ ${SCHEMA_HINT[type!]}
   }
 }
 
-/** 从 LLM 输出里稳健地抽取第一个 JSON 对象（兼容 ```json 代码块包裹与前后杂语） */
+/** 从 LLM 输出里稳健地抽取第一个 JSON 对象（收敛到统一容错解析器 src/lib/json-parser.ts） */
 function extractJSON(text: string): any | null {
-  if (!text) return null;
-  let s = text.trim();
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) s = fence[1].trim();
-  const a = s.indexOf("{");
-  const b = s.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
-  let candidate = s.slice(a, b + 1);
-  // 容错 1：LLM 常在对象/数组闭合前多打尾逗号（JSON.parse 不允许），先清理
-  candidate = candidate.replace(/,(\s*[}\]])/g, "$1");
-  // 容错 2：偶发的不可见字符（BOM / 制表符）也会让解析失败，一并清掉
-  candidate = candidate.replace(/﻿/g, "").replace(/[\t\f\v]/g, " ");
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
-  }
+  return safeParseAIJson(text);
 }
 
 /** 按类型校验/裁剪 AI 产出，确保字段与向导 upload state 完全对齐（tags 合并为逗号字符串） */

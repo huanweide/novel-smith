@@ -21,6 +21,7 @@ import {
   formatStorylines, extractLastChapterHook, filterActiveStorylines,
 } from "@/core/pipeline/outline-context";
 import { completeText } from "@/core/llm/client";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export async function POST(request: Request) {
   try {
@@ -141,26 +142,9 @@ ${characterList}
       }
 
       try {
-        // ── 鲁棒 JSON 解析（v0.46.55 修复：模型偶发返回 markdown 包裹/尾逗号/截断的 JSON）──
-        let raw = result.value.trim();
-        // 1) 剥 markdown 代码块（```json ... ``` 或 ``` ... ```）
-        const md = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (md) raw = md[1].trim();
-        // 2) 提取最外层 {...}（容忍前后杂文）
-        const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
-        if (a >= 0 && b > a) raw = raw.slice(a, b + 1);
-        // 3) 多级 JSON.parse：直接 → 去尾逗号 → 修复常见非法字符
-        const tryParse = (s: string): Record<string, unknown> | null => {
-          try { return JSON.parse(s) as Record<string, unknown>; } catch { /* 下一级 */ }
-          try {
-            const fixed = s
-              .replace(/,\s*([}\]])/g, "$1")              // 去尾逗号
-              .replace(/\u2028|\u2029/g, " ")              // 行分隔符
-              .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ""); // 控制字符
-            return JSON.parse(fixed) as Record<string, unknown>;
-          } catch { return null; }
-        };
-        let parsed = tryParse(raw);
+        // ── 鲁棒 JSON 解析（收敛到统一容错解析器 src/lib/json-parser.ts）──
+        const raw = result.value;
+        let parsed = safeParseAIJson(raw);
         // 4) 正则兜底：直接提取各字段（JSON 完全不可解析时仍能拿到大纲）
         const grab = (key: string): string => {
           const m = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));

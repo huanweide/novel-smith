@@ -1,4 +1,13 @@
 ﻿# Novel Smith 更新公告
+## v3.1.97 — 2026-09-08
+
+### 架构复盘 P1·JSON 解析全量收敛（R1 · 29 处手写解析收口到 src/lib/json-parser.ts）
+
+- **全库手写 JSON 解析收口**：把散布在 15 个文件共 29 处手写的 `indexOf("{") / lastIndexOf("}")` 括号提取 + `JSON.parse` 全部替换为 `src/lib/json-parser.ts` 的 `parseAIJson` / `safeParseAIJson` / `parseAIArray` / `safeParseAIArray`；含 API 路由 6 处、core 模块 8 处、pipeline/orchestrator 3 处。
+- **删重复实现**：`src/app/api/import/parse/route.ts` 内联的 `repairJSON` / `parseJSON` 私有函数删除，3 个调用点统一走 `json-parser`。
+- **行为零变化**：各调用点原有字段校验 / 归一化 / 正则兜底全部保留，只替换「提取 + 解析」环节；`parseAIJson` 保持原有「数组入参也返回数组」的兼容行为。
+- **测试与门禁**：`json-parser.test.ts` 扩充 `parseAIArray` / `safeParseAIArray` 共 10 例（标准数组、BOM、```json 围栏、尾逗号、缺 `]`、夹杂散文、控制字符、对象入参抛错、safe 变体），总数 26 例全绿；类型检查 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。个人 IP 仍归瑞宝宝。
+
 ## v3.1.96 — 2026-09-08
 
 ### 架构复盘 P1·质量模块归位（R3 · 4 质量文件统一迁入 src/core/quality/）
