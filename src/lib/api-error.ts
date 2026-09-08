@@ -27,7 +27,7 @@ const PRISMA_HINTS: Record<string, { status: number; error: string; hint: string
   P1001: {
     status: 503,
     error: "数据库无法连接",
-    hint: "请确认 PostgreSQL 已启动（本地用 `docker compose up -d`），并检查 .env 中的 DATABASE_URL 是否正确。",
+    hint: "请确认 .env 中的 DATABASE_URL 指向本地 SQLite 文件（默认 `file:./data/novelforge.db`），并确认 `./data/` 目录可写；必要时运行 `npm run dev:db` 自动建库建表（本项目为本地文件库，无需 Docker / 外部数据库服务）。",
   },
   // 连接中途断开
   P1002: {

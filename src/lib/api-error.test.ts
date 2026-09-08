@@ -10,11 +10,12 @@ afterEach(() => {
 });
 
 describe("classifyError - Prisma 已知错误码中文映射", () => {
-  it("P1001 无法连接数据库 → 503 + docker 指引", () => {
+  it("P1001 无法连接数据库 → 503 + 本地 SQLite 重建指引（不得再提示 docker）", () => {
     const e = Object.assign(new Error("connect ECONNREFUSED"), { code: "P1001" });
     const r = classifyError(e);
     expect(r).toMatchObject({ status: 503, code: "P1001", error: "数据库无法连接" });
-    expect(r.hint).toContain("docker compose");
+    expect(r.hint).toContain("npm run dev:db");
+    expect(r.hint).not.toContain("docker");
   });
 
   it("P2021 表不存在 → 503 + prisma db push 指引", () => {

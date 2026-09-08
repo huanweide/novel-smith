@@ -30,7 +30,7 @@ interface Problem {
   kind: "db" | "llm";
 }
 
-const DB_FIX_CMD = "docker compose up -d && npx prisma db push";
+const DB_FIX_CMD = "npm run dev:db";
 
 export function SystemStatusBanner() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -57,6 +57,9 @@ export function SystemStatusBanner() {
   // 探讨模式是纯对话式前期构思阶段，不需要数据库；
   // 用户本地没跑 Postgres 很正常，不该弹「数据库未连接」吓人。
   const isExplore = pathname === "/explore" || pathname?.startsWith("/explore?");
+  // /detector 是纯本地工具页（去 AI 味检测不调 LLM），本来就不该要求配 Key；
+  // 在这里弹「AI 未配置」会直接抵消它「零门槛」的意义。
+  const isDetector = pathname === "/detector" || pathname?.startsWith("/detector?");
   if (!health.db.ok && !isExplore) {
     problems.push({
       key: "db",
@@ -66,7 +69,7 @@ export function SystemStatusBanner() {
       kind: "db",
     });
   }
-  if (!health.llm.ok) {
+  if (!health.llm.ok && !isDetector) {
     problems.push({
       key: "llm",
       label: "AI 未配置",

@@ -1,4 +1,15 @@
 ﻿# Novel Smith 更新公告
+## v3.1.93 — 2026-09-08
+
+### 体验链路四大漏洞修复（FIRST-RUN-FIX · 首启动不再被误导 / 版本不再落后 / 不配 Key 也能惊艳 / 社区有门可进）
+
+- **首启动不再被误导（Docker 幽灵提示）**：项目自 v3.1.42 起已彻底移除 Docker 与 Postgres、改用本地 SQLite 文件库，但数据库报错时界面仍在让用户去跑 `docker compose up -d`——新用户会以为要装 Docker，装了也解决不了。四处一并修正：`src/lib/api-error.ts` 的 P1001 提示、`src/components/system-status-banner.tsx` 顶部横幅的「一键修复命令」、`scripts/doctor.mjs` 的诊断文案，全部改为引导 `npm run dev:db` 并检查 `./data` 目录可写。顺带解开一处**「测试固化错误行为」**——`src/lib/api-error.test.ts` 原本断言提示必须包含 `docker compose`，等于用测试把错误文案保护了起来、长期没人敢改；现在断言改为「包含 npm run dev:db 且不得包含 docker」，把防复发写进测试。
+- **版本可信度（README 不再落后几十个版本）**：此前 `README.md` 写 v3.1.60、英文 README 写 v3.1.57，而实际已是 v3.1.92——访客第一眼「这项目几十个版本没更新」，可信度与 Star 意愿直接受损。根因是 `scripts/bump-version.js` 只改 `changelog-data.ts`、从不碰 README，漂移必然复发；现在 bump 流程新增第 7 步「自动同步中英 README 顶部的当前版本行」，从流程上根治。顺带清理改名遗留：`.env.example` 标题由「Novel Forge」改为「Novel Smith」。
+- **零门槛首体验（不配 Key 也能惊艳）**：新增 `/detector`「去 AI 味检测」独立页——粘贴一段文字，立刻得到总分 + 四档等级 + 逐段绿/黄/红色条 + 每一处「为什么像 AI 写的」与「怎么改」+ 六项可解释的原始统计。它复用 `src/core/humanize` 的纯本地规则引擎：**不联网、不调模型、不需要 API Key、不需要数据库**，稿件一个字节都不出本机。此前这个最强差异化被埋在「配 Key → 建项目 → 写章节」三道门之后，新用户 clone 完根本摸不到；现在价值验证从 30 分钟压缩到 30 秒。首页顶部导航与空态卡片均已加入口，系统状态横幅在 `/detector` 不再弹「AI 未配置」，避免一进页面就被黄条抵消零门槛效果。
+- **社区基建（让「想支持一下」变成低成本动作）**：新增 `CONTRIBUTING.md`（起站三步 / 目录结构 / 三道门禁 / bump 五件套 / git 快照 / 怎么提一个好 Issue / 怎么贡献预设与模板）；仓库 Discussions 已开启（此前因接口 410 未能启用）；README「贡献与反馈」由 4 条泛泛要点改为具体三步路径并链到 CONTRIBUTING.md。
+- **补记上一轮遗漏**：v3.1.92 当时只改了 `LATEST_VERSION`，漏插 `VERSIONS` 与 `CHANGELOG_BRIEF` 条目，本轮一并补齐，changelog 页面与版本号彻底对齐。
+- **质量门禁**：类型检查 0 错、vitest 全绿、生产构建通过。个人 IP 仍归瑞宝宝。
+
 ## v3.1.92 — 2026-09-06
 
 ### 生成纯净度修复（GEN-PURITY-HUD · 读者再也看不到后台自检块）

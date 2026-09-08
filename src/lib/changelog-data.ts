@@ -25,10 +25,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.92";
+export const LATEST_VERSION = "v3.1.93";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
+  "v3.1.93 体验链路四大漏洞修复（FIRST-RUN-FIX · 首启动不再被误导 / 版本不再落后 / 不配 Key 也能惊艳 / 社区有门可进）：①首启动误导——数据库报错竟让用户去跑 docker compose，而项目自 v3.1.42 起已彻底移除 Docker 与 Postgres、改用本地 SQLite 文件库，这条提示会把新用户直接引向死路（装了 Docker 也解决不了）；现已把 api-error.ts 的 P1001 提示、system-status-banner 的一键修复命令、doctor.mjs 的诊断文案统一改为引导 npm run dev:db，并解开一处「测试固化错误行为」——原单测断言提示必须含 docker compose，导致错误文案长期没人敢改，现改为断言含 npm run dev:db 且不得含 docker，防复发写进测试；②版本可信度——README.md 长期停在 v3.1.60、英文 README 停在 v3.1.57，而实际已是 v3.1.92，访客第一眼就是「几十个版本没更新」，直接压低 Star 意愿；根因是 bump 脚本只改 changelog-data.ts、从不碰 README，漂移必然复发，现在 bump 流程新增第 7 步「自动同步中英 README 顶部版本行」从流程上根治，并清理 .env.example 的「Novel Forge」改名遗留；③零门槛首体验——新增 /detector「去 AI 味检测」独立页，粘贴一段文字立刻得到总分 + 四档等级 + 逐段绿/黄/红 + 每处「为什么像 AI 写的」与「怎么改」+ 六项可解释统计；它复用纯本地规则引擎，不联网、不调模型、不需要 API Key、不需要数据库，稿件一个字节都不出本机——此前这个最强卖点被埋在「配 Key→建项目→写章节」三道门之后，新用户根本摸不到；价值验证从 30 分钟压到 30 秒，首页顶部与空态均已加入口，系统状态横幅在该页不再弹「AI 未配置」以免抵消零门槛效果；④社区基建——新增 CONTRIBUTING.md（起站三步 / 目录结构 / 三道门禁 / bump 五件套 / 快照用法 / 怎么提一个好 Issue / 怎么贡献预设与模板），开启仓库 Discussions，README 贡献节由 4 条泛泛要点改为具体三步路径并链到 CONTRIBUTING.md；⑤补记 v3.1.92 缺失条目——上一轮只改了 LATEST_VERSION、漏插 VERSIONS 与 BRIEF，本轮一并补齐；⑥门禁——类型检查 0 错、vitest 全绿、生产构建通过。个人 IP 仍归瑞宝宝。",
+  "v3.1.92 生成纯净度修复（GEN-PURITY-HUD · 正文不再混进后台自检标记）：①问题——八部分输出协议里的「一、头部：剧情校准 HUD」原被写成强制「输出格式模板（严禁省略）」，模型会把【剧情校准 HUD】状态块直接吐进正文头部，污染交付稿（无设定临时项目必现）；②双保险——主修复把该段改写为「后台静默自检、严禁输出正文任何位置」硬约束（禁 HUD 字样 / 禁「---」包裹状态块 / 禁自检表格），兜底新增 src/core/post-process/sanitize.ts 的 stripProtocolLeak，在落库前三处（partialDraft 解析 / 草稿保存 / 最终 fullContent）正则剥离任何残留标记；③门禁——sanitize.test.ts 新增 5 条单测，类型检查 0 错、vitest 全绿、生产构建通过。个人 IP 仍归瑞宝宝。",
   "v3.1.91 长文局部替换加固（LONG-CHAP-PATCH-HARDEN · 长篇单章也不再退化成整章重写）：①实战暴露问题——v3.1.90 的局部替换只在 181 字短章验证过，真实 5000 字长章（实测生成 3086 字）走完整流程时锚点频繁失配、应用修改退化成整章重写（命中 0/1）；根因是 indexOf 精确匹配对长文锚点的空格/换行/标点差异零容忍，且 runEditorLocate 输出预算仅 3000 token 易把 patches JSON 截断；②加固四处——applyPatches 增加正则弱匹配容错（精确失配后把空白归一为 \\s+ 重定位，救回只差一个空格/换行的锚点），并改为基于精确下标切片替换 + 每步在当前正文重定位的倒序处理避免索引漂移；buildLocatePrompt 强化锚点约束（复制粘贴、15-80 字、唯一、压缩类给示例）；runEditorLocate 输出预算随正文动态放大（最高 6000）；parseLocateJson 增加截断愈合；③实测反转——同一真实长章应用一条意见，从 rewrite（0/1、保留 84%）变为 patch（1/1、保留 97.5%），其余一字不动；④门禁——类型检查 0 错、vitest 143 文件 1524 测试全绿（新增 5 条：弱匹配 2 / 截断愈合 2 / 长文多锚点 1）、生产构建通过；端到端真长章实测全过，临时项目自动清理，全程没碰真实小说。个人 IP 仍归瑞宝宝。",
   "v3.1.89 分章打包 ZIP 导出 + 模拟编辑审稿（EXPORT-ZIP-AND-EDITOR-REVIEW · 拆好章、有人替你把一审）：①分章打包导出——按平台排版后每章生成独立 .txt 并自动打包成 zip（001_第1章 这样按序号排），文件名做非法字符清洗，批量上传平台后台不用再手动拆；署名页单独成 00-说明.txt 可关；②模拟编辑审稿——本地 LLM 扮演番茄/起点/晋江/公众号编辑或爽文老读者做一审，从能否签约/开头钩子/爽点密度/节奏/人设/文笔六维打分，提示词明令禁止套公式（不许提「必须装逼打脸」「三章一小高潮」），要求指出具体位置+具体改法；③提示词可见可改可存——界面内可编辑文本框，选角色填系统预设，点「存为我的预设」持久化；支持最近3/5/10章或全书审稿（超长自动按预算裁剪）；④结构化建议可一键变现——每条带位置/问题/严重度/改法/给微调AI的精确指令，「复制给微调 AI」一键拼好可直接粘贴的文本，每条附「微调入口」直达该章现有微调界面；⑤新增「应用修改」——勾选建议即调后台改写接口按意见逐章改写落库，保留人称视角文风，落库前自动存版本快照 + editVersion+1 乐观锁，空响应/严重变短会拦截保留原文；⑥界面合并去重——导出与审稿收进同一「发布」面板双标签，平台选择器与署名开关共用；质量门禁——类型检查 0 错、vitest 142 文件 1504 测试全绿（新增 27 条）、生产构建通过。个人 IP 仍归瑞宝宝。",
   "v3.1.88 发布面板修复并回归「导出分章」核心（PUBLISH-EXPORT-FIRST）：①修复 PublishCheckPanel consistency.stats.issues 白屏 bug，给 risk/consistency 各数组加空数组兜底；②发布 Tab 简化为「按平台导出分好章节」——选平台/格式/署名开关后点「加载并导出整书」直接拿到已按番茄/起点/公众号/通用排版好的 TXT/HTML；③后端 publish-check API 新增 export.text/export.html 字段，直接拼好章节标题+按句切开正文+署名页；④M2/M3 机械报告折叠为可选，默认不展开；质量门禁——类型检查 0 错、vitest 138 文件 1477 测试全绿、生产构建通过。个人 IP 仍归瑞宝宝。",
@@ -258,6 +260,70 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.93",
+    date: "2026-09-08",
+    title: "体验链路四大漏洞修复（FIRST-RUN-FIX）",
+    sections: [
+      {
+        label: "首启动不再被误导（Docker 幽灵提示）",
+        items: [
+          "数据库报错或未连接时，界面竟让用户去跑 docker compose up -d——但项目自 v3.1.42 起已彻底移除 Docker 与 Postgres、改用本地 SQLite 文件库，这条提示会把新用户直接引向死路：以为要装 Docker，装了也解决不了问题。",
+          "四处一并修正：src/lib/api-error.ts 的 P1001 hint、src/components/system-status-banner.tsx 顶部的「一键修复命令」、scripts/doctor.mjs 的诊断文案，全部改为引导 npm run dev:db 并检查 ./data 目录可写。",
+          "顺带解开一处「测试固化错误行为」——src/lib/api-error.test.ts 原本断言提示里必须包含 docker compose，等于用测试把错误文案保护了起来，长期没人敢改；现在改为断言包含 npm run dev:db 且不得包含 docker，把防复发写进测试。",
+        ],
+      },
+      {
+        label: "版本可信度（README 不再落后几十个版本）",
+        items: [
+          "此前 README.md 写 v3.1.60、README_EN.md 写 v3.1.57，而实际版本已是 v3.1.92——访客第一眼看到「这项目几十个版本没更新」，可信度与 Star 意愿直接受损。",
+          "根因是 scripts/bump-version.js 只改 changelog-data.ts、从不碰 README，漂移必然复发。现在 bump 流程新增第 7 步「同步中英 README 顶部的当前版本行」，从流程上根治。",
+          "顺带清理改名遗留：.env.example 的标题由「Novel Forge 环境变量模板」改为「Novel Smith 环境变量模板」。",
+        ],
+      },
+      {
+        label: "零门槛首体验（不配 Key 也能惊艳）",
+        items: [
+          "新增 /detector「去 AI 味检测」独立页：粘贴一段文字，立刻得到总分 + 四档等级 + 逐段绿/黄/红色条 + 每一处「为什么像 AI 写的」与「怎么改」+ 六项可解释的原始统计。",
+          "它复用 src/core/humanize 的纯本地规则引擎——不联网、不调模型、不需要 API Key、不需要数据库，稿件一个字节都不出本机。此前这个最强差异化被埋在「配 Key → 建项目 → 写章节」三道门之后，新用户 clone 完根本摸不到，哇塞时刻永远不出现。",
+          "价值验证从 30 分钟压缩到 30 秒：先尝到甜头，再自愿去配 Key。首页顶部导航与空态卡片均已加入口；系统状态横幅在 /detector 不再弹「AI 未配置」，避免一进页面就被黄条抵消零门槛效果。",
+        ],
+      },
+      {
+        label: "社区基建（让「想支持一下」变成低成本动作）",
+        items: [
+          "新增 CONTRIBUTING.md：本地起站三步、目录结构速览、三道门禁、bump 五件套、git 快照用法、怎么提一个好 Issue、怎么贡献预设与模板——把参与门槛降到最低。",
+          "仓库 Discussions 已开启（此前因接口 410 未能启用），聊天与提问有了去处；README 的「贡献与反馈」由 4 条泛泛要点改为具体三步路径，并链到 CONTRIBUTING.md。",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v3.1.92",
+    date: "2026-09-06",
+    title: "生成纯净度修复（GEN-PURITY-HUD）",
+    sections: [
+      {
+        label: "实战暴露真问题",
+        items: [
+          "八部分输出协议里的「一、头部：剧情校准 HUD」原本被写成强制「输出格式模板（严禁省略）」，模型会把【剧情校准 HUD】状态块直接吐进正文头部，污染交付稿（无设定的临时项目必现）。",
+        ],
+      },
+      {
+        label: "双保险修复",
+        items: [
+          "主修复：把该段改写为「后台静默自检、严禁输出正文任何位置」硬约束——不得出现【剧情校准 HUD】字样、不得出现「---」包裹的状态块、不得出现自检表格。",
+          "兜底：新增 src/core/post-process/sanitize.ts 的 stripProtocolLeak，在落库前三处（partialDraft 解析 / 草稿保存 / 最终 fullContent）用正则剥离任何残留的 HUD 标记。",
+        ],
+      },
+      {
+        label: "配套单测与门禁",
+        items: [
+          "sanitize.test.ts 新增 5 条单测；类型检查 0 错、vitest 全绿、生产构建通过。瑞宝宝的小说只交付沉浸正文。",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.91",
     date: "2026-09-07",
