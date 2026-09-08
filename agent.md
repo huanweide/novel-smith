@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.91 |
+| 包名 / 版本 | `novel-smith` v3.1.93 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.91 长文局部替换加固——真实长章下「应用修改」不再退化成整章重写（LONG-CHAP-PATCH-HARDEN）`（2026-09-07，Latest） |
+| 最新 Release | `v3.1.93 体验链路四大漏洞修复——首启动不再被 Docker 提示误导 / 中英 README 版本对齐且 bump 自动同步 / 新增零门槛 /detector 去 AI 味检测页 / 社区基建（FIRST-RUN-FIX）`（2026-09-08，Latest） |
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -99,6 +99,14 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.93 — 2026-09-08 — 体验链路四大漏洞修复（FIRST-RUN-FIX）
+- **首启动不再被误导（Docker 幽灵提示）**：项目自 v3.1.42 起已彻底移除 Docker / Postgres 改用本地 SQLite，但 DB 报错时界面仍让用户跑 `docker compose up -d`（装了也解决不了）。四处修正：`src/lib/api-error.ts` 的 P1001 hint、`src/components/system-status-banner.tsx:33` 的 `DB_FIX_CMD`、`scripts/doctor.mjs:88` 诊断文案，统一改引导 `npm run dev:db`；并解开「测试固化错误行为」——`src/lib/api-error.test.ts:17` 原断言提示必须含 `docker compose`，现改为断言含 `npm run dev:db` 且**不得含 docker**，防复发进测试。
+- **版本可信度**：`README.md` 长期停在 v3.1.60、英文停在 v3.1.57（实际 v3.1.92）。根因：`scripts/bump-version.js` 只改 `changelog-data.ts` 从不碰 README。现已给 bump 流程加第 7 步「同步中英 README 顶部版本行」（新增 `syncReadmeVersion()`），从流程根治漂移；顺带把 `.env.example` 标题的「Novel Forge」改名遗留清掉。
+- **零门槛首体验（最大杠杆）**：新增 `/detector`「去 AI 味检测」独立页（`src/app/detector/page.tsx` + `src/components/detector/DetectorPanel.tsx`），复用 `src/core/humanize` 纯本地规则引擎——**不联网、不调模型、不需要 API Key、不需要数据库**。此前最强差异化被埋在「配 Key→建项目→写章节」三道门后，新用户 clone 完摸不到；现在价值验证从 30 分钟压到 30 秒。首页顶部与空态加入口（`src/app/page.tsx`），`SystemStatusBanner` 在 `/detector` 不再弹「AI 未配置」。
+- **社区基建**：新增 `CONTRIBUTING.md`（起站三步 / 目录结构 / 三道门禁 / bump 五件套 / 快照 / 怎么提好 Issue / 怎么贡献预设模板）；仓库 **Discussions 已开启**（`gh repo edit --enable-discussions`，此前因接口 410 未启用）；README「贡献与反馈」改为具体三步并链到 CONTRIBUTING.md。
+- **补上轮遗漏**：v3.1.92 当时只改了 `LATEST_VERSION`，`VERSIONS` 与 `CHANGELOG_BRIEF` 条目漏插（changelog 页首条仍是 v3.1.91），本轮一并补齐。
+- **门禁**：tsc 0 错、vitest 全绿、生产构建通过。
 
 ### v3.1.92 — 2026-09-06 — 生成纯净度修复（GEN-PURITY-HUD）
 - **问题**：八部分输出协议里的「一、头部：剧情校准 HUD」曾是强制「输出格式模板（严禁省略）」，模型会把【剧情校准 HUD】状态块直接吐进正文头部，污染交付稿（无设定临时项目必现）。
@@ -413,3 +421,4 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | `snap/20260902-181738-v3.1.59` | 2026-09-02 18:17 | v3.1.59 | main | 首屏并行化生产构建实测，动手前 | 31M |
 | `snap/20260902-183824-v3.1.59` | 2026-09-02 18:38 | v3.1.59 | main | 合并 dependabot 依赖升级前 | 31M |
 | `snap/20260905-112230-v3.1.84` | 2026-09-05 11:22 | v3.1.84 | main | Preset创意工坊完善-动手前(T15预览+撤销+编辑删除+桥接+测试) | 32M |
+| `snap/20260908-120021-v3.1.92` | 2026-09-08 12:00 | v3.1.92 | main | 修复4个体验漏洞前(Docker提示/版本漂移/detector零门槛页/社区基建) | 32M |

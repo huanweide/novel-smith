@@ -14,9 +14,13 @@
 
 [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.57** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.93** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 > **About the UI Preview**: the link above only shows **what the interface looks like** — it cannot actually be used. It runs in a read-only cloud environment, while Novel Smith needs to write into a local SQLite file. **Run it on your own machine via "Quick Start" below** — it takes about two minutes.
+
+> **No API key yet?** You can still try the most distinctive feature right away: after starting the app, open
+> `/detector`, paste any text, and instantly see how "machine-written" it reads — a fully local rule engine,
+> no API key, no upload, and your draft never leaves your machine.
 
 ---
 

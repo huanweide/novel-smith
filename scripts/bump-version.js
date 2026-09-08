@@ -17,6 +17,7 @@
  *   4. 更新 LATEST_VERSION
  *   5. 更新 CHANGELOG_BRIEF
  *   6. 写入文件
+ *   7. 同步 README.md / README_EN.md 顶部的「当前版本」行（防版本漂移）
  */
 
 const fs = require("fs");
@@ -175,6 +176,45 @@ function generateBrief(sections) {
   return briefs;
 }
 
+// ─── 同步 README 版本行（根治版本漂移）──────────────────────
+//
+// 背景：此前 bump 只改 changelog-data.ts，README.md / README_EN.md 的版本号
+// 长期停在旧版本（实测 README 停在 v3.1.60、英文停在 v3.1.57，而实际已 v3.1.92），
+// 访客第一眼看到"落后几十个版本"直接损害可信度与 Star 意愿。
+// 现在把 README 版本行同步纳入 bump 流程，从流程上杜绝复发。
+
+function syncReadmeVersion(newVersion) {
+  const targets = [
+    {
+      file: path.join(__dirname, "..", "README.md"),
+      re: /\*\*当前版本：v[\d.]+\*\*/,
+      replace: `**当前版本：${newVersion}**`,
+    },
+    {
+      file: path.join(__dirname, "..", "README_EN.md"),
+      re: /\*\*Current Version: v[\d.]+\*\*/,
+      replace: `**Current Version: ${newVersion}**`,
+    },
+  ];
+
+  const synced = [];
+  const skipped = [];
+  for (const t of targets) {
+    if (!fs.existsSync(t.file)) {
+      skipped.push(`${path.basename(t.file)}（文件不存在）`);
+      continue;
+    }
+    const content = fs.readFileSync(t.file, "utf-8");
+    if (!t.re.test(content)) {
+      skipped.push(`${path.basename(t.file)}（未找到版本行，请手工检查格式）`);
+      continue;
+    }
+    fs.writeFileSync(t.file, content.replace(t.re, t.replace), "utf-8");
+    synced.push(path.basename(t.file));
+  }
+  return { synced, skipped };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 主流程
 // ═══════════════════════════════════════════════════════════════
@@ -215,6 +255,9 @@ const newFile = generateNewFile(fileContent, newVersion, date, title, sections, 
 // 写入
 fs.writeFileSync(CHANGELOG_PATH, newFile, "utf-8");
 
+// 同步 README / README_EN 顶部的「当前版本」行（防版本漂移复发）
+const { synced, skipped } = syncReadmeVersion(newVersion);
+
 // ─── 输出 ─────────────────────────────────────────────────────
 
 console.log(`\n✅ 版本已更新: ${currentVersion} → ${newVersion}`);
@@ -223,6 +266,8 @@ console.log(`📝 标题: ${title}`);
 console.log(`📋 公告摘要:`);
 briefItems.forEach((b, i) => console.log(`   ${i + 1}. ${b}`));
 console.log(`\n📂 文件: ${CHANGELOG_PATH}`);
+if (synced.length > 0) console.log(`📄 README 版本行已同步: ${synced.join(" / ")}`);
+if (skipped.length > 0) console.log(`⚠️  README 版本行未同步: ${skipped.join(" / ")}`);
 console.log(`\n下一步:`);
 console.log(`   git add src/lib/changelog-data.ts`);
 console.log(`   git commit -m "chore: bump to ${newVersion}"`);
