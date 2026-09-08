@@ -15,7 +15,7 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 import { getTemplate } from "@/core/templates";
 import { ALL_WORLD_CATEGORIES, WORLD_CATEGORY_LABELS } from "@/lib/world-category-classifier";
 import type { BuildConfig } from "@/core/explore/types";
-import { PLOT_STRUCTURE_LABEL } from "@/core/explore/build-prompt";
+import { PLOT_STRUCTURE_LABEL } from "@/core/explore/types";
 
 /**
  * 全局提示词预算（中文按字符计）。目标把全量设定压到 ≈14K 字符（约 8~9K token），

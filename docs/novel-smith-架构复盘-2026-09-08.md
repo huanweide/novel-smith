@@ -38,7 +38,7 @@
 | 能力 | 主要文件 | 状态 | 证据 / 缺口 |
 |---|---|---|---|
 | 宝宝流数据库（自动填表） | `src/core/babylore/`（被引用 17） | ⚠️ | 功能最强，但存在**循环依赖**：`entity-sync.ts:22` 引 `./fill`，`fill.ts:27` 引 `./entity-sync` |
-| 全局提示装配 | `src/core/sync-global-prompt.ts`（被引用 33） | ⚠️ | 事实上的唯一真相源；但 `src/core/explore/build-prompt.ts:buildGlobalPromptFromExplore` 是**第二个构造入口**，双头风险 |
+| 全局提示装配 | `src/core/sync-global-prompt.ts`（被引用 33） | ✅ | 唯一构造入口；`src/core/explore/build-prompt.ts:buildGlobalPromptFromExplore` 已退化为「产出入参→委托 buildGlobalPrompt」的适配壳（R2 收敛，v3.1.98） |
 | 一致性检测 | `src/core/consistency/`（被引用 16） | ⚠️ | 后端全套在（extractFacts / detectConflicts / suggestFix），但 `ROADMAP.md` P2-6 自述"冲突 API 没在 UI 显眼处呈现"——**半成品** |
 | 伏笔管理 | `src/core/foreshadowing.ts`（被引用 8） | ✅ | 有测试 |
 | 角色去重 | `src/core/character-dedupe.ts`（被引用 4） | ✅ | 有 3 组测试；但自带一份私有 `extractJson`（:67） |
@@ -325,7 +325,7 @@ L5 数据层   data/novelforge.db（1.05 MB，31 model，schema 830 行）
 | # | 动作 | 涉及文件 | 验收标准 | 风险 | 状态 |
 |---|---|---|---|---|---|
 | 6 | JSON 解析全量收敛（R1） | 第 2.3 节 P2 表 23 处 → `src/lib/json-parser.ts` | 手写 `indexOf("{")` 解析归零；`json-parser.test.ts` 扩充各路真实 AI 脏输出用例 | 中（逐处替换需跑相关测试；分 3 批提交） | ✅ 已完成（v3.1.97） |
-| 7 | 全局提示双头收敛（R2） | `sync-global-prompt.ts`、`explore/build-prompt.ts` | 只留 1 个构造函数；探讨态与写作态输出一致（加一条对比测试） | 中（提示词改动影响生成效果，需人工抽样比对） | ⬜ 待做 |
+| 7 | 全局提示双头收敛（R2） | `sync-global-prompt.ts`、`explore/build-prompt.ts` | 只留 1 个构造函数；探讨态与写作态输出一致（加一条对比测试） | 中（提示词改动影响生成效果，需人工抽样比对） | ✅ 已落地（v3.1.98） |
 | 8 | 补 pipeline + orchestrator 冒烟测试 | `src/core/pipeline/*`、`src/core/agents/orchestrator.ts` | 主流程 mock LLM 后能跑通；orchestrator 覆盖正常/超时/脏 JSON 三态 | 中 | ⬜ 待做 |
 | 9 | 质量模块归位（R3） | 4 个质量文件 → `src/core/quality/` | 阈值常量单一来源；对外行为不变 | 低 | ✅ 已归位（v3.1.96） |
 
