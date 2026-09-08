@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings, recordLlmCall } from "@/lib/llm";
 import { STORYLINE_STATUS, withStorylineLock } from "@/core/story-status";
 import { safeJoin } from "@/lib/utils";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export interface ChapterPlan {
   /** 本章核心焦点（一句话） */
@@ -32,20 +33,8 @@ export interface PlanResult {
 
 function parsePlan(raw: string): ChapterPlan | undefined {
   if (!raw) return undefined;
-  let s = raw.trim();
-  const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) s = md[1].trim();
-  else {
-    const a = s.indexOf("{");
-    const b = s.lastIndexOf("}");
-    if (a >= 0 && b > a) s = s.slice(a, b + 1);
-  }
-  try {
-    const p = JSON.parse(s);
-    if (p && typeof p === "object") return p as ChapterPlan;
-  } catch {
-    /* 解析失败返回 undefined */
-  }
+  const p = safeParseAIJson(raw) as ChapterPlan | null;
+  if (p && typeof p === "object" && !Array.isArray(p)) return p;
   return undefined;
 }
 

@@ -25,6 +25,7 @@ import {
   ALL_WORLD_CATEGORIES,
   type WorldCategory,
 } from "@/lib/world-category-classifier";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 interface LlmCreds {
   baseURL: string;
@@ -112,15 +113,15 @@ export async function syncChapterEntities(
     const data = await res.json();
     const msg0 = data?.choices?.[0]?.message || {};
     let s = (msg0.content || "").trim();
-    // 推理模型兜底：content 为空时从推理尾部提取最后一个 JSON 块
+    // 推理模型兜底：content 为空时从推理内容提取 JSON 块（统一容错解析器处理）
     if (!s) {
-      const reasoning = String(msg0.reasoning_content || "");
-      const a = reasoning.lastIndexOf("{");
-      const b = reasoning.lastIndexOf("}");
-      if (a >= 0 && b > a) s = reasoning.slice(a, b + 1);
+      s = String(msg0.reasoning_content || "");
     }
-    const clean = s.replace(/```(?:json)?\s*([\s\S]*?)```/g, "$1").trim();
-    const parsed = JSON.parse(clean);
+    const parsed = safeParseAIJson(s);
+    if (!parsed) {
+      result.error = "实体抽取结果解析失败";
+      return result;
+    }
     const arr = Array.isArray(parsed) ? parsed : (parsed as any).entities;
     if (Array.isArray(arr)) {
       entities = arr.filter((e: any) => e && typeof e.name === "string" && String(e.name).trim().length >= 2);

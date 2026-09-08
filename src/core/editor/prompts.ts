@@ -9,6 +9,7 @@
  */
 
 import type { PublishPlatform } from "@/core/publish/pipeline";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export type EditorRoleId = "fanqie" | "qidian" | "jjwxc" | "wechat" | "reader" | "custom";
 
@@ -164,21 +165,7 @@ ${chapterBlocks}
 
 // ─── 解析 LLM 返回的 JSON，并把 chapterRef 映射回 nodeId/title ──
 export function parseReviewJson(raw: string, chapters: ReviewChapterInput[]): Omit<ReviewResult, "promptForTune"> {
-  let text = (raw || "").trim();
-  // 去掉可能的 ```json ... ``` 包裹
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) text = fence[1].trim();
-  // 兜底：截取第一个 { 到最后一个 }
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first >= 0 && last > first) text = text.slice(first, last + 1);
-
-  let obj: any = {};
-  try {
-    obj = JSON.parse(text);
-  } catch {
-    obj = {};
-  }
+  const obj: any = safeParseAIJson(raw) ?? {};
 
   const refMap = new Map<string, ReviewChapterInput>();
   for (const c of chapters) refMap.set(c.ref, c);
@@ -338,34 +325,7 @@ ${items}
 
 /** 解析定位结果；畸形/空内容一律返回空数组（由调用方决定是否回退整章改写） */
 export function parseLocateJson(raw: string): LocatePatch[] {
-  let text = (raw || "").trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) text = fence[1].trim();
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first >= 0 && last > first) text = text.slice(first, last + 1);
-
-  let obj: any = {};
-  try {
-    obj = JSON.parse(text);
-  } catch {
-    // 容错：输出可能被 maxTokens 截断（差一两个收尾括号），尝试补全后再解一次
-    for (const tail of ["", "}", "]}", "]"]) {
-      try {
-        const healed = JSON.parse(text + tail);
-        if (healed && (Array.isArray(healed.patches) || typeof healed === "object")) {
-          obj = healed;
-          break;
-        }
-      } catch {
-        /* 仍解析失败则继续尝试下一个收尾 */
-      }
-    }
-    if (!obj || (typeof obj === "object" && !Array.isArray((obj as any).patches) && Object.keys(obj).length === 0)) {
-      return [];
-    }
-  }
-
+  const obj: any = safeParseAIJson(raw) ?? {};
   const arr = Array.isArray(obj.patches) ? obj.patches : [];
   return arr
     .filter((p: any) => p && typeof p.anchor === "string" && p.anchor.trim())

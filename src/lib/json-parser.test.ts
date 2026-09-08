@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAIJson, safeParseAIJson } from "./json-parser";
+import { parseAIJson, safeParseAIJson, parseAIArray, safeParseAIArray } from "./json-parser";
 
 describe("parseAIJson —— AI 容错 JSON 解析", () => {
   it("解析标准 JSON", () => {
@@ -67,5 +67,51 @@ describe("safeParseAIJson —— 不抛错的封装", () => {
 
   it("非法输入返回 null", () => {
     expect(safeParseAIJson("乱码")).toBeNull();
+  });
+});
+
+describe("parseAIArray / safeParseAIArray —— 数组版容错解析（P1-6 收敛新增）", () => {
+  it("标准数组", () => {
+    expect(parseAIArray('[{"a":1},{"b":2}]')).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+
+  it("去掉 BOM 前缀", () => {
+    expect(parseAIArray("\uFEFF" + '[{"a":1}]')).toEqual([{ a: 1 }]);
+  });
+
+  it("从 ```json 代码块提取数组", () => {
+    expect(parseAIArray('```json\n[{"a":1}]\n```')).toEqual([{ a: 1 }]);
+  });
+
+  it("修复尾逗号", () => {
+    expect(parseAIArray('[{"a":1,},{"b":2,}]')).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+
+  it("补全未闭合括号（缺 ]）", () => {
+    expect(parseAIArray('[{"a":1}')).toEqual([{ a: 1 }]);
+  });
+
+  it("前后有杂文时提取第一个完整数组", () => {
+    expect(parseAIArray('以下是结果：[{"a":1}] 完毕')).toEqual([{ a: 1 }]);
+  });
+
+  it("字符串内真实换行（控制字符）也能修复", () => {
+    expect(parseAIArray('[{"content":"第一行\n第二行"}]')).toEqual([{ content: "第一行\n第二行" }]);
+  });
+
+  it("裸对象输入应当抛错（数组解析器不容忍对象）", () => {
+    expect(() => parseAIArray('{"a":1}')).toThrow();
+  });
+
+  it("完全无法解析时抛错", () => {
+    expect(() => parseAIArray("这根本不是 json")).toThrow();
+  });
+
+  it("safeParseAIArray 合法输入返回数组", () => {
+    expect(safeParseAIArray('[{"a":1}]')).toEqual([{ a: 1 }]);
+  });
+
+  it("safeParseAIArray 非法输入返回 null", () => {
+    expect(safeParseAIArray("乱码")).toBeNull();
   });
 });

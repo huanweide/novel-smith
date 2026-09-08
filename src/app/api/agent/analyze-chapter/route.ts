@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig, createLLMClient } from "@/core/llm/client";
 import {  safeJoin, asArray } from "@/lib/utils";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export const maxDuration = 60;
 
@@ -180,19 +181,7 @@ ${charsSummary.slice(0, 3000)}`;
     // 解析 JSON（v0.46.55 修复：模型偶发返回 markdown 包裹/尾逗号/截断 JSON，用多级鲁棒解析）
     let result: AnalysisResult;
     try {
-      let jsonStr = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      const a = jsonStr.indexOf("{"), b = jsonStr.lastIndexOf("}");
-      if (a >= 0 && b > a) jsonStr = jsonStr.slice(a, b + 1);
-      const tryParse = (s: string): Record<string, unknown> | null => {
-        try { return JSON.parse(s) as Record<string, unknown>; } catch { /* 下一级 */ }
-        try {
-          return JSON.parse(s
-            .replace(/,\s*([}\]])/g, "$1")
-            .replace(/\u2028|\u2029/g, " ")
-            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")) as Record<string, unknown>;
-        } catch { return null; }
-      };
-      const parsed = tryParse(jsonStr);
+      const parsed = safeParseAIJson(raw);
       if (!parsed) throw new Error("JSON 解析失败");
       result = {
         differences: Array.isArray(parsed.differences) ? parsed.differences : [],

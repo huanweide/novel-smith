@@ -22,6 +22,7 @@ import {
 } from "@/core/pipeline/outline-context";
 import { formatDigest, formatStage } from "@/core/pipeline";
 import { completeText } from "@/core/llm/client";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export interface ChapterOutlineInput {
   projectId: string;
@@ -135,19 +136,12 @@ ${characterList}
 
   try {
     const selectionRaw = await completeText(selectionSystem, selectionPrompt, { maxTokens: 2048, temperature: 0.3, json: true });
-    const parsed = JSON.parse(
-      (() => {
-        let s = selectionRaw.trim();
-        const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (md) s = md[1].trim();
-        const a = s.indexOf("{"), b = s.lastIndexOf("}");
-        if (a >= 0 && b > a) s = s.slice(a, b + 1);
-        return s;
-      })(),
-    ) as Record<string, unknown>;
-    if (Array.isArray(parsed.selected)) {
-      selectedNames = parsed.selected as string[];
-      selectionReasoning = (parsed.reasoning as string) || "";
+    const parsed = safeParseAIJson(selectionRaw) as Record<string, unknown> | null;
+    if (parsed && !Array.isArray(parsed) && Array.isArray((parsed as any).selected)) {
+      selectedNames = (parsed as any).selected as string[];
+      selectionReasoning = ((parsed as any).reasoning as string) || "";
+    } else {
+      throw new Error("选角 JSON 解析失败");
     }
   } catch {
     // AI 选角失败 → 回退：至少保主角
