@@ -14,7 +14,7 @@ import { isGarbageSummary } from "@/core/pipeline/digest-aggregate";
 import { scanForbiddenWordsEnhanced, type ForbiddenMatch } from "@/lib/forbidden-checker";
 import { runLocalDistillation } from "@/lib/distillation-runner";
 import { classifyAndConvert } from "@/lib/memory-classifier";
-import { analyzeQuality } from "@/lib/quality-analyzer";
+import { analyzeQuality } from "@/core/quality/quality-analyzer";
 import { STATUS_DRAFTING } from "@/core/story-status";
 import type { KnownEntity, EntityType } from "@/lib/entity-detector";
 import type { AgentOrchestrator } from "@/core/agents";

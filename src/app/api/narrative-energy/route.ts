@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { computeNarrativeEnergy } from "@/core/narrative-energy";
+import { computeNarrativeEnergy } from "@/core/quality/narrative-energy";
 
 export const dynamic = "force-dynamic";
 

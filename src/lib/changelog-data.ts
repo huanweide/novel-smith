@@ -25,13 +25,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.95";
+export const LATEST_VERSION = "v3.1.96";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "架构: 解除 babylore entity-sync 与 fill 的循环依赖，抽出共享模块 table-model.ts",
-  "测试: 补 src/lib/llm.ts 单元测试 15 例，覆盖 mapLLMError",
-  "修复: 预设撤销非幂等，重复撤销不再重复还原",
+  "架构: quality-analyzer，quality-thresholds",
+  "测试: 质量相关单测随文件迁移，tsc 0 错",
 ];
 
 /**
