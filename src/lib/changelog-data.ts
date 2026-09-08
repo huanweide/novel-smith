@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.98";
+export const LATEST_VERSION = "v3.1.99";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "架构: buildGlobalPromptFromExplore 退化为产出入参委托 buildGlobalPrompt 的适配壳，全库只留 1 个全局提示构造函数",
-  "修复: adopted 设定的 worldview 与 plot 与 economy 旧类别收敛到合法 WorldCategory，不再被世界书段静默丢弃",
-  "测试: 新增探讨态与写作态输出同构对比测试，build-prompt 测试 8 例全过",
+  "测试: 补 pipeline 三个模块冒烟测试(plan-chapter/storyline-writer/generate-chapter-outline)",
+  "测试: 补 orchestrator 三态冒烟(正常/脏JSON/超时)",
+  "健壮: 主流程 mock LLM 跑通不依赖真 DB",
 ];
 
 /**
@@ -86,6 +86,31 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.99",
+    date: "2026-09-08",
+    title: "P1-8 补 pipeline/orchestrator 冒烟测试",
+    sections: [
+      {
+        label: "测试",
+        items: [
+          "补 pipeline 三个模块冒烟测试(plan-chapter/storyline-writer/generate-chapter-outline)",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "补 orchestrator 三态冒烟(正常/脏JSON/超时)",
+        ],
+      },
+      {
+        label: "健壮",
+        items: [
+          "主流程 mock LLM 跑通不依赖真 DB",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.98",
     date: "2026-09-08",
