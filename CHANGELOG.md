@@ -1,4 +1,21 @@
 ﻿# Novel Smith 更新公告
+## v3.1.99 — 2026-09-08
+
+### P1-8·pipeline/orchestrator 冒烟测试补齐（主流程 mock LLM 跑通）
+
+- **pipeline 三模块冒烟测试**：新增 `src/core/pipeline/plan-chapter.smoke.test.ts`、`storyline-writer.smoke.test.ts`、`generate-chapter-outline.smoke.test.ts`，通过 mock `getSettings`/`fetch`/`completeText`/`prisma`/`withStorylineLock` 在不依赖真实数据库与真实 LLM 的前提下跑通主路径；覆盖「无 apiKey 返回 null / 无活跃线返回 null / fetch 命中返回 planText / 空输入不碰 DB / impactScore<4 跳过 / 合法大事写入 MILESTONE / 章节不存在抛 OutlineError / 正常生成章纲写库」等边界。
+- **orchestrator 三态冒烟**：新增 `src/core/agents/orchestrator.smoke.test.ts`，通过构造函数注入假 LLMClient，覆盖正常返回、脏 JSON 兜底不抛错、超时抛错三态。
+- **门禁**：类型检查 0 错、vitest 149 文件 1557 测试全绿（较基线 +4 文件 +12 测试）、生产构建通过。个人 IP 仍归瑞宝宝。
+
+## v3.1.98 — 2026-09-08
+
+### 全局提示双头收敛（R2）：全库只留 1 个构造函数
+
+- **🏗️ 架构**：`explore/build-prompt.ts` 的 `buildGlobalPromptFromExplore` 退化为「把探讨配置 + 已采纳设定转换为 buildGlobalPrompt 入参」的适配壳，不再自行拼文本；探讨态与写作态共用 `sync-global-prompt.ts` 的 `buildGlobalPrompt` 单一引擎，输出结构完全一致。
+- **🔧 修复**：adopted 设定的 `worldview` / `plot` / `economy` 旧类别收敛到合法 `WorldCategory`，不再被世界书段静默丢弃（此前「共 N 条」却渲染不出内容）。
+- **🧪 测试**：新增探讨态/写作态输出同构对比测试（`buildGlobalPromptFromExplore` 委托结果 === 直调 `buildGlobalPrompt`）；`build-prompt` 测试 8 例全过。
+- **📦 依赖**：`PLOT_STRUCTURE_LABEL` 迁入 `explore/types.ts`，破解潜在循环依赖。
+
 ## v3.1.97 — 2026-09-08
 
 ### 架构复盘 P1·JSON 解析全量收敛（R1 · 29 处手写解析收口到 src/lib/json-parser.ts）
@@ -500,15 +517,6 @@
   - 共性问题：接口返回值缺数组防御（多处直接对可能为字符串的字段调 `join`/`map`）、错误态不统一、两个超长页面（1357 行与 1566 行）待拆组件、`prefers-reduced-motion` 全局缺失。
   - 性能发现：`changelog-data.ts` 单文件 1MB / VERSIONS 1810 条目全量打进客户端，导致 `/changelog` 产出 2.1MB HTML。
 - 个人 IP 仍归瑞宝宝，无新 IP/品牌/引流。
-
-## v3.1.98 — 2026-09-08
-
-### 全局提示双头收敛（R2）：全库只留 1 个构造函数
-
-- **🏗️ 架构**：`explore/build-prompt.ts` 的 `buildGlobalPromptFromExplore` 退化为「把探讨配置 + 已采纳设定转换为 buildGlobalPrompt 入参」的适配壳，不再自行拼文本；探讨态与写作态共用 `sync-global-prompt.ts` 的 `buildGlobalPrompt` 单一引擎，输出结构完全一致。
-- **🔧 修复**：adopted 设定的 `worldview` / `plot` / `economy` 旧类别收敛到合法 `WorldCategory`，不再被世界书段静默丢弃（此前「共 N 条」却渲染不出内容）。
-- **🧪 测试**：新增探讨态/写作态输出同构对比测试（`buildGlobalPromptFromExplore` 委托结果 === 直调 `buildGlobalPrompt`）；`build-prompt` 测试 8 例全过。
-- **📦 依赖**：`PLOT_STRUCTURE_LABEL` 迁入 `explore/types.ts`，破解潜在循环依赖。
 
 ## v3.1.53 — 2026-08-21
 
