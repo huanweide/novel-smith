@@ -21,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { completeText } from "@/core/llm/client";
 import { isHonorificVariant, resolveVariantTarget, isSurnameAbbrevOrDescriptor, coreSurname } from "@/lib/entity-auto-creator";
 import {  safeJoin, asArray } from "@/lib/utils";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export interface DedupeMergeItem {
   mainId: string;
@@ -62,20 +63,6 @@ function charFingerprint(c: CharLite): string {
 }
 
 const dedupeGroupCache = new Map<string, { fp: string; high: string[][]; pending: string[][] }>();
-
-/** 从可能包裹了说明文字的模型输出里抠出第一个 JSON 对象 */
-function extractJson(raw: string): any {
-  if (!raw) return null;
-  const s = raw.trim();
-  const first = s.indexOf("{");
-  const last = s.lastIndexOf("}");
-  if (first === -1 || last === -1 || last < first) return null;
-  try {
-    return JSON.parse(s.slice(first, last + 1));
-  } catch {
-    return null;
-  }
-}
 
 /**
  * LLM 判定「同一真实人物」分组。
@@ -135,7 +122,7 @@ async function llmDetectSamePersonGroups(chars: CharLite[], context: string): Pr
 
   try {
     const raw = await completeText(system, prompt, { temperature: 0.2, maxTokens: 1500, role: "dedupe", json: true });
-    const json = extractJson(raw);
+    const json = safeParseAIJson(raw);
     const groups = Array.isArray(json?.groups) ? json.groups : [];
     const ids = new Set(chars.map((c) => c.id));
     const valid: string[][] = [];
