@@ -501,6 +501,15 @@
   - 性能发现：`changelog-data.ts` 单文件 1MB / VERSIONS 1810 条目全量打进客户端，导致 `/changelog` 产出 2.1MB HTML。
 - 个人 IP 仍归瑞宝宝，无新 IP/品牌/引流。
 
+## v3.1.98 — 2026-09-08
+
+### 全局提示双头收敛（R2）：全库只留 1 个构造函数
+
+- **🏗️ 架构**：`explore/build-prompt.ts` 的 `buildGlobalPromptFromExplore` 退化为「把探讨配置 + 已采纳设定转换为 buildGlobalPrompt 入参」的适配壳，不再自行拼文本；探讨态与写作态共用 `sync-global-prompt.ts` 的 `buildGlobalPrompt` 单一引擎，输出结构完全一致。
+- **🔧 修复**：adopted 设定的 `worldview` / `plot` / `economy` 旧类别收敛到合法 `WorldCategory`，不再被世界书段静默丢弃（此前「共 N 条」却渲染不出内容）。
+- **🧪 测试**：新增探讨态/写作态输出同构对比测试（`buildGlobalPromptFromExplore` 委托结果 === 直调 `buildGlobalPrompt`）；`build-prompt` 测试 8 例全过。
+- **📦 依赖**：`PLOT_STRUCTURE_LABEL` 迁入 `explore/types.ts`，破解潜在循环依赖。
+
 ## v3.1.53 — 2026-08-21
 
 ### 探讨模式人性化大升级：一键构筑 + 小说改名 + 已采纳可编辑 + 对话区滚动布局（EXPLORE-POLISH）
