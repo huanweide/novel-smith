@@ -19,7 +19,7 @@ import {
   shouldAutoCreateCharacterCard,
   MIN_CHARACTER_APPEARANCES,
 } from "@/lib/entity-auto-creator";
-import { fillModelOf } from "./fill";
+import { fillModelOf } from "./table-model";
 import {
   classifyWorldCategory,
   ALL_WORLD_CATEGORIES,

@@ -46,6 +46,8 @@ export function createMemoryDb(seed?: {
     loreTable: {
       findFirst: async ({ where }: any) =>
         state.loreTables.find((t) => t.projectId === where.projectId && t.key === where.key) ?? null,
+      findUnique: async ({ where }: any) =>
+        state.loreTables.find((t) => t.id === where.id) ?? null,
       create: async ({ data }: any) => {
         const rec = { id: nextId("lt"), ...data };
         state.loreTables.push(rec);
@@ -63,6 +65,8 @@ export function createMemoryDb(seed?: {
     styleCard: {
       findFirst: async ({ where }: any) =>
         state.styleCards.find((s) => s.projectId === where.projectId) ?? null,
+      findUnique: async ({ where }: any) =>
+        state.styleCards.find((s) => s.id === where.id) ?? null,
       create: async ({ data }: any) => {
         const rec = { id: nextId("sc"), ...data };
         state.styleCards.push(rec);
@@ -89,6 +93,8 @@ export function createMemoryDb(seed?: {
         state.lorebookEntries.find(
           (e) => e.projectId === where.projectId && e.category === where.category && e.title === where.title,
         ) ?? null,
+      findUnique: async ({ where }: any) =>
+        state.lorebookEntries.find((e) => e.id === where.id) ?? null,
       create: async ({ data }: any) => {
         const rec = { id: nextId("le"), ...data };
         state.lorebookEntries.push(rec);
@@ -115,6 +121,8 @@ export function createMemoryDb(seed?: {
         const name = where?.name?.equals;
         return state.characters.find((c) => c.projectId === where.projectId && c.name === name) ?? null;
       },
+      findUnique: async ({ where }: any) =>
+        state.characters.find((c) => c.id === where.id) ?? null,
       create: async ({ data }: any) => {
         const rec = { id: nextId("cc"), ...data };
         state.characters.push(rec);
