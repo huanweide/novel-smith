@@ -3,7 +3,7 @@
 // 用法：npx tsx scripts/agent-quality-blind-test.cjs
 // 诚实边界：样本为人工构造+标注（反自欺：含灰色地带，不全放明显好/坏），非真实用户语料，仅作基线。
 
-import { analyzeQuality } from "../src/lib/quality-analyzer";
+import { analyzeQuality } from "../src/core/quality/quality-analyzer";
 
 interface Sample {
   label: string;

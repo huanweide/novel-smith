@@ -10,7 +10,7 @@ const prismaMock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/core/babylore/loop", () => ({ safeFillAfterWriting: vi.fn() }));
-vi.mock("@/lib/quality-analyzer", () => ({ analyzeQuality: vi.fn() }));
+vi.mock("@/core/quality/quality-analyzer", () => ({ analyzeQuality: vi.fn() }));
 vi.mock("@/core/foreshadowing", () => ({ detectPayoffs: vi.fn() }));
 
 import { evaluateConfirmEligibility, MIN_AUTO_CONFIRM_LENGTH, applyConfirm, triggerForeshadowDetect } from "@/core/confirm-guard";

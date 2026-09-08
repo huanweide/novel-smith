@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.95 |
+| 包名 / 版本 | `novel-smith` v3.1.96 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -99,6 +99,11 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.96 — 2026-09-08 — 架构复盘 P1·质量模块归位（R3）
+- **质量概念归一**：`quality-analyzer.ts` / `quality-thresholds.ts` / `auto-rate.ts` / `narrative-energy.ts` 四个质量模块统一迁入 `src/core/quality/`，阈值常量单一来源；顺手修掉 `quality-analyzer.ts` 的 `./forbidden-checker` 相对引用及两处测试/脚本里的旧路径。
+- **对外行为不变**：纯目录搬迁 + 引用改写，无逻辑改动。
+- **门禁**：tsc 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。
 
 ### v3.1.95 — 2026-09-08 — 架构复盘 P0 第二批·循环依赖解除 + 核心模块测试补齐（ARCH-CLEANUP-P0B）
 - **解除 babylore 循环依赖**：`entity-sync.ts` 与 `fill.ts` 互相引用，环路。抽出纯函数 `fillModelOf` 到新建 `src/core/babylore/table-model.ts`，两边单向依赖，环破；babylore 7 测试文件 65 例全绿。

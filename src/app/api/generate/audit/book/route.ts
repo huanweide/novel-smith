@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanForbiddenWordsEnhanced } from "@/lib/forbidden-checker";
-import { analyzeQuality } from "@/lib/quality-analyzer";
+import { analyzeQuality } from "@/core/quality/quality-analyzer";
 
 /**
  * GET /api/generate/audit/book?projectId=xxx —— 全书健康度体检（v2.8.0，只读）
