@@ -4,16 +4,24 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface PrismaUndoWriter {
-  loreTable: { delete(args: any): Promise<any> };
+  loreTable: {
+    findUnique(args: any): Promise<any>;
+    delete(args: any): Promise<any>;
+  };
   styleCard: {
+    findUnique(args: any): Promise<any>;
     delete(args: any): Promise<any>;
     update(args: any): Promise<any>;
   };
   lorebookEntry: {
+    findUnique(args: any): Promise<any>;
     delete(args: any): Promise<any>;
     update(args: any): Promise<any>;
   };
-  characterCard: { delete(args: any): Promise<any> };
+  characterCard: {
+    findUnique(args: any): Promise<any>;
+    delete(args: any): Promise<any>;
+  };
   project: {
     findUnique(args: any): Promise<any>;
     update(args: any): Promise<any>;
@@ -41,6 +49,33 @@ interface UpdItem {
   before: unknown;
 }
 
+/**
+ * 浅层深度相等：支持原始值 / 数组 / 普通对象（撤销场景里的 before 快照只含这些）。
+ * 用于判断「当前值是否已经等于撤销目标值」，从而跳过无意义的重复还原。
+ */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => deepEqual(v, b[i]));
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const ka = Object.keys(a as Record<string, unknown>);
+    const kb = Object.keys(b as Record<string, unknown>);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) =>
+      deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+    );
+  }
+  return false;
+}
+
+/** current 是否已完全匹配 before 快照（before 为部分字段时按字段逐个比较） */
+function alreadyMatches(current: any, before: any): boolean {
+  if (!current || !before || typeof before !== "object") return false;
+  return Object.keys(before).every((k) => deepEqual(current[k], before[k]));
+}
+
 export async function executeUndo(
   db: PrismaUndoWriter,
   projectId: string,
@@ -60,14 +95,20 @@ export async function executeUndo(
   const created: CrtItem[] = Array.isArray(record.created) ? record.created : [];
   const updatedBefore: UpdItem[] = Array.isArray(record.updatedBefore) ? record.updatedBefore : [];
 
-  // ── 1) 还原被覆盖的旧值（逆序） ──
+  // ── 1) 还原被覆盖的旧值（逆序）。幂等：当前已等于 before 则跳过，避免重复还原。 ──
   for (let i = updatedBefore.length - 1; i >= 0; i -= 1) {
     const u = updatedBefore[i];
     try {
       if (u.kind === "style" && u.id && u.before) {
+        const cur = await db.styleCard.findUnique({ where: { id: u.id } });
+        if (!cur) { skipped.push(`style:${u.name}（实体已不存在，无法还原）`); continue; }
+        if (alreadyMatches(cur, u.before)) continue; // 已还原，静默跳过
         await db.styleCard.update({ where: { id: u.id }, data: u.before });
         restored.push(`style:${u.name}`);
       } else if (u.kind === "lorebook" && u.id && u.before) {
+        const cur = await db.lorebookEntry.findUnique({ where: { id: u.id } });
+        if (!cur) { skipped.push(`lorebook:${u.name}（实体已不存在，无法还原）`); continue; }
+        if (alreadyMatches(cur, u.before)) continue; // 已还原，静默跳过
         await db.lorebookEntry.update({ where: { id: u.id }, data: u.before });
         restored.push(`lorebook:${u.name}`);
       } else if (u.kind === "regex") {
@@ -77,7 +118,9 @@ export async function executeUndo(
           : []);
         const idx = rules.findIndex((r) => r && r.name === String(u.name));
         if (idx >= 0) {
-          if (u.before) rules[idx] = u.before as Record<string, unknown>;
+          const target = (u.before as Record<string, unknown>) ?? null;
+          if (target && deepEqual(rules[idx], target)) continue; // 已还原，静默跳过
+          if (target) rules[idx] = target;
           else rules.splice(idx, 1);
           await db.project.update({ where: { id: projectId }, data: { postProcessingRules: rules } });
           restored.push(`regex:${u.name}`);
@@ -89,9 +132,11 @@ export async function executeUndo(
         };
         const project = await db.project.findUnique({ where: { id: projectId } });
         const cfg: Record<string, unknown> = { ...((project?.llmConfig as Record<string, unknown>) || {}) };
-        for (const k of before.addedKeys || []) delete cfg[k];
-        for (const [k, v] of Object.entries(before.values || {})) cfg[k] = v;
-        await db.project.update({ where: { id: projectId }, data: { llmConfig: cfg } });
+        const target: Record<string, unknown> = { ...cfg };
+        for (const k of before.addedKeys || []) delete target[k];
+        for (const [k, v] of Object.entries(before.values || {})) target[k] = v;
+        if (deepEqual(cfg, target)) continue; // 已还原，静默跳过
+        await db.project.update({ where: { id: projectId }, data: { llmConfig: target } });
         restored.push("api_config:LLM参数");
       }
     } catch (e) {

@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.94 |
+| 包名 / 版本 | `novel-smith` v3.1.95 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -99,6 +99,13 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.95 — 2026-09-08 — 架构复盘 P0 第二批·循环依赖解除 + 核心模块测试补齐（ARCH-CLEANUP-P0B）
+- **解除 babylore 循环依赖**：`entity-sync.ts` 与 `fill.ts` 互相引用，环路。抽出纯函数 `fillModelOf` 到新建 `src/core/babylore/table-model.ts`，两边单向依赖，环破；babylore 7 测试文件 65 例全绿。
+- **补齐最热模块测试**：`src/lib/llm.ts`（被 43 处引用、原零测试）新增 `src/lib/llm.test.ts` 15 例，覆盖 `mapLLMError` / `estimateCost` / `getSettings`（provider 选择、预设 provider 的 baseUrl 强制走 `PROVIDER_BASE_URLS`、local 走用户 baseUrl、无 Key 退环境变量）。
+- **修复预设撤销非幂等**：原 `executeUndo` 重复撤销会再记 `restored`、重复还原；改为动手前先读当前值，已等于目标值则静默跳过（更新类可安全重跑），删除类靠真实 Prisma 缺失异常进 `skipped` 不重复删。新增 `src/core/presets/undo-atomic.test.ts` 固化幂等。
+- **门禁**：tsc 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。
+- **关联**：同一复盘文档 `docs/novel-smith-架构复盘-2026-09-08.md` 的 P0 全 5 项（快照 / D1–D4 / S4 / llm 测试 / undo 测试）现已完成；下一批进入 P1（JSON 收敛 / 提示双头收敛 / pipeline·orchestrator 冒烟 / 质量模块归位）。
 
 ### v3.1.94 — 2026-09-08 — 架构复盘 P0 第一批·死代码清理（ARCH-CLEANUP-P0A）
 - **删除无用的孤儿代码**：①`src/core/prompt-eval.ts` 及其测试——全库唯一引用是 changelog 历史字符串、运行时零消费者；②`src/core/explore/build-prompt.ts` 的 `lorebookToAdopted`——定义处外全库零引用；③`src/core/agents/layered-prompt.ts` 的 `assembleLayeredPrompt` 及其在 `agents/index.ts` 的 re-export——仅经 index 再导出、无真实消费者。

@@ -1,4 +1,13 @@
 ﻿# Novel Smith 更新公告
+## v3.1.95 — 2026-09-08
+
+### 架构复盘 P0 第二批·循环依赖解除 + 核心模块测试补齐（ARCH-CLEANUP-P0B）
+
+- **解除 babylore 循环依赖**：`src/core/babylore/entity-sync.ts` 与 `fill.ts` 互相引用（`entity-sync` 引 `fillModelOf`、`fill` 引 `syncChapterEntities`），形成环路。把纯函数 `fillModelOf` 抽到新建的 `src/core/babylore/table-model.ts`，两边各自单向依赖新模块，环被打破；babylore 7 个测试文件 65 用例全绿。
+- **补齐全库最热模块的测试**：`src/lib/llm.ts`（被 43 处引用、原本零测试）新增 `src/lib/llm.test.ts` 共 15 例，覆盖 `mapLLMError`（401/403/404/429/5xx/默认）、`estimateCost`（已知/未知模型定价）、`getSettings` 的 provider 选择与「预设 provider 的 baseUrl 强制走 `PROVIDER_BASE_URLS`、忽略数据库残留错误 baseUrl」、local 走用户填写 baseUrl、无 Key 时退环境变量。
+- **修复预设撤销非幂等（异常中断不留半截）**：原 `executeUndo` 重复撤销会把 `before` 值又还原一遍、再记 `restored`，重试补偿场景会重复还原。改为动手前先读当前值——已等于目标值就静默跳过，更新类撤销可安全重跑；删除类因真实 Prisma 缺失记录抛异常进 skipped，不会重复删除。新增 `src/core/presets/undo-atomic.test.ts` 固化幂等保证。
+- **质量门禁**：类型检查 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。个人 IP 仍归瑞宝宝。
+
 ## v3.1.94 — 2026-09-08
 
 ### 架构复盘 P0 第一批·死代码清理（ARCH-CLEANUP-P0A · 删掉没人用的代码、收敛重复的 JSON 解析）

@@ -25,6 +25,7 @@ import { recordLlmCall } from "@/lib/llm";
 import { getSettings } from "@/lib/llm";
 import { buildProjectOverrides } from "@/core/llm/client";
 import { syncChapterEntities } from "./entity-sync";
+import { fillModelOf } from "./table-model";
 import type { LoreTableOp, TableDef } from "./types";
 
 export interface FillResult {
@@ -287,21 +288,6 @@ interface LlmCreds {
   baseURL: string;
   apiKey: string;
   model: string;
-}
-
-/**
- * v1.2.0 实测修复：填表是纯抽取任务，推理模型（deepseek-v4-flash 等）会
- *  - 推理内容过长吃光 max_tokens → content 为空（ops=0）；
- *  - 或生成超长导致 res.json() 长时间挂起（响应体等待服务端生成完）。
- * 故填表统一用同厂商基础对话模型（deepseek-chat），快且输出稳定。
- * 非推理模型原样透传。
- */
-export function fillModelOf(model: string): string {
-  const m = (model || "").toLowerCase();
-  if (m.includes("reasoner") || m.includes("thinking") || (m.includes("v4") && m.includes("flash"))) {
-    return "deepseek-chat";
-  }
-  return model;
 }
 
 async function runFillForText(
