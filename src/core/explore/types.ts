@@ -178,6 +178,15 @@ export const PLOT_STRUCTURES = [
   { id: "johakyu", name: "序破急", desc: "日式三段式结构" },
 ] as const;
 
+/** 情节结构 id → 中文标签（sync-global-prompt 与 build-prompt 共用；统一放 explore/types 以避免循环依赖） */
+export const PLOT_STRUCTURE_LABEL: Record<string, string> = {
+  five_act: "五幕式",
+  three_act: "三幕式",
+  hero_journey: "英雄之旅",
+  kishotenketsu: "起承转合",
+  johakyu: "序破急",
+};
+
 /** 风格偏好 */
 export const STYLE_PREFERENCES = [
   "轻松搞笑", "热血燃向", "严肃深沉", "细腻温情", "黑暗压抑", "诙谐讽刺", "史诗磅礴", "清新治愈",

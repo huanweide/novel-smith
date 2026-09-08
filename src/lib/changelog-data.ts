@@ -25,14 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.97";
+export const LATEST_VERSION = "v3.1.98";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "架构: 全库 29 处手写 LLM-JSON 解析收口到 lib/json-parser（parseAIJson/safeParseAIJson/parseAIArray/safeParseAIArray）",
-  "测试: json-parser 单测扩至 26 例覆盖脏输出；tsc 0 错、vitest 全绿",
-  "去除重复: 删除 import/parse 路由内联 repairJSON/parseJSON 私有实现",
-  "健壮: AI 返回格式变化只需改一处，消除「某一路崩」",
+  "架构: buildGlobalPromptFromExplore 退化为产出入参委托 buildGlobalPrompt 的适配壳，全库只留 1 个全局提示构造函数",
+  "修复: adopted 设定的 worldview 与 plot 与 economy 旧类别收敛到合法 WorldCategory，不再被世界书段静默丢弃",
+  "测试: 新增探讨态与写作态输出同构对比测试，build-prompt 测试 8 例全过",
 ];
 
 /**
@@ -87,6 +86,41 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.98",
+    date: "2026-09-08",
+    title: "全局提示双头收敛（R2）",
+    sections: [
+      {
+        label: "架构",
+        items: [
+          "buildGlobalPromptFromExplore 退化为产出入参委托 buildGlobalPrompt 的适配壳",
+          "全库只留 1 个全局提示构造函数",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "adopted 设定的 worldview 与 plot 与 economy 旧类别收敛到合法 WorldCategory",
+          "不再被世界书段静默丢弃",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增探讨态与写作态输出同构对比测试",
+          "build-prompt 测试 8 例全过",
+        ],
+      },
+      {
+        label: "健壮",
+        items: [
+          "单一真相源",
+          "提示词改动只需维护一处",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.97",
     date: "2026-09-08",

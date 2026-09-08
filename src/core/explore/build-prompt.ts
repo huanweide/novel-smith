@@ -2,85 +2,90 @@
 // 探讨模式 — 全局提示词构建（共享）
 // explore/create 与 projects/[id]/build-config 复用，避免重复
 // ============================================================
+//
+// R2 收敛（v3.1.98）：
+// 全库「全局提示词」只有一个真正构造入口 —— sync-global-prompt.ts 的 buildGlobalPrompt。
+// 本文件的 buildGlobalPromptFromExplore 退化为「把探讨配置 + 已采纳内容转换为
+// buildGlobalPrompt 的入参」的适配壳，不再自行拼文本。这样无论是探讨态建项目、
+// 还是写作态 sync 刷新，AI 看到的 globalPrompt 都是同一套渲染引擎产出，结构完全一致。
 
 import type { BuildConfig, AdoptedItem, ExploreStep } from "@/core/explore/types";
-import { STEP_LABELS } from "@/core/explore/types";
+import { buildGlobalPrompt } from "@/core/sync-global-prompt";
+import { stepToCategory } from "@/core/explore/utils";
+import { ALL_WORLD_CATEGORIES } from "@/lib/world-category-classifier";
+import type { WorldCategory } from "@/lib/world-category-classifier";
 
 /**
- * 从 BuildConfig + 已采纳内容构建 globalPrompt 文本。
- * 结构化字段（流派/核心冲突/力量体系/金手指/风格偏好）显式呈现，
- * 已采纳的探讨内容按步骤组织。
+ * stepToCategory 历史上会返回 worldview / plot / economy 等旧类别，
+ * 这些都不在 ALL_WORLD_CATEGORIES 里，会被 buildGlobalPrompt 的世界书段静默丢弃，
+ * 导致探讨态采纳的设定「看得到共N条、却渲染不出来」。这里统一收敛到合法 WorldCategory，
+ * 保证 adopted 设定一定落进世界书段、不被吞掉。
+ */
+const STEP_CATEGORY_FALLBACK: Record<string, WorldCategory> = {
+  worldview: "custom",
+  plot: "custom",
+  economy: "currency",
+};
+
+function stepToBuildCategory(step: ExploreStep): WorldCategory {
+  const raw = stepToCategory(step);
+  if ((ALL_WORLD_CATEGORIES as readonly string[]).includes(raw)) return raw as WorldCategory;
+  return STEP_CATEGORY_FALLBACK[raw] || "custom";
+}
+
+/** buildGlobalPrompt 入参所需的 project 投影（仅取它真正读取的字段）。 */
+type ExploreProjectInput = {
+  name: string;
+  genre: unknown;
+  synopsis: string;
+  toneKeywords: unknown;
+  authorNote?: string;
+  llmConfig?: unknown;
+  buildConfig?: unknown;
+};
+
+/**
+ * 把探讨模式产物（BuildConfig + 已采纳设定）投影成 buildGlobalPrompt 的入参。
+ * - project 携带 buildConfig，使 buildGlobalPrompt 的「探讨布置（结构配置）」段
+ *   渲染出受众/篇幅/情节结构/原创人名/流派/核心冲突/力量体系/金手指/风格偏好；
+ * - adopted 全部转为世界书词条（与 explore/create 路由落库逻辑一致），由 buildGlobalPrompt
+ *   的「世界书」段统一渲染。
+ */
+export function exploreToBuildInputs(
+  config: BuildConfig,
+  adopted: AdoptedItem[],
+): { project: ExploreProjectInput; loreEntries: any[] } {
+  const project: ExploreProjectInput = {
+    name: config.novelName || "未命名小说项目",
+    genre: config.genre || "玄幻",
+    synopsis: adopted
+      .filter((a) => a.step === "opening" || a.step === "core_conflict")
+      .map((a) => a.content)
+      .join("\n")
+      .slice(0, 500),
+    toneKeywords: config.stylePreference ? [config.stylePreference] : [],
+    buildConfig: config,
+    llmConfig: undefined,
+    authorNote: undefined,
+  };
+
+  const loreEntries = adopted.map((a) => ({
+    title: a.title,
+    category: stepToBuildCategory(a.step),
+    content: a.content,
+  }));
+
+  return { project, loreEntries };
+}
+
+/**
+ * 从 BuildConfig + 已采纳内容构建 globalPrompt 文本（探讨态）。
+ * 直接委托给 buildGlobalPrompt —— 与写作态共用唯一构造引擎，保证输出同构。
  */
 export function buildGlobalPromptFromExplore(
   config: BuildConfig,
   adopted: AdoptedItem[],
 ): string {
-  const parts: string[] = [];
-
-  parts.push(`## 基本信息`);
-  if (config.novelName) parts.push(`- 书名：${config.novelName}`);
-  if (config.genre) parts.push(`- 类型：${config.genre}`);
-  if (config.audience) parts.push(`- 受众：${config.audience}`);
-  if (config.wordCount) parts.push(`- 字数：${config.wordCount}`);
-  if (config.plotStructure) {
-    const ps = PLOT_STRUCTURE_LABEL[config.plotStructure] || config.plotStructure;
-    parts.push(`- 情节结构：${ps}`);
-  }
-  parts.push(`- 原创人名：${config.forceOriginalNames ? "强制" : "不强制"}`);
-  parts.push(`- 自动生成故事线：${config.autoGenerateStoryline ? "是" : "否"}`);
-
-  if (config.styleTags && config.styleTags.length > 0) {
-    parts.push(`\n## 流派标签`);
-    parts.push(config.styleTags.join("、"));
-  }
-
-  if (config.coreConflict) {
-    parts.push(`\n## 核心冲突`);
-    parts.push(config.coreConflict);
-  }
-
-  if (config.powerSystem) {
-    parts.push(`\n## 力量体系`);
-    parts.push(config.powerSystem);
-  }
-
-  if (config.goldenFinger) {
-    parts.push(`\n## 金手指`);
-    parts.push(config.goldenFinger);
-  }
-
-  if (config.stylePreference) {
-    parts.push(`\n## 风格偏好`);
-    parts.push(config.stylePreference);
-  }
-
-  // 按步骤整理已采纳内容
-  const stepOrder: ExploreStep[] = [
-    "opening", "worldview", "protagonist", "golden_finger",
-    "core_conflict", "factions", "power_system", "currency",
-    "map", "plot_thread", "free_talk",
-  ];
-
-  for (const step of stepOrder) {
-    const stepItems = adopted.filter((a) => a.step === step);
-    if (stepItems.length === 0) continue;
-
-    parts.push(`\n## ${STEP_LABELS[step]}`);
-    for (const item of stepItems) {
-      parts.push(`### ${item.title}`);
-      parts.push(item.content.slice(0, 600));
-    }
-  }
-
-  return parts.join("\n");
+  const { project, loreEntries } = exploreToBuildInputs(config, adopted);
+  return buildGlobalPrompt(project, [], loreEntries, null);
 }
-
-/** 情节结构 id → 中文标签 */
-export const PLOT_STRUCTURE_LABEL: Record<string, string> = {
-  five_act: "五幕式",
-  three_act: "三幕式",
-  hero_journey: "英雄之旅",
-  kishotenketsu: "起承转合",
-  johakyu: "序破急",
-};
-

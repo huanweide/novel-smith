@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildGlobalPromptFromExplore } from "./build-prompt";
+import { buildGlobalPromptFromExplore, exploreToBuildInputs } from "./build-prompt";
+import { buildGlobalPrompt } from "@/core/sync-global-prompt";
 import { DEFAULT_BUILD_CONFIG } from "./types";
 import type { AdoptedItem, ExploreStep } from "./types";
 
@@ -11,21 +12,16 @@ function adopted(step: ExploreStep, title: string, content: string): AdoptedItem
   return { id: `a-${title}`, step, title, content, timestamp: 0 };
 }
 
-describe("buildGlobalPromptFromExplore", () => {
-  it("默认配置：以基本信息段开头，布尔默认 true 渲染正确，空段不输出", () => {
+describe("buildGlobalPromptFromExplore（R2 收敛：单一构造入口 buildGlobalPrompt）", () => {
+  it("输出与写作态同构：以「作品」段开头，含「探讨布置」段", () => {
     const out = buildGlobalPromptFromExplore(makeConfig(), []);
-    expect(out.startsWith("## 基本信息")).toBe(true);
-    expect(out).toContain("原创人名：强制");
+    expect(out.startsWith("# 作品：")).toBe(true);
+    expect(out).toContain("## 探讨布置（结构配置）");
+    expect(out).toContain("强制原创人名：是");
     expect(out).toContain("自动生成故事线：是");
-    // 默认值均为空串 → 对应段不出现
-    expect(out).not.toContain("## 核心冲突");
-    expect(out).not.toContain("## 力量体系");
-    expect(out).not.toContain("## 金手指");
-    expect(out).not.toContain("## 风格偏好");
-    expect(out).not.toContain("## 流派标签");
   });
 
-  it("完整配置：所有段落按固定顺序出现", () => {
+  it("完整配置：探讨布置段渲染全部结构化字段", () => {
     const out = buildGlobalPromptFromExplore(
       makeConfig({
         novelName: "测试之书",
@@ -41,144 +37,57 @@ describe("buildGlobalPromptFromExplore", () => {
       }),
       [],
     );
-    const idxInfo = out.indexOf("## 基本信息");
-    const idxTags = out.indexOf("## 流派标签");
-    const idxConflict = out.indexOf("## 核心冲突");
-    const idxPower = out.indexOf("## 力量体系");
-    const idxGold = out.indexOf("## 金手指");
-    const idxStyle = out.indexOf("## 风格偏好");
-    expect(idxInfo).toBeGreaterThan(-1);
-    expect(idxTags).toBeGreaterThan(idxInfo);
-    expect(idxConflict).toBeGreaterThan(idxTags);
-    expect(idxPower).toBeGreaterThan(idxConflict);
-    expect(idxGold).toBeGreaterThan(idxPower);
-    expect(idxStyle).toBeGreaterThan(idxGold);
-    expect(out).toContain("书名：测试之书");
+    expect(out).toContain("# 作品：《测试之书》");
     expect(out).toContain("类型：玄幻");
     expect(out).toContain("受众：男频·青年向");
-    expect(out).toContain("字数：50-200万字");
-    expect(out).toContain("## 核心冲突");
-    expect(out).toContain("主角对抗天道");
-    expect(out).toContain("## 力量体系");
-    expect(out).toContain("修仙体系");
-    expect(out).toContain("## 金手指");
-    expect(out).toContain("签到系统");
-    expect(out).toContain("## 风格偏好");
-    expect(out).toContain("热血燃向");
+    expect(out).toContain("篇幅：50-200万字");
+    expect(out).toContain("情节结构：五幕式");
+    expect(out).toContain("流派标签：系统流、升级流");
+    expect(out).toContain("核心冲突：主角对抗天道");
+    expect(out).toContain("力量体系：修仙体系");
+    expect(out).toContain("金手指：签到系统");
+    expect(out).toContain("风格偏好：热血燃向");
   });
 
-  it("genre/audience/wordCount 为空时对应行不出现", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig({ genre: "", audience: "", wordCount: "" }),
-      [],
-    );
-    expect(out).not.toContain("类型：");
-    expect(out).not.toContain("受众：");
-    expect(out).not.toContain("字数：");
+  it("plotStructure 映射中文标签，未知 id 回退原值", () => {
+    expect(buildGlobalPromptFromExplore(makeConfig({ plotStructure: "five_act" }), [])).toContain("情节结构：五幕式");
+    expect(buildGlobalPromptFromExplore(makeConfig({ plotStructure: "unknown_x" }), [])).toContain("情节结构：unknown_x");
   });
 
-  it("styleTags 空数组不输出流派标签段", () => {
-    const out = buildGlobalPromptFromExplore(makeConfig({ styleTags: [] }), []);
-    expect(out).not.toContain("## 流派标签");
-  });
-
-  it("styleTags 多项用中文顿号连接", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig({ styleTags: ["系统流", "升级流", "无敌流"] }),
-      [],
-    );
-    expect(out).toContain("## 流派标签");
-    expect(out).toContain("系统流、升级流、无敌流");
-  });
-
-  it("plotStructure 映射为中文标签，未知 id 回退原值", () => {
-    const a = buildGlobalPromptFromExplore(makeConfig({ plotStructure: "five_act" }), []);
-    expect(a).toContain("情节结构：五幕式");
-    const b = buildGlobalPromptFromExplore(makeConfig({ plotStructure: "unknown_x" }), []);
-    expect(b).toContain("情节结构：unknown_x");
-  });
-
-  it("coreConflict 为空不输出核心冲突段", () => {
-    const out = buildGlobalPromptFromExplore(makeConfig({ coreConflict: "" }), []);
-    expect(out).not.toContain("## 核心冲突");
-  });
-
-  it("forceOriginalNames false 渲染「不强制」", () => {
-    const out = buildGlobalPromptFromExplore(makeConfig({ forceOriginalNames: false }), []);
-    expect(out).toContain("原创人名：不强制");
-  });
-
-  it("autoGenerateStoryline false 渲染「否」", () => {
-    const out = buildGlobalPromptFromExplore(makeConfig({ autoGenerateStoryline: false }), []);
-    expect(out).toContain("自动生成故事线：否");
-  });
-
-  it("单个 adopted 段出现在基本信息之后，按 STEP_LABELS 标题渲染", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig(),
-      [adopted("opening", "开篇设定", "主角从废柴起步")],
-    );
-    const idxInfo = out.indexOf("## 基本信息");
-    const idxOpening = out.indexOf("## 开篇");
-    expect(idxOpening).toBeGreaterThan(idxInfo);
-    expect(out).toContain("### 开篇设定");
+  it("adopted 内容落入世界书段，标题加粗呈现", () => {
+    const out = buildGlobalPromptFromExplore(makeConfig(), [adopted("opening", "开篇设定", "主角从废柴起步")]);
+    expect(out).toContain("# 世界书");
+    expect(out).toContain("**开篇设定**");
     expect(out).toContain("主角从废柴起步");
   });
 
-  it("多 step adopted 按固定 stepOrder 排序（开篇段在之前）", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig(),
-      [
-        adopted("protagonist", "主角", "少年樊斯瑞"),
-        adopted("opening", "开篇", "废柴开局"),
-      ],
-    );
-    const idxOpening = out.indexOf("## 开篇");
-    const idxProtagonist = out.indexOf("## 主角身份");
-    expect(idxOpening).toBeGreaterThan(-1);
-    expect(idxProtagonist).toBeGreaterThan(-1);
-    expect(idxOpening).toBeLessThan(idxProtagonist);
-  });
-
-  it("adopted content 超过 600 字被截断", () => {
+  it("adopted 超长内容被世界书单条截断（最松档 loreCap=400）", () => {
     const long = "字".repeat(1200);
-    const out = buildGlobalPromptFromExplore(
-      makeConfig(),
-      [adopted("opening", "长文", long)],
-    );
+    const out = buildGlobalPromptFromExplore(makeConfig(), [adopted("opening", "长文", long)]);
     expect(out).not.toContain(long);
-    expect(out).toContain("字".repeat(600));
-  });
-
-  it("某 step 无 adopted 内容时跳过该段", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig(),
-      [adopted("opening", "开篇", "仅开篇有内容")],
-    );
-    expect(out).toContain("## 开篇");
-    expect(out).not.toContain("## 主角身份");
-    expect(out).not.toContain("## 世界观");
-  });
-
-  it("同一 step 多个 adopted 全部出现", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig(),
-      [
-        adopted("opening", "开篇A", "内容A"),
-        adopted("opening", "开篇B", "内容B"),
-      ],
-    );
-    expect(out).toContain("### 开篇A");
-    expect(out).toContain("内容A");
-    expect(out).toContain("### 开篇B");
-    expect(out).toContain("内容B");
+    expect(out).toContain("字".repeat(400) + "…");
   });
 
   it("中文与特殊字符原样保留", () => {
-    const out = buildGlobalPromptFromExplore(
-      makeConfig({ coreConflict: "「龙陨之地」的诅咒 & 复仇" }),
-      [],
-    );
+    const out = buildGlobalPromptFromExplore(makeConfig({ coreConflict: "「龙陨之地」的诅咒 & 复仇" }), []);
     expect(out).toContain("「龙陨之地」的诅咒 & 复仇");
+  });
+
+  it("R2 核心验收①：探讨态输出 === 写作态 buildGlobalPrompt(同套入参)", () => {
+    const config = makeConfig({ novelName: "等价之书", genre: "科幻", coreConflict: "人机冲突", stylePreference: "严肃深沉" });
+    const adoptedItems = [adopted("opening", "开篇", "地球停转"), adopted("power_system", "力量体系", "量子计算")];
+    const { project, loreEntries } = exploreToBuildInputs(config, adoptedItems);
+    const direct = buildGlobalPrompt(project, [], loreEntries, null);
+    const via = buildGlobalPromptFromExplore(config, adoptedItems);
+    expect(via).toBe(direct);
+  });
+
+  it("R2 核心验收②：genre 为空时与写作态一致（同样输出空「类型：」行）", () => {
+    const config = makeConfig({ genre: "", novelName: "空类型之书" });
+    const { project, loreEntries } = exploreToBuildInputs(config, []);
+    const direct = buildGlobalPrompt(project, [], loreEntries, null);
+    expect(buildGlobalPromptFromExplore(config, [])).toBe(direct);
+    // 与写作态共享渲染：空 genre 仍输出「类型：」行（不再静默丢弃）
+    expect(direct).toContain("类型：");
   });
 });
