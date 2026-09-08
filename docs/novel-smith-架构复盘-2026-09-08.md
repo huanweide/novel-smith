@@ -310,15 +310,15 @@ L5 数据层   data/novelforge.db（1.05 MB，31 model，schema 830 行）
 
 ### P0 · 本周（低风险 · 高确定性）
 
-| # | 动作 | 涉及文件 | 验收标准 | 风险 |
-|---|---|---|---|---|
-| 1 | 建快照 | `scripts/git-snapshot.sh` | `list` 能看到新 tag | 无 |
-| 2 | 删 D1–D4 死代码 | `prompt-eval.ts`、`build-prompt.ts:88`、`layered-prompt.ts:187`+`agents/index.ts:11-12`、`character-dedupe.ts:67` | tsc 0 错 + vitest 全绿（测试数从 1529 降到 ~1520，属预期） | 低 |
-| 3 | 解循环依赖 S4 | `babylore/{entity-sync,fill}.ts` + 新建 `babylore/table-model.ts` | 两文件间无直接互引；babylore 相关测试全绿 | 低（纯搬移） |
-| 4 | 补 `src/lib/llm.ts` 测试 | 新建 `src/lib/llm.test.ts` | 覆盖：provider 选择、baseUrl 强制走 `PROVIDER_BASE_URLS`、占位 key 拒绝调用、超时 | 中（需 mock fetch） |
-| 5 | 补 `presets/undo.ts` + `apply.ts` 测试 | 新建 `src/core/presets/undo.test.ts` 等 | 注入→撤销后状态完全还原；异常中断不留半截 | 低 |
+| # | 动作 | 涉及文件 | 验收标准 | 风险 | 状态 |
+|---|---|---|---|---|---|
+| 1 | 建快照 | `scripts/git-snapshot.sh` | `list` 能看到新 tag | 无 | ✅ 已完成（v3.1.93 基线快照） |
+| 2 | 删 D1–D4 死代码 | `prompt-eval.ts`、`build-prompt.ts:88`、`layered-prompt.ts:187`+`agents/index.ts:11-12`、`character-dedupe.ts:67` | tsc 0 错 + vitest 全绿（测试数从 1529 降到 ~1520，属预期） | 低 | ✅ 已删除（v3.1.94） |
+| 3 | 解循环依赖 S4 | `babylore/{entity-sync,fill}.ts` + 新建 `babylore/table-model.ts` | 两文件间无直接互引；babylore 相关测试全绿 | 低（纯搬移） | ✅ 已解除（v3.1.95） |
+| 4 | 补 `src/lib/llm.ts` 测试 | 新建 `src/lib/llm.test.ts` | 覆盖：provider 选择、baseUrl 强制走 `PROVIDER_BASE_URLS`、占位 key 拒绝调用、超时 | 中（需 mock fetch） | ✅ 已补齐（v3.1.95，15 例；占位 key 拒绝 / 超时属 client.ts·local-parser，已注明） |
+| 5 | 补 `presets/undo.ts` + `apply.ts` 测试 | 新建 `src/core/presets/undo.test.ts` 等 | 注入→撤销后状态完全还原；异常中断不留半截 | 低 | ✅ 已补齐（v3.1.95，含 undo 幂等修复 + undo-atomic 测试） |
 
-**P0 出口标准**：tsc 0 错、vitest 全绿、死代码清零、循环依赖清零、最热模块 `llm.ts` 有测试。
+**P0 出口标准**：tsc 0 错、vitest 全绿、死代码清零、循环依赖清零、最热模块 `llm.ts` 有测试。 → **已全部达成（v3.1.95）**。
 
 ### P1 · 第 2–3 周（中风险 · 收益最大）
 
