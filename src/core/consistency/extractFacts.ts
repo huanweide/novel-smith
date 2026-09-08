@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { completeText } from "@/core/llm/client";
+import { safeParseAIArray } from "@/lib/json-parser";
 
 export type ConsistencyCategory = "character" | "world" | "plot" | "relationship";
 
@@ -63,24 +64,8 @@ export function dedupeFacts(facts: RawFact[]): RawFact[] {
  *  3. JSON.parse 失败整体返回空（不抛，避免一次坏响应炸掉整轮）
  */
 export function parseFactsFromLLM(text: string): RawFact[] {
-  if (!text || typeof text !== "string") return [];
-  let s = text.trim();
-
-  const fence = s.match(/```(?:json|text|markdown)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
-
-  const start = s.indexOf("[");
-  const end = s.lastIndexOf("]");
-  if (start === -1 || end === -1 || end < start) return [];
-
-  const arrText = s.slice(start, end + 1);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(arrText);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
+  const parsed = safeParseAIArray(text);
+  if (!parsed) return [];
 
   const facts: RawFact[] = [];
   for (const item of parsed) {

@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.96 |
+| 包名 / 版本 | `novel-smith` v3.1.97 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -99,6 +99,12 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.97 — 2026-09-08 — 架构复盘 P1·JSON 解析全量收敛（R1）
+- **全量收敛**：15 文件 29 处手写 `indexOf("{")/lastIndexOf("}")` 解析收口到 `src/lib/json-parser.ts`（parseAIJson/safeParseAIJson/parseAIArray/safeParseAIArray）；删 `import/parse/route.ts` 内联 repairJSON/parseJSON。
+- **行为零变化**：各点字段校验/归一化/正则兜底保留，只替换提取+解析环节。
+- **门禁**：tsc 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。
+- **关联**：复盘文档 P1 表 #6 勾 ✅；下一批 P1-7（全局提示双头收敛 R2）。
 
 ### v3.1.96 — 2026-09-08 — 架构复盘 P1·质量模块归位（R3）
 - **质量概念归一**：`quality-analyzer.ts` / `quality-thresholds.ts` / `auto-rate.ts` / `narrative-energy.ts` 四个质量模块统一迁入 `src/core/quality/`，阈值常量单一来源；顺手修掉 `quality-analyzer.ts` 的 `./forbidden-checker` 相对引用及两处测试/脚本里的旧路径。

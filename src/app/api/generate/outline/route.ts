@@ -5,6 +5,7 @@ import { safeJoin } from "@/lib/utils";
 import { getActiveRules, injectRules } from "@/core/rules";
 import { getSettings, recordLlmCall } from "@/lib/llm";
 import { buildProjectOverrides } from "@/core/llm/client";
+import { safeParseAIJson } from "@/lib/json-parser";
 
 export const maxDuration = 300;
 
@@ -260,16 +261,10 @@ ${finalDirective}${charCountNote}
     let rawOutline = "";
 
     try {
-      let jsonStr = structuredContent.trim();
-      const md = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (md) jsonStr = md[1].trim();
-      else {
-        const a = jsonStr.indexOf("{"), b = jsonStr.lastIndexOf("}");
-        if (a >= 0 && b > a) jsonStr = jsonStr.slice(a, b + 1);
-      }
-      const parsed = JSON.parse(jsonStr);
-      chapters = parsed.chapters || [];
-      rawOutline = parsed.rawOutline || "";
+      const parsed = safeParseAIJson(structuredContent);
+      if (!parsed) throw new Error("JSON 解析失败");
+      chapters = (parsed.chapters as any[]) || [];
+      rawOutline = (parsed.rawOutline as string) || "";
     } catch {
       // 正则回退
       const re = /第[一二三四五六七八九十百千\d]+章[：:]\s*(.+)/g;

@@ -23,6 +23,7 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import { recordLlmCall } from "@/lib/llm";
 import { getSettings } from "@/lib/llm";
+import { safeParseAIJson } from "@/lib/json-parser";
 import { buildProjectOverrides } from "@/core/llm/client";
 import { syncChapterEntities } from "./entity-sync";
 import { fillModelOf } from "./table-model";
@@ -134,21 +135,10 @@ export function clearFilledChapters(projectId: string, nodeId?: string): number 
 
 function parseOps(raw: string): LoreTableOp[] {
   if (!raw) return [];
-  let s = raw.trim();
-  const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) s = md[1].trim();
-  else {
-    const a = s.indexOf("{");
-    const b = s.lastIndexOf("}");
-    if (a >= 0 && b > a) s = s.slice(a, b + 1);
-  }
-  try {
-    const parsed = JSON.parse(s);
-    const ops = Array.isArray(parsed) ? parsed : parsed.operations;
-    if (Array.isArray(ops)) return ops.filter((o: any) => o && o.table && o.op) as LoreTableOp[];
-  } catch {
-    /* 解析失败交由重试逻辑处理 */
-  }
+  const parsed = safeParseAIJson(raw);
+  if (!parsed) return [];
+  const ops = Array.isArray(parsed) ? parsed : parsed.operations;
+  if (Array.isArray(ops)) return ops.filter((o: any) => o && o.table && o.op) as LoreTableOp[];
   return [];
 }
 
@@ -351,9 +341,8 @@ ${chapterText.slice(0, 12000)}
       // content 为空（finish=length）；此时从推理尾部提取最后一个 JSON 块作为最终答案。
       if (!raw) {
         const reasoning = String(msg0.reasoning_content || "");
-        const a = reasoning.lastIndexOf("{");
-        const b = reasoning.lastIndexOf("}");
-        if (a >= 0 && b > a) raw = reasoning.slice(a, b + 1);
+        const parsed = safeParseAIJson(reasoning);
+        if (parsed) raw = JSON.stringify(parsed);
       }
       const ops = parseOps(raw);
       if (ops.length === 0) {

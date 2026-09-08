@@ -13,6 +13,7 @@ import { getSettings, recordLlmCall } from "@/lib/llm";
 import { countTokens } from "@/core/assembly/tokenizer";
 import { THREE_CARD_BOUNDARIES } from "@/core/settings";
 import { rateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
+import { parseAIJson } from "@/lib/json-parser";
 
 export const maxDuration = 300;
 
@@ -20,61 +21,7 @@ const CHUNK_SIZE = 30; // 每块最多30个角色（仅作分块触发参考）
 const CHUNK_CHAR_BUDGET = 16000; // 单块文本字符预算：超过即强制分块，避免大长文单路超模型上下文（P1-3）
 const CHUNK_OVERLAP = 300;       // 块间重叠字符，保留上下文连续性（P1-3）
 
-// ─── JSON 修复 + 解析 ──────────────────────────────
-
-/** 清洗 AI 常见 JSON 语法错误 */
-function repairJSON(raw: string): string {
-  let s = raw.trim();
-  // BOM
-  if (s.charCodeAt(0) === 0xFEFF) s = s.slice(1);
-  // 去掉 markdown 代码块
-  const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) s = md[1].trim();
-  // 截取最外层花括号
-  const a = s.indexOf("{"), b = s.lastIndexOf("}");
-  if (a >= 0 && b > a) s = s.slice(a, b + 1);
-
-  // 去尾逗号：},] 和 ,] 和 ,}
-  s = s.replace(/,(\s*[}\]])/g, "$1");
-  // 去尾逗号在数组末尾：...]\n 之后多余的逗号
-  // 修字符串内的未转义换行符（AI有时在字符串值里直接换行）
-  // 注：这个比较激进，只在 JSON.parse 失败后才尝试
-
-  return s;
-}
-
-function parseJSON(raw: string): Record<string, unknown> {
-  // 第一轮：标准修复
-  let s = repairJSON(raw);
-  try { return JSON.parse(s) as Record<string, unknown>; } catch { /* */ }
-
-  // 第二轮：更激进的修复——尝试补全截断的JSON
-  // 如果JSON在中间被截断（maxTokens限制），补上闭合括号
-  try {
-    // 数花括号和方括号，补上缺失的闭合
-    let braces = 0, brackets = 0;
-    let inString = false, escape = false;
-    for (const ch of s) {
-      if (escape) { escape = false; continue; }
-      if (ch === '\\') { escape = true; continue; }
-      if (ch === '"' && !escape) { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === '{') braces++;
-      if (ch === '}') braces--;
-      if (ch === '[') brackets++;
-      if (ch === ']') brackets--;
-    }
-    // 补闭合
-    while (brackets > 0) { s += ']'; brackets--; }
-    while (braces > 0) { s += '}'; braces--; }
-    // 如果数组未结束，补]
-    if (s.endsWith(',')) s = s.slice(0, -1);
-
-    return JSON.parse(s) as Record<string, unknown>;
-  } catch { /* */ }
-
-  throw new Error(`JSON parse fail: ${s.slice(0, 200)}`);
-}
+// ─── JSON 解析（统一收敛到 src/lib/json-parser.ts 的 parseAIJson，见 P1-6）───
 
 function normChar(c: Record<string, unknown>): Record<string, unknown> {
   const p = c.personality;
@@ -418,7 +365,7 @@ ${loreText}
             send({ type: "progress", stage: "path-b-done", message: `⚠️ 世界提取失败: ${resB.error}`, pct: 90 });
           } else {
             try {
-              const p = parseJSON(resB.raw);
+              const p = parseAIJson(resB.raw);
               lore = (Array.isArray(p.lore) ? p.lore : []).map(normLore).filter(l => l.title);
               if (typeof p.style === "object" && p.style !== null) style = p.style as Record<string, unknown>;
               send({ type: "progress", stage: "path-b-done", message: `✅ 世界提取完成 · ${lore.length}词条${chunkNote} · ${resB.sec}s`, pct: 90 });
@@ -461,7 +408,7 @@ ${loreText}
                   send({ type: "progress", stage: `chunk-${ci}-err`, message: `⚠️ 第${ci + 1}块失败: ${res.error}`, pct: 5 + Math.round(((doneCount + 1) / chunks.length) * 75) });
                 } else {
                   try {
-                    const p = parseJSON(res.raw);
+                    const p = parseAIJson(res.raw);
                     const pc = Array.isArray(p.characters) ? p.characters.map(normChar).filter(c => c.name) : [];
                     chunkResults[ci] = pc;
                     totalChars += pc.length;
@@ -500,7 +447,7 @@ ${loreText}
               send({ type: "progress", stage: "path-a-done", message: `⚠️ 人物提取失败: ${resA.error}`, pct: 60 });
             } else {
               try {
-                const p = parseJSON(resA.raw);
+                const p = parseAIJson(resA.raw);
                 const pc = Array.isArray(p.characters) ? p.characters : [];
                 chars = pc.map(normChar).filter(c => c.name);
                 send({ type: "progress", stage: "path-a-done", message: `✅ 人物提取完成 · ${chars.length}角色 · ${resA.sec}s`, pct: 60 });

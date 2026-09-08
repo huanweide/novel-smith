@@ -7,6 +7,7 @@
 
 import { completeText } from "@/core/llm/client";
 import { safeJoin } from "@/lib/utils";
+import { parseAIJson } from "@/lib/json-parser";
 
 export type GenProject = {
   name: string;
@@ -147,13 +148,7 @@ ${
 
   let parsed: Record<string, unknown>;
   try {
-    let s = raw.trim();
-    const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (md) s = md[1].trim();
-    const a = s.indexOf("{");
-    const b = s.lastIndexOf("}");
-    if (a >= 0 && b > a) s = s.slice(a, b + 1);
-    parsed = JSON.parse(s) as Record<string, unknown>;
+    parsed = parseAIJson(raw);
   } catch {
     throw new Error("AI 返回格式解析失败");
   }

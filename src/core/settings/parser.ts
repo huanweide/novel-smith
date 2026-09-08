@@ -28,6 +28,7 @@ import { getEffectiveConfig, createLLMClient } from "@/core/llm/client";
 import { prisma } from "@/lib/prisma";
 import { syncGlobalPrompt } from "@/core/sync-global-prompt";
 import { parseSettingsLocal } from "./local-parser";
+import { parseAIArray, parseAIJson, safeParseAIJson } from "@/lib/json-parser";
 
 // ─── 三卡分界标准（Prompt 片段）───────────────────────────────
 
@@ -481,18 +482,13 @@ ${rawText}
 }
 
 function parseLorebookResponse(raw: string): ParsedLoreEntry[] {
-  let s = raw.trim();
-  const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) s = md[1].trim();
-  const a = s.indexOf("["), b = s.lastIndexOf("]");
-  if (a >= 0 && b > a) s = s.slice(a, b + 1);
-
+  let arr: unknown[];
   try {
-    const arr = JSON.parse(s) as Array<Record<string, unknown>>;
-    return arr.map(normalizeLoreEntry);
+    arr = parseAIArray(raw);
   } catch (err) {
     throw new Error(`解析世界卡JSON失败: ${(err as Error).message}\n原始: ${raw.slice(0, 300)}`);
   }
+  return (arr as Array<Record<string, unknown>>).map(normalizeLoreEntry);
 }
 
 // ─── 专用提取：仅风格卡 ──────────────────────────────────
@@ -614,22 +610,17 @@ ${rawText}
 }
 
 function parseStyleOnlyResponse(raw: string): StyleProfile & { writingRules: string[] } {
-  let s = raw.trim();
-  const md = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (md) s = md[1].trim();
-  const a = s.indexOf("{"), b = s.lastIndexOf("}");
-  if (a >= 0 && b > a) s = s.slice(a, b + 1);
-
+  let parsed: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(s) as Record<string, unknown>;
-    const profile = normalizeStyleProfile(parsed);
-    const writingRules = Array.isArray(parsed.writingRules)
-      ? parsed.writingRules.filter((r: unknown) => typeof r === "string")
-      : [];
-    return { ...profile, writingRules };
+    parsed = parseAIJson(raw);
   } catch (err) {
     throw new Error(`解析风格卡JSON失败: ${(err as Error).message}\n原始: ${raw.slice(0, 300)}`);
   }
+  const profile = normalizeStyleProfile(parsed);
+  const writingRules = Array.isArray(parsed.writingRules)
+    ? parsed.writingRules.filter((r: unknown) => typeof r === "string")
+    : [];
+  return { ...profile, writingRules };
 }
 
 /**
