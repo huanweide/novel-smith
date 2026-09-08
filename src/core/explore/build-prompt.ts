@@ -84,16 +84,3 @@ export const PLOT_STRUCTURE_LABEL: Record<string, string> = {
   johakyu: "序破急",
 };
 
-/** 从世界书条目反向重建 adopted 列表（用于编辑布置时重建 globalPrompt） */
-export function lorebookToAdopted(
-  entries: Array<{ title: string; content: string; category: string }>,
-  categoryToStep: Record<string, ExploreStep>,
-): AdoptedItem[] {
-  return entries.map((e, i) => ({
-    id: `lb-${i}`,
-    step: categoryToStep[e.category] || "worldview",
-    title: e.title,
-    content: e.content,
-    timestamp: 0,
-  }));
-}

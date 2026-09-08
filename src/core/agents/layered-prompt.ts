@@ -178,38 +178,6 @@ export function getBaseLayers(): PromptLayer[] {
 }
 
 /**
- * 组装完整的分层 system prompt。
- *
- * @param config            动态上下文配置
- * @param disabledLayers    用户禁用的层级编号（如 [3] 表示关闭中等规则层）
- * @returns 组装后的完整 systemPrompt 文本
- */
-export function assembleLayeredPrompt(
-  config: LayeredPromptConfig,
-  disabledLayers: number[] = [],
-): string {
-  const layers: PromptLayer[] = [
-    ...BASE_LAYERS,
-    buildDynamicLayer(config),
-    buildToolLayer(config.toolSchemas || []),
-  ];
-
-  const enabled = layers.filter(
-    (l) =>
-      l.enabled &&
-      !disabledLayers.includes(l.level) &&
-      l.content.trim().length > 0,
-  );
-
-  return enabled
-    .map((l) => {
-      const prefix = l.priority ? `[${l.priority}] ` : "";
-      return `# ${prefix}${l.label}\n${l.content}`;
-    })
-    .join("\n\n---\n\n");
-}
-
-/**
  * 获取单层内容（用于编辑面板）。
  */
 export function getLayer(level: LayerLevel, config?: LayeredPromptConfig): PromptLayer | undefined {
