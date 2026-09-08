@@ -1,4 +1,12 @@
 ﻿# Novel Smith 更新公告
+## v3.1.94 — 2026-09-08
+
+### 架构复盘 P0 第一批·死代码清理（ARCH-CLEANUP-P0A · 删掉没人用的代码、收敛重复的 JSON 解析）
+
+- **删除无用的孤儿代码**：①`src/core/prompt-eval.ts` 及其测试——全库唯一引用是 changelog 历史字符串，运行时零消费者；②`src/core/explore/build-prompt.ts` 的 `lorebookToAdopted`——定义处外全库零引用；③`src/core/agents/layered-prompt.ts` 的 `assembleLayeredPrompt` 及其在 `agents/index.ts` 的 re-export——仅经 index 再导出、无真实消费者。
+- **收敛重复的 JSON 解析**：`src/core/character-dedupe.ts` 的私有 `extractJson` 改调 `src/lib/json-parser.ts` 的 `safeParseAIJson`，与后续 P1「JSON 解析全量收敛」同源，消除一份重复实现。
+- **质量门禁**：类型检查 0 错、vitest 143 文件 1524 测试全绿（prompt-eval 5 条随模块删除属预期）、生产构建通过。个人 IP 仍归瑞宝宝。
+
 ## v3.1.93 — 2026-09-08
 
 ### 体验链路四大漏洞修复（FIRST-RUN-FIX · 首启动不再被误导 / 版本不再落后 / 不配 Key 也能惊艳 / 社区有门可进）

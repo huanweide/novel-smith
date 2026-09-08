@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.93 |
+| 包名 / 版本 | `novel-smith` v3.1.94 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -99,6 +99,12 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.94 — 2026-09-08 — 架构复盘 P0 第一批·死代码清理（ARCH-CLEANUP-P0A）
+- **删除无用的孤儿代码**：①`src/core/prompt-eval.ts` 及其测试——全库唯一引用是 changelog 历史字符串、运行时零消费者；②`src/core/explore/build-prompt.ts` 的 `lorebookToAdopted`——定义处外全库零引用；③`src/core/agents/layered-prompt.ts` 的 `assembleLayeredPrompt` 及其在 `agents/index.ts` 的 re-export——仅经 index 再导出、无真实消费者。
+- **收敛重复的 JSON 解析**：`src/core/character-dedupe.ts` 的私有 `extractJson` 改调 `src/lib/json-parser.ts` 的 `safeParseAIJson`，与后续 P1「JSON 解析全量收敛」同源，消除一份重复实现。
+- **门禁**：tsc 0 错、vitest 143 文件 1524 测试全绿（prompt-eval 5 条随模块删除属预期）、生产构建通过。
+- **关联**：本回合为 `docs/novel-smith-架构复盘-2026-09-08.md` 落地计划的 P0 第一批（D1–D4），后续 P0-S4 解循环依赖、P0 补测试、P1 收敛、P2 拆分按同一文档顺序推进。
 
 ### v3.1.93 — 2026-09-08 — 体验链路四大漏洞修复（FIRST-RUN-FIX）
 - **首启动不再被误导（Docker 幽灵提示）**：项目自 v3.1.42 起已彻底移除 Docker / Postgres 改用本地 SQLite，但 DB 报错时界面仍让用户跑 `docker compose up -d`（装了也解决不了）。四处修正：`src/lib/api-error.ts` 的 P1001 hint、`src/components/system-status-banner.tsx:33` 的 `DB_FIX_CMD`、`scripts/doctor.mjs:88` 诊断文案，统一改引导 `npm run dev:db`；并解开「测试固化错误行为」——`src/lib/api-error.test.ts:17` 原断言提示必须含 `docker compose`，现改为断言含 `npm run dev:db` 且**不得含 docker**，防复发进测试。
@@ -422,3 +428,4 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | `snap/20260902-183824-v3.1.59` | 2026-09-02 18:38 | v3.1.59 | main | 合并 dependabot 依赖升级前 | 31M |
 | `snap/20260905-112230-v3.1.84` | 2026-09-05 11:22 | v3.1.84 | main | Preset创意工坊完善-动手前(T15预览+撤销+编辑删除+桥接+测试) | 32M |
 | `snap/20260908-120021-v3.1.92` | 2026-09-08 12:00 | v3.1.92 | main | 修复4个体验漏洞前(Docker提示/版本漂移/detector零门槛页/社区基建) | 32M |
+| `snap/20260908-143353-v3.1.93` | 2026-09-08 14:33 | v3.1.93 | main | 架构清理-按复盘计划P0-P2收敛补测瘦身 | 32M |
