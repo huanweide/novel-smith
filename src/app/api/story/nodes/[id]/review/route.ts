@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanForbiddenWordsEnhanced } from "@/lib/forbidden-checker";
-import { analyzeQuality } from "@/lib/quality-analyzer";
+import { analyzeQuality } from "@/core/quality/quality-analyzer";
 import type { ReviewIssueType } from "@/core/types";
 
 // POST /api/story/nodes/[id]/review

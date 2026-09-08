@@ -4,14 +4,14 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { safeFillAfterWriting } from "@/core/babylore/loop";
-import { analyzeQuality } from "@/lib/quality-analyzer";
-import { QUALITY_PASS_THRESHOLD } from "@/core/quality-thresholds";
+import { analyzeQuality } from "@/core/quality/quality-analyzer";
+import { QUALITY_PASS_THRESHOLD } from "@/core/quality/quality-thresholds";
 import { CONFIRMABLE_STATUSES, STATUS_CONFIRMED } from "@/core/story-status";
 import { extractConsistencyFacts } from "@/core/consistency/extractFacts";
 import { detectPayoffs } from "@/core/foreshadowing";
 
 // 共享阈值（单一真相源）：与 analyzeQuality 的 passed 口径一致
-export { QUALITY_PASS_THRESHOLD } from "@/core/quality-thresholds";
+export { QUALITY_PASS_THRESHOLD } from "@/core/quality/quality-thresholds";
 
 // 自动放行结构门槛（盲测实证驱动）：纯统计分数对劣质/短/重复文不可信（盲测假放行率 100%），
 // 自动/批量放行叠加「最小长度 + 机械重复检测」，分数仅作参考与看板。

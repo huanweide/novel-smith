@@ -13,8 +13,8 @@
  *   6. 主语多样性 —— 连续相同主语开头
  */
 
-import { scanForbiddenWordsEnhanced, type ForbiddenMatch } from "./forbidden-checker";
-import { QUALITY_PASS_THRESHOLD } from "@/core/quality-thresholds";
+import { scanForbiddenWordsEnhanced, type ForbiddenMatch } from "@/lib/forbidden-checker";
+import { QUALITY_PASS_THRESHOLD } from "@/core/quality/quality-thresholds";
 
 // ─── 类型 ─────────────────────────────────────────────────
 

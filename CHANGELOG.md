@@ -1,4 +1,12 @@
 ﻿# Novel Smith 更新公告
+## v3.1.96 — 2026-09-08
+
+### 架构复盘 P1·质量模块归位（R3 · 4 质量文件统一迁入 src/core/quality/）
+
+- **质量概念归一**：`quality-analyzer.ts`（原 `src/lib/`）、`quality-thresholds.ts`、`auto-rate.ts`、`narrative-energy.ts`（原 `src/core/`）四个质量相关模块统一迁入 `src/core/quality/`，共享命名空间，阈值常量单一来源；顺手修正 `quality-analyzer.ts` 遗留的相对引用 `./forbidden-checker` → `@/lib/forbidden-checker`、以及两个测试/脚本里的旧相对路径（`auto-rate.test.ts` 的 `./story-status`、`scripts/agent-quality-blind-test.ts` 的旧位置）。
+- **对外行为不变**：纯目录搬迁 + 引用路径改写，无逻辑改动；`confirm-guard`、`post-processor`、各审核/监测/叙事能量路由的引用同步更新。
+- **质量门禁**：类型检查 0 错、vitest 145 文件 1541 测试全绿、生产构建通过。个人 IP 仍归瑞宝宝。
+
 ## v3.1.95 — 2026-09-08
 
 ### 架构复盘 P0 第二批·循环依赖解除 + 核心模块测试补齐（ARCH-CLEANUP-P0B）

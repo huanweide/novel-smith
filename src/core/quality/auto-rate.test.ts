@@ -4,7 +4,7 @@
  * 覆盖：已确认章中 auto-confirm 计数、百分比（含除零保护）。
  */
 import { describe, it, expect } from "vitest";
-import { STATUS_CONFIRMED } from "./story-status";
+import { STATUS_CONFIRMED } from "@/core/story-status";
 import { countAutoConfirmed, computeAutoRate } from "./auto-rate";
 
 describe("countAutoConfirmed", () => {

@@ -322,12 +322,12 @@ L5 数据层   data/novelforge.db（1.05 MB，31 model，schema 830 行）
 
 ### P1 · 第 2–3 周（中风险 · 收益最大）
 
-| # | 动作 | 涉及文件 | 验收标准 | 风险 |
-|---|---|---|---|---|
-| 6 | JSON 解析全量收敛（R1） | 第 2.3 节 P2 表 23 处 → `src/lib/json-parser.ts` | 手写 `indexOf("{")` 解析归零；`json-parser.test.ts` 扩充各路真实 AI 脏输出用例 | 中（逐处替换需跑相关测试；分 3 批提交） |
-| 7 | 全局提示双头收敛（R2） | `sync-global-prompt.ts`、`explore/build-prompt.ts` | 只留 1 个构造函数；探讨态与写作态输出一致（加一条对比测试） | 中（提示词改动影响生成效果，需人工抽样比对） |
-| 8 | 补 pipeline + orchestrator 冒烟测试 | `src/core/pipeline/*`、`src/core/agents/orchestrator.ts` | 主流程 mock LLM 后能跑通；orchestrator 覆盖正常/超时/脏 JSON 三态 | 中 |
-| 9 | 质量模块归位（R3） | 4 个质量文件 → `src/core/quality/` | 阈值常量单一来源；对外行为不变 | 低 |
+| # | 动作 | 涉及文件 | 验收标准 | 风险 | 状态 |
+|---|---|---|---|---|---|
+| 6 | JSON 解析全量收敛（R1） | 第 2.3 节 P2 表 23 处 → `src/lib/json-parser.ts` | 手写 `indexOf("{")` 解析归零；`json-parser.test.ts` 扩充各路真实 AI 脏输出用例 | 中（逐处替换需跑相关测试；分 3 批提交） | ⬜ 待做 |
+| 7 | 全局提示双头收敛（R2） | `sync-global-prompt.ts`、`explore/build-prompt.ts` | 只留 1 个构造函数；探讨态与写作态输出一致（加一条对比测试） | 中（提示词改动影响生成效果，需人工抽样比对） | ⬜ 待做 |
+| 8 | 补 pipeline + orchestrator 冒烟测试 | `src/core/pipeline/*`、`src/core/agents/orchestrator.ts` | 主流程 mock LLM 后能跑通；orchestrator 覆盖正常/超时/脏 JSON 三态 | 中 | ⬜ 待做 |
+| 9 | 质量模块归位（R3） | 4 个质量文件 → `src/core/quality/` | 阈值常量单一来源；对外行为不变 | 低 | ✅ 已归位（v3.1.96） |
 
 **P1 出口标准**：JSON 解析单一实现、提示构造单一入口、热路径有冒烟测试、质量概念归一。
 

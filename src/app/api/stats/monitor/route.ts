@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-error";
 import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_PENDING_CONFIRM } from "@/core/story-status";
-import { computeAutoRate } from "@/core/auto-rate";
+import { computeAutoRate } from "@/core/quality/auto-rate";
 
 // IMP-020：监控全月聚合（aggregate + groupBy）开销大，而结果仅随 projectId / 当月窗口变化，
 // 与切章时的 nodeId 无关。做 30s 内存缓存，避免每次切章重跑全月 groupBy（byProject 分支此前白算）。
