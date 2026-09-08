@@ -155,6 +155,9 @@ export default function Dashboard() {
             <Link href="/dissect" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">
               <Icon name="book" size={13} /> <span className="hidden sm:inline">拆书</span>
             </Link>
+            <Link href="/detector" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5 tooltip-trigger" data-tooltip="去 AI 味检测（不需要 API Key）">
+              <Icon name="shield" size={13} /> <span className="hidden sm:inline">去 AI 味</span>
+            </Link>
             <Link href="/workshop" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">
               <Icon name="sparkles" size={13} /> <span className="hidden sm:inline">创意工坊</span>
             </Link>
@@ -254,6 +257,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FeatureCard featured icon="sparkles" title="探讨模式" desc="对话式构建世界观、角色与大纲，从一句话灵感聊到完整纲要" href="/explore" cta="开始探讨" />
               <FeatureCard icon="book" title="拆书分析" desc="上传文本，逆向学习结构与文风" href="/dissect" cta="去拆书" />
+              <FeatureCard icon="shield" title="去 AI 味检测" desc="粘贴一段文字，本地扫描机器味、逐段给改法——不需要 API Key 就能用" href="/detector" cta="立刻试试" />
             </div>
             <div className="mt-4 text-center">
               <Link href="/settings" className="inline-flex items-center gap-1.5 text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] transition-colors">
@@ -657,7 +661,7 @@ function FeatureCard({
   featured = false,
   className,
 }: {
-  icon: "sparkles" | "book" | "settings";
+  icon: IconName;
   title: string;
   desc: string;
   href: string;

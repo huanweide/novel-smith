@@ -85,7 +85,7 @@ if (!dbUrl) {
         }
       } catch (e) {
         fail(
-          `数据库无法连接：${e.message}。请确认 PostgreSQL 已启动且 DATABASE_URL 正确——注意：环境变量“存在”不等于“有效”。`
+          `数据库无法连接：${e.message}。请确认 .env 中 DATABASE_URL 指向本地 SQLite 文件（默认 file:./data/novelforge.db）且 ./data/ 目录可写，必要时运行 npm run dev:db 重建——注意：环境变量“存在”不等于“有效”。`
         );
       }
     } else {
