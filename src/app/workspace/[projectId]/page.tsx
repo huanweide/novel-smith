@@ -115,6 +115,18 @@ export default function WorkspacePage() {
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, [zenMode]);
+  // P3-1：F11 一键进入/退出沉浸写作（ROADMAP P1 #3）——此前只能靠按钮，键盘快捷键缺失
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F11") {
+        e.preventDefault();
+        setZenMode((z) => !z);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // P2-2：被动展示叙事阶段名——基于当前章在全书章节列表中的进度位置推导，复用 computeNarrativeStage。
   // 主线被标记 completed 时视为收尾；否则不靠章数硬判（用户可写数百章而不被提前结局）。
   const narrativeStage = narrativeStageOf(selectedNode?.id, chapterNodes, project?.storylines);
