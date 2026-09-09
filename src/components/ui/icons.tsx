@@ -107,6 +107,7 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  Menu,
 } from "lucide-react";
 
 /** 图标名称 → React 组件映射 */
@@ -115,6 +116,7 @@ const iconMap = {
   book: BookOpen,
   settings: Settings,
   clipboard: ClipboardList,
+  menu: Menu,
   search: Search,
   sparkles: Sparkles,
   wrench: Wrench,
