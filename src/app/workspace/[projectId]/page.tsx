@@ -31,6 +31,7 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useWorkspaceDialogs } from "@/hooks/useWorkspaceDialogs";
 import { WorkspaceDialogs } from "@/components/workspace/WorkspaceDialogs";
 import { ProjectSwitcher } from "@/components/workspace/ProjectSwitcher";
+import { ConflictBadge } from "@/components/workspace/ConflictBadge";
 
 export default function WorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -141,6 +142,12 @@ export default function WorkspacePage() {
       if (typeof window !== "undefined" && projectId) localStorage.removeItem(`novel-forge-flash-prompt-${projectId}`);
     }
     setSelectedNode(node);
+  };
+
+  // ROADMAP P2 #6：冲突指示器「跳到该章」——按 nodeId 在项目章节里定位并选中
+  const jumpToNode = (nodeId: string) => {
+    const n = (project as any)?.storyNodes?.find((x: any) => x.id === nodeId);
+    if (n) handleSelectNode(n);
   };
 
   // 命令面板（Cmd/Ctrl+K）跳转参数：?node / ?editCharacter / ?editLore / ?tab
@@ -1167,6 +1174,8 @@ export default function WorkspacePage() {
       <div className={`px-4 py-2 border-b border-[var(--nv-border-2)] flex items-center gap-2 ${zenMode ? "hidden" : ""}`} inert={leftDrawerOpen || rightDrawerOpen}>
         {/* ROADMAP P1 #4：多项目快捷切换（原先必须回首页再选） */}
         <ProjectSwitcher currentId={projectId} currentName={project?.name} />
+        {/* ROADMAP P2 #6：世界书冲突检测可视化（此前冲突只有 API、无常驻入口） */}
+        <ConflictBadge projectId={projectId} onJumpToNode={jumpToNode} />
         <button onClick={() => setLeftDrawerOpen(o => !o)} className="lg:hidden text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="切换大纲栏（窄屏）">
           <Icon name="book" size={13} /> 大纲
         </button>
