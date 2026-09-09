@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.99";
+export const LATEST_VERSION = "v3.1.100";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "测试: 补 pipeline 三个模块冒烟测试(plan-chapter/storyline-writer/generate-chapter-outline)",
-  "测试: 补 orchestrator 三态冒烟(正常/脏JSON/超时)",
-  "健壮: 主流程 mock LLM 跑通不依赖真 DB",
+  "重构: orchestrator.ts(1591行)拆为 prompts/review-parser/summary-parser/prompt-context/agent 五模块",
+  "重构: StorylineWorkbench.tsx(1632行)拆为 constants/LineNav/ClueRow/useStorylineWorkbench，主组件降至864行",
+  "重构: game page(1571行)拆为 types/constants/useGamePage，页面降至981行",
 ];
 
 /**
@@ -86,6 +86,40 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.100",
+    date: "2026-09-09",
+    title: "P2 拆三大巨型文件",
+    sections: [
+      {
+        label: "重构",
+        items: [
+          "orchestrator.ts(1591行)拆为 prompts/review-parser/summary-parser/prompt-context/agent 五模块",
+        ],
+      },
+      {
+        label: "重构",
+        items: [
+          "StorylineWorkbench.tsx(1632行)拆为 constants/LineNav/ClueRow/useStorylineWorkbench",
+          "主组件降至864行",
+        ],
+      },
+      {
+        label: "重构",
+        items: [
+          "game page(1571行)拆为 types/constants/useGamePage",
+          "页面降至981行",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "三处重构后 tsc 0 错 + vitest 1557 全绿",
+          "行为零变化",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.99",
     date: "2026-09-08",
