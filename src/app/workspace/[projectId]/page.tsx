@@ -144,10 +144,15 @@ export default function WorkspacePage() {
     setSelectedNode(node);
   };
 
-  // ROADMAP P2 #6：冲突指示器「跳到该章」——按 nodeId 在项目章节里定位并选中
-  const jumpToNode = (nodeId: string) => {
+  // ROADMAP P2 #6：冲突指示器「跳到该章」——按 nodeId 定位选中该章，
+  // 并把引发冲突的正文摘录设为章内查找词，让 CenterPanel 自动跳到并高亮那一句
+  const [conflictFocus, setConflictFocus] = useState<{ text: string; seq: number } | null>(null);
+  const jumpToNode = (nodeId: string, excerpt?: string) => {
     const n = (project as any)?.storyNodes?.find((x: any) => x.id === nodeId);
     if (n) handleSelectNode(n);
+    // 取前 20 字做查找词：整段摘录可能跨标点/换行，太长反而匹配不上
+    const q = (excerpt || "").trim().slice(0, 20);
+    if (q) setConflictFocus((prev) => ({ text: q, seq: (prev?.seq ?? 0) + 1 }));
   };
 
   // 命令面板（Cmd/Ctrl+K）跳转参数：?node / ?editCharacter / ?editLore / ?tab
@@ -1225,6 +1230,7 @@ export default function WorkspacePage() {
           <CenterPanel zen={zenMode} onEnterZen={() => setZenMode(true)} selectedNode={selectedNode}
             isGenerating={isGenerating || continueLoading} reviewResult={reviewResult}
             narrativeStage={narrativeStage}
+            focusText={conflictFocus?.text ?? null} focusSeq={conflictFocus?.seq ?? 0}
             authorNote={authorNote} onAuthorNoteChange={handleAuthorNoteChange}
             targetWordCount={targetWordCount} onTargetWordCountChange={setTargetWordCount}
             todayWords={monitorTodayWords}

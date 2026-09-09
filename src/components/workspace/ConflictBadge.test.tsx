@@ -59,14 +59,14 @@ describe("ConflictBadge 世界书冲突检测可视化（ROADMAP P2 #6）", () =
     expect(screen.getByText("角色状态")).toBeTruthy();
   });
 
-  it("点「跳到该章」→ 回调该冲突所属 nodeId", async () => {
+  it("点「跳到该章」→ 回调 nodeId 且带上正文摘录（供章内查找高亮）", async () => {
     const onJump = vi.fn();
     render(<ConflictBadge projectId="p1" onJumpToNode={onJump} />);
     await waitFor(() => expect(screen.getByLabelText("2 处待处理冲突")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("2 处待处理冲突"));
-    await waitFor(() => expect(screen.getAllByTitle("跳到引发冲突的章节").length).toBe(2));
-    fireEvent.click(screen.getAllByTitle("跳到引发冲突的章节")[1]);
-    expect(onJump).toHaveBeenCalledWith("n2");
+    await waitFor(() => expect(screen.getAllByTitle("跳到引发冲突的章节并高亮该句").length).toBe(2));
+    fireEvent.click(screen.getAllByTitle("跳到引发冲突的章节并高亮该句")[1]);
+    expect(onJump).toHaveBeenCalledWith("n2", "三年匆匆过去");
   });
 
   it("标记「已修正」→ 该条移出列表，计数递减", async () => {

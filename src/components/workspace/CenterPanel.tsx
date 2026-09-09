@@ -171,6 +171,7 @@ export function CenterPanel({
   narrativeStage,
   locateEntityId,
   onConflict,
+  focusText, focusSeq,
 }: {
   selectedNode: StoryNodeData | null; isGenerating: boolean;
   reviewResult: { passed: boolean; issues: ReviewIssue[] } | null;
@@ -205,6 +206,13 @@ export function CenterPanel({
     mine: Record<string, unknown>;
     server: { editVersion: number; title?: string | null; outline?: string | null; content?: string | null; notes?: string | null };
   }) => void;
+  /**
+   * 反向联动：从冲突指示器点「跳到该章」时，把引发冲突的正文摘录灌进章内查找，
+   * 复用既有的章内查找能力自动定位并高亮那一句（ROADMAP P2 #6 的最后一公里）。
+   */
+  focusText?: string | null;
+  /** 同一段文本被重复点击时也要重新触发定位，故用递增序号强制 effect 重跑 */
+  focusSeq?: number;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   // v2.49：流式正文下沉到 useWriterStore，父组件（WorkspacePage）逐 token 不再重渲染，只这里局部更新
@@ -472,6 +480,23 @@ export function CenterPanel({
     jumpToMatch(nodeQuery, true);
     setMatchIdx((i) => (i <= 1 ? matchCount : i - 1));
   }, [nodeQuery, matchCount]);
+
+  // ── 反向联动（ROADMAP P2 #6）：外部（冲突指示器）请求定位某段文本 ──
+  // 把文本灌进章内查找框，等正文渲染出命中后自动跳到第一处并高亮。
+  useEffect(() => {
+    if (!focusText) return;
+    setNodeQuery(focusText);
+    setMatchIdx(1);
+  }, [focusText, focusSeq]);
+
+  useEffect(() => {
+    // 只在「查找词正是外部请求的文本」时自动跳，避免干扰用户自己输入的查找
+    if (!focusText || focusText !== nodeQuery) return;
+    if (!nodeQuery || matchCount === 0) return;
+    // 切章后正文可能尚未完成渲染，给一拍让 DOM 稳定再跳
+    const timer = setTimeout(() => jumpToMatch(nodeQuery, false), 60);
+    return () => clearTimeout(timer);
+  }, [focusText, focusSeq, nodeQuery, matchCount]);
 
   // v3.1.78 章内替换：对源文本 displayContent 走纯函数 replaceMatches 生成新正文，再复用落库逻辑直接 PUT（不读 DOM，规避 contentEditable 依赖）
   const commitContent = useCallback(async (newContent: string, nextMatchIdx = 0): Promise<boolean> => {
