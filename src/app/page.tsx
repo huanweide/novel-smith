@@ -623,12 +623,21 @@ function ProjectCard({ project, onDelete, deletingId, onRenamed, index = 0 }: { 
 
       <div className="flex items-center justify-between pt-3 border-t border-[var(--nv-border-2)] relative z-[1]">
         <span className="text-[10px] text-[var(--nv-text-muted)]">{timeAgo}</span>
-              <Link
-                href={`/workspace/${project.id}`}
-                className="text-xs text-primary hover:text-primary font-medium inline-flex items-center gap-1 transition-colors"
-              >
-                进入工作台 <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  href={`/read/${project.id}`}
+                  className="text-xs text-[var(--nv-text-secondary)] hover:text-[var(--nv-primary)] inline-flex items-center gap-1 transition-colors"
+                  title="移动优先的阅读模式"
+                >
+                  <Icon name="book" size={12} /> 阅读
+                </Link>
+                <Link
+                  href={`/workspace/${project.id}`}
+                  className="text-xs text-primary hover:text-primary font-medium inline-flex items-center gap-1 transition-colors"
+                >
+                  进入工作台 <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
+                </Link>
+              </div>
       </div>
     </div>
   );
