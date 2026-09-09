@@ -30,6 +30,7 @@ import { useShortcut } from "@/components/ShortcutProvider";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useWorkspaceDialogs } from "@/hooks/useWorkspaceDialogs";
 import { WorkspaceDialogs } from "@/components/workspace/WorkspaceDialogs";
+import { ProjectSwitcher } from "@/components/workspace/ProjectSwitcher";
 
 export default function WorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -1164,6 +1165,8 @@ export default function WorkspacePage() {
       </div>
 
       <div className={`px-4 py-2 border-b border-[var(--nv-border-2)] flex items-center gap-2 ${zenMode ? "hidden" : ""}`} inert={leftDrawerOpen || rightDrawerOpen}>
+        {/* ROADMAP P1 #4：多项目快捷切换（原先必须回首页再选） */}
+        <ProjectSwitcher currentId={projectId} currentName={project?.name} />
         <button onClick={() => setLeftDrawerOpen(o => !o)} className="lg:hidden text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="切换大纲栏（窄屏）">
           <Icon name="book" size={13} /> 大纲
         </button>

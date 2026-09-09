@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.101";
+export const LATEST_VERSION = "v3.1.102";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "体验: F11 键一键进入/退出 zenMode 沉浸写作（ROADMAP P1 #3）",
-  "修复: 此前沉浸只能靠按钮触发，键盘快捷键缺失",
-  "测试: tsc 0 错 + next build 通过；F11 现 toggle 全屏沉浸且监听 fullscreenchange 同步退出",
+  "体验: 写作页顶部新增项目切换下拉，一键跳别的项目或回项目列表（ROADMAP P1 #4）",
+  "优化: 展开时才拉 /api/projects，未展开不发请求",
+  "测试: 新增 ProjectSwitcher 5 例（懒加载/渲染/跳转/回首页/失败兜底）",
 ];
 
 /**
@@ -86,6 +86,33 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.102",
+    date: "2026-09-09",
+    title: "P3-2 多项目快捷切换",
+    sections: [
+      {
+        label: "体验",
+        items: [
+          "写作页顶部新增项目切换下拉",
+          "一键跳别的项目或回项目列表（ROADMAP P1 #4）",
+        ],
+      },
+      {
+        label: "优化",
+        items: [
+          "展开时才拉 /api/projects",
+          "未展开不发请求",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 ProjectSwitcher 5 例（懒加载/渲染/跳转/回首页/失败兜底）",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.101",
     date: "2026-09-09",
