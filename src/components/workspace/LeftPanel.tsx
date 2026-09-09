@@ -20,7 +20,7 @@ export function LeftPanel({
   activeTab, onTabChange, selectedNode, onSelectNode,   onAddSection,
   onEditCharacter, onEditLore, onNewCharacter, loadProject,
   viewMode, onSetViewMode, onDeleteNode, deletingNodeId, onLoadSample,
-  onWriteChapter, onSummarizeCurrent, summarizing, onLocateEntity,
+  onWriteChapter, onSummarizeCurrent, summarizing, onLocateEntity, onCollapse,
 }: {
   activeTab: string;
   onTabChange: (tab: "characters" | "world" | "outline" | "storylines" | "rules" | "digest") => void;
@@ -36,6 +36,8 @@ export function LeftPanel({
   summarizing?: boolean;
   /** 反向联动：点角色卡 / 世界书卡片，正文定位该实体 */
   onLocateEntity?: (id: string) => void;
+  /** ROADMAP P1 #5：收起左栏——与右栏 onMinimize 对等（此前左栏只有 `[` 快捷键，没有可见入口） */
+  onCollapse?: () => void;
 }) {
   // FE-8：project 数据从 store 读取，不再由父组件逐层透传 project 大对象
   const project = useProjectStore((s) => s.project);
@@ -138,6 +140,18 @@ export function LeftPanel({
             document.body
           )}
         </div>
+        {/* ROADMAP P1 #5：左栏收起入口（此前只有 `[` 快捷键，右栏却有按钮——能力不对等） */}
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="ml-auto shrink-0 rounded p-1 text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-primary)]"
+            title="收起大纲栏（腾出横向视野 · 可从顶部「大纲」按钮或 `[` 键展开）"
+            aria-label="收起大纲栏"
+          >
+            <Icon name="arrowLeft" size={14} />
+          </button>
+        )}
       </div>
       <div key={activeTab} className="flex-1 overflow-y-auto p-2 animate-in">
         {activeTab === "outline" && (

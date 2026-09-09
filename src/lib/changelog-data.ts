@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.105";
+export const LATEST_VERSION = "v3.1.106";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "体验: 顶部工具栏新增收起/展开开关，收起后只留冲突徽标与展开入口",
-  "体验: 收起偏好写入 localStorage，下次进写作页自动保持",
-  "门禁: tsc 0 错 + vitest 151 文件 1568 测试全绿 + next build 通过",
+  "修正: 回滚 v3.1.105 的顶部工具栏折叠——zen 沉浸已能隐藏顶部，属重复造轮子",
+  "体验: 左栏新增可见收起按钮（此前只有 [ 快捷键，右栏却有按钮",
+  "体验: 左栏收起后顶部「大纲」按钮转为展开入口，收起后不会无处恢复",
 ];
 
 /**
@@ -86,6 +86,41 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.106",
+    date: "2026-09-09",
+    title: "P3-5 修正：视野优化补左栏收起入口（回滚冗余顶部折叠）",
+    sections: [
+      {
+        label: "修正",
+        items: [
+          "回滚 v3.1.105 的顶部工具栏折叠——zen 沉浸已能隐藏顶部",
+          "属重复造轮子",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "左栏新增可见收起按钮（此前只有 [ 快捷键",
+          "右栏却有按钮",
+          "能力不对等）",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "左栏收起后顶部「大纲」按钮转为展开入口",
+          "收起后不会无处恢复",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 151 文件 1568 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.105",
     date: "2026-09-09",
