@@ -29,7 +29,8 @@ export function ConflictBadge({
   onJumpToNode,
 }: {
   projectId: string;
-  onJumpToNode: (nodeId: string) => void;
+  /** nodeId 用于定位章节，excerpt（正文摘录）会被设为章内查找词，实现跳到那句话并高亮 */
+  onJumpToNode: (nodeId: string, excerpt?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<ConflictItem[]>([]);
@@ -157,10 +158,10 @@ export function ConflictBadge({
                     type="button"
                     onClick={() => {
                       setOpen(false);
-                      onJumpToNode(c.nodeId);
+                      onJumpToNode(c.nodeId, c.excerpt);
                     }}
                     className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--nv-text-secondary)] hover:text-[var(--nv-accent)]"
-                    title="跳到引发冲突的章节"
+                    title="跳到引发冲突的章节并高亮该句"
                   >
                     跳到该章 <Icon name="arrowRight" size={11} />
                   </button>
