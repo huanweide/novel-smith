@@ -1,4 +1,12 @@
 ﻿# Novel Smith 更新公告
+## v3.1.101 — 2026-09-09
+
+### P3-1·F11 一键沉浸写作（ROADMAP P1 #3）
+
+- **键盘快捷键补齐**：`src/app/workspace/[projectId]/page.tsx` 此前已有完整的 `zenMode` 沉浸实现（进入请求浏览器物理全屏、退出收起、侧栏/工具栏/顶部/右栏全部隐藏、监听 `fullscreenchange` 同步），但**只能靠按钮触发、缺 F11 键**。
+- **修复**：新增 `keydown` 监听 —— 按 F11 切换 `zenMode`（并 `preventDefault` 阻止浏览器原生全屏与我们的沉浸互相打架），配合既有 `fullscreenchange` 监听实现「按 F11 进/出沉浸、Esc 退出全屏同步退出沉浸」的完整闭环。
+- **门禁**：类型检查 0 错、next build 通过。
+
 ## v3.1.100 — 2026-09-09
 
 ### P2·三大巨型文件拆分（4800 行 → 分模块，行为零变化）
