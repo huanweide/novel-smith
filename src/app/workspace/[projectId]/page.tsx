@@ -129,22 +129,8 @@ export default function WorkspacePage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // ROADMAP P1 #5：写作区视野优化——顶部工具栏可收起，把纵向视野还给正文（偏好记在本地）
-  const [topBarCollapsed, setTopBarCollapsed] = useState(false);
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("novel-forge-topbar-collapsed") === "1") setTopBarCollapsed(true);
-    } catch {
-      /* localStorage 不可用时忽略，默认展开 */
-    }
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem("novel-forge-topbar-collapsed", topBarCollapsed ? "1" : "0");
-    } catch {
-      /* 忽略写入失败 */
-    }
-  }, [topBarCollapsed]);
+  // ROADMAP P1 #5：视野优化的真实缺口不是"顶部再收一次"（zen 沉浸已能隐藏全部），
+  // 而是左栏只有 `[` 快捷键、没有可见收起入口（右栏有按钮）——下面补对等能力。
   // P2-2：被动展示叙事阶段名——基于当前章在全书章节列表中的进度位置推导，复用 computeNarrativeStage。
   // 主线被标记 completed 时视为收尾；否则不靠章数硬判（用户可写数百章而不被提前结局）。
   const narrativeStage = narrativeStageOf(selectedNode?.id, chapterNodes, project?.storylines);
@@ -1192,14 +1178,17 @@ export default function WorkspacePage() {
       />
       </div>
 
-      <div className={`px-4 ${topBarCollapsed ? "py-1" : "py-2"} border-b border-[var(--nv-border-2)] flex items-center gap-2 ${zenMode ? "hidden" : ""}`} inert={leftDrawerOpen || rightDrawerOpen}>
-        {!topBarCollapsed && (
-          <>
+      <div className={`px-4 py-2 border-b border-[var(--nv-border-2)] flex items-center gap-2 ${zenMode ? "hidden" : ""}`} inert={leftDrawerOpen || rightDrawerOpen}>
         {/* ROADMAP P1 #4：多项目快捷切换（原先必须回首页再选） */}
         <ProjectSwitcher currentId={projectId} currentName={project?.name} />
         {/* ROADMAP P2 #6：世界书冲突检测可视化（此前冲突只有 API、无常驻入口） */}
         <ConflictBadge projectId={projectId} onJumpToNode={jumpToNode} />
-        <button onClick={() => setLeftDrawerOpen(o => !o)} className="lg:hidden text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="切换大纲栏（窄屏）">
+        {/* 左栏收起后（桌面端）此按钮转为「展开大纲栏」入口，避免收起后无处恢复 */}
+        <button
+          onClick={() => { if (leftCollapsed) setLeftCollapsed(false); else setLeftDrawerOpen(o => !o); }}
+          className={`text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5 ${leftCollapsed ? "" : "lg:hidden"}`}
+          title={leftCollapsed ? "展开大纲栏" : "切换大纲栏（窄屏）"}
+        >
           <Icon name="book" size={13} /> 大纲
         </button>
         <button onClick={() => setRightDrawerOpen(o => !o)} className="lg:hidden text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="切换侧栏（窄屏）">
@@ -1210,16 +1199,6 @@ export default function WorkspacePage() {
         </button>
         <button onClick={() => setZenMode(true)} className="text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="沉浸写作模式（⌘/Ctrl + . 进入 · 隐藏全部侧栏并全屏正文）">
           <Icon name="maximize" size={13} /> 沉浸写作
-        </button>
-          </>
-        )}
-        <button
-          onClick={() => setTopBarCollapsed((c) => !c)}
-          className="text-xs btn-ghost px-2 py-1 rounded-xl flex items-center gap-1"
-          title={topBarCollapsed ? "展开顶部工具栏" : "收起顶部工具栏（把纵向视野还给正文）"}
-          aria-expanded={!topBarCollapsed}
-        >
-          {topBarCollapsed ? "展开" : "收起"}
         </button>
       </div>
 
@@ -1248,7 +1227,8 @@ export default function WorkspacePage() {
           onDeleteNode={deleteNode} deletingNodeId={deletingId}
           onLoadSample={loadSample} onWriteChapter={handleWriteFromStoryline}
           onSummarizeCurrent={handleSummarize} summarizing={summarizing}
-          onLocateEntity={handleLocateEntity} />
+          onLocateEntity={handleLocateEntity}
+          onCollapse={() => setLeftCollapsed(true)} />
         </ErrorBoundary>
         </div>
 
