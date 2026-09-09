@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.97 |
+| 包名 / 版本 | `novel-smith` v3.1.107 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -99,6 +99,13 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.107 — 2026-09-09 — 移动端响应式阅读模式（P3-11 · /read 独立路由）
+- **新建阅读路由** `/read/[projectId]`：移动优先、响应式的小说阅读页，不复用也不破坏桌面写作台。手机点开即读整本书，桌面端自动展开左侧常驻目录栏。
+- **阅读体验**：顶部阅读进度条（实时反映滚动）、字号 A−/A+ 调节（14–24px 钳制、localStorage 记忆）、目录移动端抽屉式（☰ 唤出、点遮罩关闭）/桌面端常驻、底栏上一章/下一章翻页。
+- **纯复用零数据层改动**：目录走 `GET /api/projects/[id]/chapters`、正文走 `GET /api/story/nodes/[id]`、渲染复用 `MarkdownViewer`；新增 `src/lib/reader-utils.ts` 纯函数（字号钳制/进度计算/上下章推导）+ 9 条单测；首页项目卡加「阅读」入口。
+- **门禁**：tsc 0 错、vitest 152 文件 1577 测试全绿、next build 通过。
+- **关联**：ROADMAP P3 #11 勾 ✅；P2 #7 模板市集经侦察确认早已由 v3.1.85/86 完整交付（不重做）。
 
 ### v3.1.97 — 2026-09-08 — 架构复盘 P1·JSON 解析全量收敛（R1）
 - **全量收敛**：15 文件 29 处手写 `indexOf("{")/lastIndexOf("}")` 解析收口到 `src/lib/json-parser.ts`（parseAIJson/safeParseAIJson/parseAIArray/safeParseAIArray）；删 `import/parse/route.ts` 内联 repairJSON/parseJSON。
@@ -447,3 +454,4 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | `snap/20260905-112230-v3.1.84` | 2026-09-05 11:22 | v3.1.84 | main | Preset创意工坊完善-动手前(T15预览+撤销+编辑删除+桥接+测试) | 32M |
 | `snap/20260908-120021-v3.1.92` | 2026-09-08 12:00 | v3.1.92 | main | 修复4个体验漏洞前(Docker提示/版本漂移/detector零门槛页/社区基建) | 32M |
 | `snap/20260908-143353-v3.1.93` | 2026-09-08 14:33 | v3.1.93 | main | 架构清理-按复盘计划P0-P2收敛补测瘦身 | 32M |
+| `snap/20260909-221811-v3.1.106` | 2026-09-09 22:18 | v3.1.106 | main | P3-11 移动端响应式阅读模式：新建 /read/[projectId] 独立阅读路由 | 32M |

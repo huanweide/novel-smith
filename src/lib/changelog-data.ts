@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.106";
+export const LATEST_VERSION = "v3.1.107";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "修正: 回滚 v3.1.105 的顶部工具栏折叠——zen 沉浸已能隐藏顶部，属重复造轮子",
-  "体验: 左栏新增可见收起按钮（此前只有 [ 快捷键，右栏却有按钮",
-  "体验: 左栏收起后顶部「大纲」按钮转为展开入口，收起后不会无处恢复",
+  "新增: 移动优先阅读模式 /read/[项目]——目录抽屉 + 沉浸正文 + 字号调节 + 阅读进度",
+  "体验: 首页项目卡新增「阅读」入口，手机上也能舒服地读自己的小说",
+  "复用: 既有 /chapters 清单与 /story/nodes/[id] 正文接口 + MarkdownViewer，零数据层改动",
 ];
 
 /**
@@ -86,6 +86,34 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.107",
+    date: "2026-09-09",
+    title: "P3-11 移动端响应式阅读模式（/read 独立阅读路由）",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "新建 /read/[projectId] 移动优先阅读路由：目录抽屉 + 沉浸正文 + 字号 A-/A+ 调节（localStorage 记忆）+ 顶部阅读进度条 + 上一章/下一章",
+          "首页项目卡新增「阅读」入口，手机上也能舒服地读自己的小说",
+        ],
+      },
+      {
+        label: "复用",
+        items: [
+          "复用既有 /api/projects/[id]/chapters 清单与 /api/story/nodes/[id] 正文接口，以及 MarkdownViewer 渲染，零数据层改动",
+          "桌面端（lg+）自动转为左侧常驻目录栏，移动端为抽屉式，一套组件自适应",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 reader-utils 纯函数模块（字号钳制/进度计算/上下章推导）+ 9 条单测",
+          "tsc 0 错 + vitest 152 文件 1577 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.106",
     date: "2026-09-09",

@@ -1819,3 +1819,16 @@ html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.
 .mem-tier-a { background: color-mix(in oklch, var(--nv-primary) 16%, transparent); color: var(--nv-primary); }
 .mem-tier-b { background: color-mix(in oklch, var(--nv-info) 16%, transparent); color: var(--nv-info); }
 .mem-tier-c { background: var(--nv-surface-3); color: var(--nv-text-muted); }
+
+/* 阅读模式 .reader-scope：让字号调节真正生效。
+   MarkdownViewer 内部段落用固定 text-[17px]，需在本作用域内覆盖，
+   否则外层 font-size 调节对正文无效。仅作用于 /read 阅读路由，不影响写作台。 */
+.reader-scope { font-size: var(--reader-fs, 18px); }
+.reader-scope :is(p, li, blockquote, td, th, a) {
+  font-size: var(--reader-fs, 18px) !important;
+  line-height: 1.85 !important;
+}
+.reader-scope h1 { font-size: calc(var(--reader-fs, 18px) * 1.5) !important; }
+.reader-scope h2 { font-size: calc(var(--reader-fs, 18px) * 1.3) !important; }
+.reader-scope h3 { font-size: calc(var(--reader-fs, 18px) * 1.15) !important; }
+.reader-scope pre, .reader-scope code { font-size: calc(var(--reader-fs, 18px) * 0.85) !important; }
