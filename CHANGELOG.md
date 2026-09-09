@@ -1,4 +1,14 @@
 ﻿# Novel Smith 更新公告
+## v3.1.100 — 2026-09-09
+
+### P2·三大巨型文件拆分（4800 行 → 分模块，行为零变化）
+
+- **orchestrator.ts（1591 行）→ 5 个模块**：`src/core/agents/orchestrator/` 目录下拆出 `prompts.ts`（提示词模板）、`review-parser.ts`（审校响应解析 + 两个校验器）、`summary-parser.ts`（章节摘要解析）、`prompt-context.ts`（PromptContext 装配，最大的一块约 970 行）、`agent.ts`（调度器主类 414 行）。原路径 `@/core/agents/orchestrator` 由 `index.ts` 桶文件接管，全部对外导出与构造签名不变。
+- **StorylineWorkbench.tsx（1632 行）→ 主组件 864 行**：拆出 `storyline-workbench/constants.ts`（常量/类型/纯工具）、`LineNav.tsx`、`ClueRow.tsx`，并把 104–627 行的全部状态与业务逻辑抽成 `useStorylineWorkbench` 自定义 hook（569 行）；主组件只剩 props 接收 + hook 调用 + JSX 编排。
+- **game/[nodeId]/page.tsx（1571 行）→ 页面 981 行**：拆出 `components/game/page/types.ts` / `constants.ts`，并把 84–623 行逻辑抽成 `useGamePage` hook（567 行）；页面保留 hook 调用、加载态早返回与主 JSX。
+- **拆分手法**：一律按行号脚本切片（字节级搬运，不手工重写），私有方法转纯函数、类方法改为委托调用，避免任何行为漂移。
+- **门禁**：类型检查 0 错、vitest 149 文件 1557 测试全绿（与拆分前基线完全一致）、生产构建通过。
+
 ## v3.1.99 — 2026-09-08
 
 ### P1-8·pipeline/orchestrator 冒烟测试补齐（主流程 mock LLM 跑通）
