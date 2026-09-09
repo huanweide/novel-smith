@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.104";
+export const LATEST_VERSION = "v3.1.105";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "体验: 点冲突跳转时把正文摘录灌进章内查找，自动定位并高亮引发冲突的那句话",
-  "优化: 复用既有章内查找能力(v3.1.77)而非另写高亮，零侵入正文渲染",
-  "优化: 摘录取前20字做查找词，避免跨标点/换行匹配不上；同句重复点击用递增序号强制重定位",
+  "体验: 顶部工具栏新增收起/展开开关，收起后只留冲突徽标与展开入口",
+  "体验: 收起偏好写入 localStorage，下次进写作页自动保持",
+  "门禁: tsc 0 错 + vitest 151 文件 1568 测试全绿 + next build 通过",
 ];
 
 /**
@@ -86,6 +86,34 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.105",
+    date: "2026-09-09",
+    title: "P3-5 写作区视野优化：顶部工具栏可收起",
+    sections: [
+      {
+        label: "体验",
+        items: [
+          "顶部工具栏新增收起/展开开关",
+          "收起后只留冲突徽标与展开入口",
+          "把纵向视野还给正文",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "收起偏好写入 localStorage",
+          "下次进写作页自动保持",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 151 文件 1568 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.104",
     date: "2026-09-09",
