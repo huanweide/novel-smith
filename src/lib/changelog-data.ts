@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.102";
+export const LATEST_VERSION = "v3.1.103";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "体验: 写作页顶部新增项目切换下拉，一键跳别的项目或回项目列表（ROADMAP P1 #4）",
-  "优化: 展开时才拉 /api/projects，未展开不发请求",
-  "测试: 新增 ProjectSwitcher 5 例（懒加载/渲染/跳转/回首页/失败兜底）",
+  "体验: 写作页顶部常驻冲突指示器，显示待处理冲突数并可展开列表",
+  "体验: 点冲突「跳到该章」按 nodeId 直接定位到引发冲突的章节",
+  "体验: 冲突卡片展示类别/说明/正文摘录，可就地标记已修正或忽略",
 ];
 
 /**
@@ -86,6 +86,39 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.103",
+    date: "2026-09-09",
+    title: "P3-3 世界书冲突检测可视化",
+    sections: [
+      {
+        label: "体验",
+        items: [
+          "写作页顶部常驻冲突指示器",
+          "显示待处理冲突数并可展开列表",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "点冲突「跳到该章」按 nodeId 直接定位到引发冲突的章节",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "冲突卡片展示类别/说明/正文摘录",
+          "可就地标记已修正或忽略",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 ConflictBadge 6 例（计数/空态/摘录/跳转/标记/失败兜底）",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.102",
     date: "2026-09-09",
