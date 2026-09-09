@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.100";
+export const LATEST_VERSION = "v3.1.101";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "重构: orchestrator.ts(1591行)拆为 prompts/review-parser/summary-parser/prompt-context/agent 五模块",
-  "重构: StorylineWorkbench.tsx(1632行)拆为 constants/LineNav/ClueRow/useStorylineWorkbench，主组件降至864行",
-  "重构: game page(1571行)拆为 types/constants/useGamePage，页面降至981行",
+  "体验: F11 键一键进入/退出 zenMode 沉浸写作（ROADMAP P1 #3）",
+  "修复: 此前沉浸只能靠按钮触发，键盘快捷键缺失",
+  "测试: tsc 0 错 + next build 通过；F11 现 toggle 全屏沉浸且监听 fullscreenchange 同步退出",
 ];
 
 /**
@@ -86,6 +86,32 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.101",
+    date: "2026-09-09",
+    title: "P3-1 F11 一键沉浸写作",
+    sections: [
+      {
+        label: "体验",
+        items: [
+          "F11 键一键进入/退出 zenMode 沉浸写作（ROADMAP P1 #3）",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "此前沉浸只能靠按钮触发",
+          "键盘快捷键缺失",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "tsc 0 错 + next build 通过；F11 现 toggle 全屏沉浸且监听 fullscreenchange 同步退出",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.100",
     date: "2026-09-09",
