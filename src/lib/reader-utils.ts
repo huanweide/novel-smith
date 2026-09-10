@@ -36,3 +36,30 @@ export function neighborIndices(
     next: idx < ids.length - 1 ? idx + 1 : -1,
   };
 }
+
+/** 阅读主题循环顺序 */
+export const READER_THEMES = ["default", "night", "sepia"] as const;
+export type ReaderTheme = (typeof READER_THEMES)[number];
+
+/** 恢复上次阅读章节：记住的那章还在书里就用它，否则退回第一章 */
+export function pickInitialChapterId(
+  ids: string[],
+  rememberedId: string | null,
+): string | null {
+  if (!ids.length) return null;
+  if (rememberedId && ids.includes(rememberedId)) return rememberedId;
+  return ids[0];
+}
+
+/** 主题按顺序循环（不在列表里则回到默认），用于「切换阅读主题」按钮 */
+export function cycleTheme(current: string): ReaderTheme {
+  const idx = READER_THEMES.indexOf(current as ReaderTheme);
+  return READER_THEMES[(idx + 1) % READER_THEMES.length];
+}
+
+/** 阅读主题 → 展示名 */
+export const READER_THEME_LABEL: Record<ReaderTheme, string> = {
+  default: "跟随主题",
+  night: "夜间",
+  sepia: "纸感",
+};

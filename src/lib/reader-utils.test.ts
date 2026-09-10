@@ -3,6 +3,9 @@ import {
   clampFontSize,
   computeReadingProgress,
   neighborIndices,
+  pickInitialChapterId,
+  cycleTheme,
+  READER_THEMES,
   MIN_FONT_SIZE,
   MAX_FONT_SIZE,
   DEFAULT_FONT_SIZE,
@@ -49,5 +52,32 @@ describe("neighborIndices", () => {
   });
   it("找不到当前章返回双 -1", () => {
     expect(neighborIndices(ids, "zzz")).toEqual({ prev: -1, next: -1 });
+  });
+});
+
+describe("pickInitialChapterId", () => {
+  const ids = ["a", "b", "c"];
+  it("记住的章还在书里就用它", () => {
+    expect(pickInitialChapterId(ids, "b")).toBe("b");
+  });
+  it("记住的章已被删除则退回第一章", () => {
+    expect(pickInitialChapterId(ids, "zzz")).toBe("a");
+  });
+  it("没记住过就从第一章开始", () => {
+    expect(pickInitialChapterId(ids, null)).toBe("a");
+  });
+  it("空书返回 null", () => {
+    expect(pickInitialChapterId([], "b")).toBe(null);
+  });
+});
+
+describe("cycleTheme", () => {
+  it("按顺序循环并回到默认", () => {
+    expect(cycleTheme("default")).toBe("night");
+    expect(cycleTheme("night")).toBe("sepia");
+    expect(cycleTheme("sepia")).toBe("default");
+  });
+  it("未知主题回到默认值", () => {
+    expect(cycleTheme("bogus")).toBe(READER_THEMES[0]);
   });
 });

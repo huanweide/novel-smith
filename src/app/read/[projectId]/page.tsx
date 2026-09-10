@@ -11,6 +11,10 @@ import {
   clampFontSize,
   computeReadingProgress,
   neighborIndices,
+  pickInitialChapterId,
+  cycleTheme,
+  READER_THEME_LABEL,
+  type ReaderTheme,
 } from "@/lib/reader-utils";
 
 interface TocItem {
@@ -25,6 +29,9 @@ interface ProjectMeta {
 }
 
 const FS_KEY = "novel-smith-reader-fs";
+const THEME_KEY = "novel-smith-reader-theme";
+/** 每本书单独记住「上次读到哪一章」 */
+const lastKey = (projectId: string) => `novel-smith-reader-last-${projectId}`;
 
 export default function ReadPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -40,6 +47,7 @@ export default function ReadPage() {
   const [tocOpen, setTocOpen] = useState(false);
   const [fontSize, setFontSize] = useState(18);
   const [progress, setProgress] = useState(0);
+  const [theme, setTheme] = useState<ReaderTheme>("default");
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -49,6 +57,21 @@ export default function ReadPage() {
       const v = Number(localStorage.getItem(FS_KEY));
       if (Number.isFinite(v)) setFontSize(clampFontSize(v));
     } catch { /* 忽略 */ }
+  }, []);
+
+  // ── 阅读主题：从 localStorage 恢复 ──
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      if (t) setTheme(t as ReaderTheme);
+    } catch { /* 忽略 */ }
+  }, []);
+  const changeTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = cycleTheme(prev);
+      try { localStorage.setItem(THEME_KEY, next); } catch { /* 忽略 */ }
+      return next;
+    });
   }, []);
   const changeFont = useCallback(
     (delta: number) => {
@@ -87,8 +110,12 @@ export default function ReadPage() {
           const mine = projs.find((p) => p.id === projectId);
           if (mine) setProjectName(mine.name);
         }
-        if (list.length > 0) setCurrentId(list[0].id);
-        else setLoadError(null);
+        // 记住上次读到哪一章：还在书里就继续读，否则从头开始
+        const remembered = (() => {
+          try { return localStorage.getItem(lastKey(projectId)); } catch { return null; }
+        })();
+        setCurrentId(pickInitialChapterId(list.map((c) => c.id), remembered));
+        setLoadError(null);
       } catch {
         if (alive) setLoadError("网络异常，目录加载失败");
       } finally {
@@ -138,6 +165,23 @@ export default function ReadPage() {
     setTocOpen(false);
   };
 
+  // ── 记住「上次读到哪一章」，下次打开同一本自动接着读 ──
+  useEffect(() => {
+    if (!currentId || !projectId) return;
+    try { localStorage.setItem(lastKey(projectId), currentId); } catch { /* 忽略 */ }
+  }, [currentId, projectId]);
+
+  // ── 键盘 ← → 翻上一章 / 下一章（桌面端顺手）──
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" && prev >= 0) selectChapter(ids[prev]);
+      else if (e.key === "ArrowRight" && next >= 0) selectChapter(ids[next]);
+      else if (e.key === "Escape") setTocOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const TocList = (
     <div className="flex flex-col">
       <div className="px-4 py-3 text-xs font-semibold tracking-widest text-[var(--nv-text-secondary)] border-b border-[var(--nv-border-2)]">
@@ -167,7 +211,9 @@ export default function ReadPage() {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[var(--nv-void)] text-[var(--nv-text-primary)]">
+    <div
+      className={`h-screen flex flex-col bg-[var(--nv-void)] text-[var(--nv-text-primary)] reader-theme-${theme}`}
+    >
       {/* 阅读进度条 */}
       <div className="h-0.5 w-full bg-[var(--nv-surface-2)] shrink-0">
         <div
@@ -206,6 +252,14 @@ export default function ReadPage() {
             title="放大字号"
           >
             A+
+          </button>
+          <button
+            onClick={changeTheme}
+            className="btn-ghost text-xs px-2 py-1.5 rounded-lg ml-1"
+            aria-label="切换阅读主题"
+            title={`阅读主题：${READER_THEME_LABEL[theme]}（点击切换）`}
+          >
+            {READER_THEME_LABEL[theme]}
           </button>
           <Link
             href={`/workspace/${projectId}`}
