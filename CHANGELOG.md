@@ -1,4 +1,14 @@
 ﻿# Novel Smith 更新公告
+## v3.1.111 — 2026-09-10
+
+### 首页 SSR（服务端预取直出首屏）
+
+- **问题**：首页项目列表原本是浏览器端 `useQuery("projects:list")` 二次 `fetch /api/projects` 才拿到，首屏要等客户端请求往返，多一次加载闪烁、FCP 偏慢。
+- **改造**：`src/app/page.tsx` 改为 async 服务端组件，直接调用新增的 `getProjectsForHome()` 预取项目列表，作为 `initialData` 注入客户端 `home-dashboard` 组件；首页内容拆成 `page.tsx`（服务端入口）+ `home-dashboard.tsx`（客户端组件）。新增 `src/lib/projects-service.ts` 服务端取数层，首页与 `GET /api/projects` 共用同一份取数逻辑（含 `updatedAt` 归一化 ISO 串），避免两端漂移。
+- **零回归兜底**：服务端取数失败时 `initialProjects` 留空，客户端按原逻辑自行 `fetch`——加载/错误 UI 完全不变；轻量状态层 `useQuery` 新增 `initialData` 注水支持，首渲染与服务端 HTML 一致，杜绝 hydration mismatch。
+- **收益**：首屏直出项目数据、不再发二次请求，首屏更快、少一次闪烁。
+- **门禁**：类型检查 0 错、vitest 153 文件 1593 测试全绿、next build 通过。
+
 ## v3.1.110 — 2026-09-10
 
 ### 首页移动端横向溢出修复（Chrome 真机视口实测）
