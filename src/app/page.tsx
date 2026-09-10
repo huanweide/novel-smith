@@ -183,17 +183,17 @@ export default function Dashboard() {
     <div className="nf-home min-h-screen bg-transparent text-foreground">
       {/* 顶栏：悬浮下移（不贴死顶部，让系统提示条可见）+ 主操作 / 导航 / 系统三组 */}
       <header className="nf-header sticky top-2 z-40 mx-2 rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/90 shadow-lg backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="nf-logo" aria-hidden="true">
+            <span className="nf-logo shrink-0" aria-hidden="true">
               <Icon name="sparkles" size={16} />
             </span>
-            <div className="leading-tight">
-            <h1 className="text-lg font-bold tracking-tight text-foreground">Novel Smith</h1>
-            <p className="text-[10px] text-[var(--nv-text-tertiary)] tracking-[0.22em]">小说工匠 · 创作引擎</p>
+            <div className="leading-tight min-w-0">
+            <h1 className="text-lg font-bold tracking-tight text-foreground truncate">Novel Smith</h1>
+            <p className="hidden sm:block text-[10px] text-[var(--nv-text-tertiary)] tracking-[0.22em]">小说工匠 · 创作引擎</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Link href="/explore" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium">
               <Icon name="sparkles" size={14} /> <span>开始创作</span>
             </Link>
@@ -222,7 +222,7 @@ export default function Dashboard() {
             <Link href="/settings" className="btn-ghost text-xs h-8 w-8 rounded-xl inline-flex items-center justify-center tooltip-trigger" data-tooltip="设置" aria-label="设置">
               <Icon name="settings" size={13} />
             </Link>
-            <button onClick={() => window.dispatchEvent(new Event("nf-open-command-palette"))} className="btn-ghost text-xs h-8 px-2.5 rounded-xl inline-flex items-center gap-1.5 tooltip-trigger" data-tooltip="全局命令面板（Cmd/Ctrl+K）">
+            <button onClick={() => window.dispatchEvent(new Event("nf-open-command-palette"))} className="btn-ghost hidden sm:inline-flex text-xs h-8 px-2.5 rounded-xl items-center gap-1.5 tooltip-trigger" data-tooltip="全局命令面板（Cmd/Ctrl+K）">
               <Icon name="search" size={13} />
               <kbd className="text-[10px] px-1 rounded bg-[var(--nv-surface-2)] text-[var(--nv-text-tertiary)]">⌘K</kbd>
             </button>
