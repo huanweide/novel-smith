@@ -47,12 +47,19 @@ export interface QueryResult<T> {
 export function useQuery<T>(
   key: string,
   fetcher: () => Promise<T>,
-  opts: { enabled?: boolean; staleTime?: number } = {}
+  opts: { enabled?: boolean; staleTime?: number; initialData?: T } = {}
 ): QueryResult<T> {
+  const initialDataRef = useRef(opts.initialData);
+  initialDataRef.current = opts.initialData;
+
+  // 首屏直接用服务端注入的初始数据（SSR 注水），避免客户端二次请求；
+  // 同时让客户端首渲染与服务端 HTML 一致，杜绝 hydration mismatch。
   const [data, setData] = useState<T | undefined>(() =>
-    cache.get(key)?.data as T | undefined
+    (cache.get(key)?.data as T | undefined) ?? (initialDataRef.current as T | undefined)
   );
-  const [loading, setLoading] = useState<boolean>(!cache.has(key));
+  const [loading, setLoading] = useState<boolean>(
+    () => !cache.has(key) && initialDataRef.current === undefined
+  );
   const [error, setError] = useState<unknown>(null);
   const staleTime = opts.staleTime ?? 30_000;
 
@@ -81,13 +88,19 @@ export function useQuery<T>(
 
   useEffect(() => {
     if (opts.enabled === false) return;
+    // 服务端注水：把初始数据写入缓存，使后续 load 命中缓存、不再发请求（仅缓存为空时注入）
+    if (initialDataRef.current !== undefined && !cache.has(key)) {
+      cache.set(key, { data: initialDataRef.current, ts: Date.now() });
+      setData(initialDataRef.current);
+      setLoading(false);
+    }
     if (!listeners.has(key)) listeners.set(key, new Set());
     listeners.get(key)!.add(load);
     load();
     return () => {
       listeners.get(key)?.delete(load);
     };
-  }, [key, load, opts.enabled]);
+  }, [key, load, opts.enabled, initialDataRef]);
 
   return { data, loading, error, refetch: load };
 }

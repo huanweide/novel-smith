@@ -25,13 +25,14 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.110";
+export const LATEST_VERSION = "v3.1.111";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "修复: 首页移动端横向溢出——375px 实测溢出 +202px，顶栏按钮组加收缩 + 横向滚动兜底，归零",
-  "实测: Chrome 真机视口验证——/read 移动优先 0 溢出、首页修复后 0 溢出，有数据证据",
-  "移动端: 顶栏副标题与 ⌘K 快捷键隐藏省空间，Logo/标题加 shrink-0/truncate 防挤压",
+  "首页 SSR：服务端预取项目列表并直出首屏，浏览器端不再二次请求，首屏更快、少一次加载闪烁",
+  "新增服务端取数层 src/lib/projects-service.ts，首页与 /api/projects 共用同一份取数逻辑，避免两端漂移",
+  "注水失败兜底：服务端取数异常时回退到原有客户端 fetch，加载/错误 UI 不变，零回归风险",
+  "轻量状态层 useQuery 新增 initialData 注水支持，配合 SSR 首屏直出、杜绝 hydration mismatch",
 ];
 
 /**
@@ -86,6 +87,34 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.111",
+    date: "2026-09-10",
+    title: "首页 SSR（服务端预取直出首屏）",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "首页由客户端二次 fetch 改为服务端组件预取：page.tsx 改为 async 服务端组件，直接取数并作为 initialData 注入客户端",
+          "新增 src/lib/projects-service.ts 服务端取数层 getProjectsForHome()，首页与 GET /api/projects 共用同一份取数逻辑（updatedAt 归一化 ISO 串）",
+          "首页内容拆为 page.tsx（服务端入口）+ home-dashboard.tsx（客户端组件），首页 ProjectSummary 类型统一从 service 层导入",
+        ],
+      },
+      {
+        label: "修复 / 体验",
+        items: [
+          "首屏不再发 /api/projects 二次请求（FCP 更快、少一次加载闪烁）；服务端取数失败时回退到客户端 fetch，UI 不变，零回归",
+          "轻量状态层 useQuery 新增 initialData 注水：首渲染与服务端 HTML 一致，杜绝 hydration mismatch",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 153 文件 1593 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.110",
     date: "2026-09-10",
