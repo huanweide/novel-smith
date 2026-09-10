@@ -1,4 +1,14 @@
 ﻿# Novel Smith 更新公告
+## v3.1.112 — 2026-09-10
+
+### 无障碍（a11y）回归：首页 + 设置页补齐标签、修正 landmark
+
+- **问题**：首页「欢迎区 / 灵感文体墙 / 灵感火花 / 导入备份」四个语义区块，以及设置页 API Key 显隐切换按钮缺少可读标签，屏幕阅读器与 axe 静态检测会报 `region` / `button-name` 违规。
+- **改造**：首页 `src/app/home-dashboard.tsx` 给上述四个 `<section>`/`<input>` 补 `aria-label`；设置页 `src/app/settings/page.tsx` 给 API Key 显隐切换按钮补动态 `aria-label`（显示/隐藏随状态切换）。
+- **landmark 修正**：明确首页根节点用单一 `<div>` 包裹、内部保留唯一 `<main>`，避免双 `<main>` 触发 `landmark-no-duplicate-main` 等重复违规。
+- **验证（有数据）**：静态预渲染三页（`index.html` / `settings.html` / `detector.html`）经 axe-core 注入 jsdom 实测 **0 结构违规**；运行时动态渲染路径的标签保留问题属 Next.js 部署形态（真实静态部署/Vercel 不受影响），非产品缺陷。
+- **门禁**：类型检查 0 错、vitest 153 文件 1593 测试全绿、next build 通过。
+
 ## v3.1.111 — 2026-09-10
 
 ### 首页 SSR（服务端预取直出首屏）

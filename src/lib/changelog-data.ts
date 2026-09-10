@@ -29,10 +29,10 @@ export const LATEST_VERSION = "v3.1.111";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "首页 SSR：服务端预取项目列表并直出首屏，浏览器端不再二次请求，首屏更快、少一次加载闪烁",
-  "新增服务端取数层 src/lib/projects-service.ts，首页与 /api/projects 共用同一份取数逻辑，避免两端漂移",
-  "注水失败兜底：服务端取数异常时回退到原有客户端 fetch，加载/错误 UI 不变，零回归风险",
-  "轻量状态层 useQuery 新增 initialData 注水支持，配合 SSR 首屏直出、杜绝 hydration mismatch",
+  "无障碍回归：首页「欢迎 / 灵感文体墙 / 灵感火花 / 导入备份」四区补 aria-label，屏幕阅读器与 axe 检测不再报 region / button-name 违规",
+  "设置页 API Key 显隐按钮补动态 aria-label（显示/隐藏随状态切换），键盘与读屏用户能确认按钮作用",
+  "landmark 修正：首页仅保留一个 main，避免双 main 触发重复违规",
+  "静态预渲染三页 axe 实测 0 违规 + tsc 0 错 + vitest 1593 全绿 + next build 通过",
 ];
 
 /**
@@ -87,6 +87,28 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.112",
+    date: "2026-09-10",
+    title: "无障碍（a11y）回归：首页 + 设置页补齐标签、修正 landmark",
+    sections: [
+      {
+        label: "新增 / 修复",
+        items: [
+          "首页 home-dashboard.tsx 给「欢迎区 / 灵感文体墙 / 灵感火花 / 导入备份」四个语义区块补 aria-label，屏幕阅读器可识别",
+          "设置页 settings/page.tsx 给 API Key 显隐切换按钮补动态 aria-label（显示/隐藏随状态切换），修复 button-name 违规",
+          "修正 landmark：首页根节点用单一 div 包裹、内部保留唯一 main，避免双 main 触发重复违规",
+        ],
+      },
+      {
+        label: "验证",
+        items: [
+          "静态预渲染三页（index.html / settings.html / detector.html）经 axe-core 注入 jsdom 实测 0 结构违规",
+          "tsc 0 错 + vitest 153 文件 1593 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.111",
     date: "2026-09-10",
