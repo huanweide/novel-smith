@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.108";
+export const LATEST_VERSION = "v3.1.109";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "阅读: 记住每本书上次读到哪一章，下次打开自动接着读（删除的章自动退回第一章）",
-  "阅读: 新增夜间 / 纸感 / 跟随主题三档护眼主题，整个阅读环境跟着变",
-  "阅读: 键盘 ← → 翻上一章/下一章、Esc 关目录；主题与字号偏好全部本地记忆、不上云",
+  "新增: 项目卫生——一键识别历史测试残留的空壳项目，勾选后移入回收站（软删可恢复）",
+  "安全: 有正文的项目永不列入候选；默认全部不勾选，删除必须你自己确认，零误删风险",
+  "规矩: CONTRIBUTING 新增「E2E-TEMP- 前缀 + try/finally 清理」硬规矩，防止残留再长出来",
 ];
 
 /**
@@ -86,6 +86,36 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.109",
+    date: "2026-09-10",
+    title: "项目卫生：一键清理历史测试残留（实测体检方案 P0-1 / P0-2）",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "新建 src/lib/project-hygiene.ts 纯函数：isTestResidue / idleDays / pickResidueCandidates",
+          "首页「我的作品」区新增「清理测试残留 · N」入口，检测到候选才出现",
+          "弹窗逐条列出候选（项目名 + 理由 + 闲置天数），勾选后移入回收站",
+        ],
+      },
+      {
+        label: "安全",
+        items: [
+          "有正文的项目永不列入候选（nodeCount > 0 直接判否），这是最硬的保命线",
+          "默认全部不勾选，删除必须用户逐条确认；走既有 DELETE 软删只写 deletedAt，可从回收站恢复，零误删风险",
+        ],
+      },
+      {
+        label: "实测依据",
+        items: [
+          "2026-09-10 实测：8 个项目里 7 个零章节、6 个是测试代号，EXPLORE-FIX-TEST 还重名两份",
+          "CONTRIBUTING.md 新增临时脚本硬规矩：临时项目统一 E2E-TEMP- 前缀 + 清理必须写进 try/finally",
+          "tsc 0 错 + vitest 153 文件 1593 测试全绿（新增 10 条）+ next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.108",
     date: "2026-09-10",

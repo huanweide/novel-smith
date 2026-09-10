@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, useMemo, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LATEST_VERSION } from "@/lib/changelog-data";
 import { safeSplit } from "@/lib/utils";
+import { pickResidueCandidates, type ResidueCandidate } from "@/lib/project-hygiene";
 import { useQuery } from "@/hooks/useApi";
 import { GENRE_TEMPLATES } from "@/core/templates/genres";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { useConfirmDelete } from "@/components/workspace/useConfirmDelete";
+import { Modal } from "@/components/ui/Modal";
 import { ImportDialog } from "@/components/workspace/ImportDialog";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
@@ -70,6 +72,50 @@ export default function Dashboard() {
   );
   const projects = projectsData ?? [];
   const loadError = error ? (error instanceof Error ? error.message : "加载项目失败") : null;
+
+  // ── 测试残留清理：只识别，绝不自动删 ──
+  // 删除走既有 DELETE /api/projects/[id]（软删只写 deletedAt），可从回收站恢复，零数据风险。
+  const [hygieneOpen, setHygieneOpen] = useState(false);
+  const [hygieneSel, setHygieneSel] = useState<string[]>([]);
+  const [hygieneBusy, setHygieneBusy] = useState(false);
+
+  const residueList = useMemo<ResidueCandidate[]>(
+    () =>
+      pickResidueCandidates(
+        projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          nodeCount: p._count?.storyNodes ?? 0,
+          updatedAt: p.updatedAt,
+        })),
+      ),
+    [projects],
+  );
+
+  const toggleResidue = (id: string) =>
+    setHygieneSel((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const purgeResidues = async () => {
+    if (!hygieneSel.length) return;
+    setHygieneBusy(true);
+    let ok = 0;
+    let fail = 0;
+    for (const id of hygieneSel) {
+      try {
+        const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+        if (res.ok) ok += 1;
+        else fail += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    setHygieneBusy(false);
+    setHygieneSel([]);
+    setHygieneOpen(false);
+    await loadProjects();
+    if (fail === 0) toastSuccess(`已移入回收站 ${ok} 个测试残留项目（需要时可从回收站恢复）`);
+    else toastError(`成功 ${ok} 个、失败 ${fail} 个，请稍后再试`);
+  };
 
   const router = useRouter();
   const staggerRef = useStaggerOnView(!loading && projects.length > 0);
@@ -279,7 +325,19 @@ export default function Dashboard() {
                 <span className="w-1 h-4 rounded-full bg-primary/70" />
                 <h2 className="text-sm font-semibold tracking-[0.18em] text-[var(--nv-text-secondary)]">我的作品</h2>
               </div>
-              <span className="text-[11px] text-[var(--nv-text-muted)]">{projects.length} 部</span>
+              <div className="flex items-center gap-3">
+                {residueList.length > 0 && (
+                  <button
+                    onClick={() => { setHygieneSel([]); setHygieneOpen(true); }}
+                    className="text-[11px] px-2.5 py-1 rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] hover:border-[var(--nv-border-3)] inline-flex items-center gap-1 transition-colors"
+                    title="识别出疑似历史测试残留的空壳项目，移入回收站（可恢复）"
+                  >
+                    <Icon name="trash" size={11} />
+                    清理测试残留 · {residueList.length}
+                  </button>
+                )}
+                <span className="text-[11px] text-[var(--nv-text-muted)]">{projects.length} 部</span>
+              </div>
             </div>
             <div ref={staggerRef} className="home-stagger nf-bookshelf grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <div data-stagger-item data-stagger-index={0} className="home-stagger-item">
@@ -294,6 +352,50 @@ export default function Dashboard() {
           </>
         )}
       </main>
+
+      {/* 清理测试残留弹窗：默认全部不勾选，删也是软删进回收站，可恢复 */}
+      <Modal open={hygieneOpen} onClose={() => setHygieneOpen(false)} title="清理测试残留" icon="trash" size="md">
+        <div className="text-xs text-[var(--nv-text-secondary)] leading-relaxed mb-3">
+          检测到 <strong className="text-[var(--nv-text-primary)]">{residueList.length}</strong> 个疑似历史测试残留的空壳项目（零章节且名称像测试代号）。
+          勾选后点击「移入回收站」——<strong className="text-[var(--nv-text-primary)]">不会物理删除</strong>，随时可从回收站恢复。有正文的项目永远不会被列进来。
+        </div>
+        <div className="max-h-[46vh] overflow-y-auto border border-[var(--nv-border-2)] rounded-lg mb-3">
+          {residueList.map((r) => (
+            <label
+              key={r.id}
+              className="flex items-start gap-2.5 px-3 py-2.5 border-b border-[var(--nv-border-2)]/60 last:border-b-0 cursor-pointer hover:bg-[var(--nv-surface-2)]"
+            >
+              <input
+                type="checkbox"
+                checked={hygieneSel.includes(r.id)}
+                onChange={() => toggleResidue(r.id)}
+                className="mt-0.5 shrink-0"
+                aria-label={`选择 ${r.name}`}
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-[var(--nv-text-primary)] truncate">{r.name}</span>
+                <span className="block text-[10px] text-[var(--nv-text-muted)]">{r.reason}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setHygieneOpen(false)}
+            className="btn-ghost text-xs px-3 py-1.5 rounded-lg"
+            disabled={hygieneBusy}
+          >
+            取消
+          </button>
+          <button
+            onClick={purgeResidues}
+            disabled={hygieneBusy || hygieneSel.length === 0}
+            className="text-xs px-3 py-1.5 rounded-lg bg-[var(--nv-primary)] text-white disabled:opacity-40"
+          >
+            {hygieneBusy ? "处理中…" : `移入回收站${hygieneSel.length ? `（${hygieneSel.length}）` : ""}`}
+          </button>
+        </div>
+      </Modal>
 
       {/* 导入 .nfproject 备份包弹窗 */}
       {importFile && (
