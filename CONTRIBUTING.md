@@ -87,6 +87,40 @@ node scripts/bump-version.js --title "标题" --items "修复:改了A,改了B" -
 
 ---
 
+## 三之二、写验证 / E2E 脚本的规矩（2026-09-10 实测教训）
+
+> 背景（有数据）：2026-09-10 实测本机 **8 个项目里有 7 个是零章节空壳**，其中 6 个名字是
+> `P2003-DEFENSE-V350` / `FT-VERIFY-V350` / `FREETALK-TEST` / `EXPLORE-FIX-TEST`（同一名字还留了两份，
+> 22 秒内被创建两次）——都是历史「即写即弃」的验证脚本留下的。
+> 成因：**临时项目只在脚本成功路径的最后一行才删**，一旦中断、超时或脚本被丢弃，项目就永久留在库里。
+
+**两条硬规矩：**
+
+1. **临时项目统一用 `E2E-TEMP-` 前缀命名**
+   ```js
+   const res = await fetch("/api/projects", {
+     method: "POST",
+     body: JSON.stringify({ name: `E2E-TEMP-${Date.now()}` }),
+   });
+   ```
+   这样首页「清理测试残留」能自动识别它们，也能肉眼一眼分清哪些是垃圾。
+
+2. **清理必须写进 `try/finally`，不允许只在成功路径删**
+   ```js
+   let id = null;
+   try {
+     id = await createTempProject();
+     await runAssertions(id);        // 这里抛错也要能走到 finally
+   } finally {
+     if (id) await fetch(`/api/projects/${id}`, { method: "DELETE" }).catch(() => {});
+   }
+   ```
+
+**补充约定**
+- 清理用 `DELETE /api/projects/[id]` 是**软删**（只写 `deletedAt`），会进回收站、可恢复，放心调。
+- 脚本跑完请不要留下带着业务名字的项目（比如「测试小说」），一律 `E2E-TEMP-*`。
+- 已经在库里的老残留：不要手改数据库，用首页「清理测试残留」勾选 → 移入回收站（同样可恢复）。
+
 ## 四、怎么提一个好 Issue
 
 用仓库的 Issue 模板（Bug 报告 / 功能请求），并附上：
