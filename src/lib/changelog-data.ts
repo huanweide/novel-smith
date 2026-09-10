@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.107";
+export const LATEST_VERSION = "v3.1.108";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "新增: 移动优先阅读模式 /read/[项目]——目录抽屉 + 沉浸正文 + 字号调节 + 阅读进度",
-  "体验: 首页项目卡新增「阅读」入口，手机上也能舒服地读自己的小说",
-  "复用: 既有 /chapters 清单与 /story/nodes/[id] 正文接口 + MarkdownViewer，零数据层改动",
+  "阅读: 记住每本书上次读到哪一章，下次打开自动接着读（删除的章自动退回第一章）",
+  "阅读: 新增夜间 / 纸感 / 跟随主题三档护眼主题，整个阅读环境跟着变",
+  "阅读: 键盘 ← → 翻上一章/下一章、Esc 关目录；主题与字号偏好全部本地记忆、不上云",
 ];
 
 /**
@@ -86,6 +86,34 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.108",
+    date: "2026-09-10",
+    title: "P3-11 阅读器增强：记住读到哪 + 护眼主题 + 键盘翻页",
+    sections: [
+      {
+        label: "阅读",
+        items: [
+          "记住每本书上次读到哪一章，下次打开自动接着读（该章已删除则自动退回第一章）",
+          "新增夜间 / 纸感 / 跟随主题三档护眼阅读主题，整个阅读环境（顶栏/目录/正文/底栏）跟着变",
+        ],
+      },
+      {
+        label: "体验",
+        items: [
+          "键盘 ← → 翻上一章/下一章、Esc 关闭目录抽屉",
+          "主题与字号偏好全部 localStorage 本地记忆，符合数据不出本机",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "reader-utils 扩展 pickInitialChapterId / cycleTheme 纯函数 + 6 条单测",
+          "tsc 0 错 + vitest 152 文件 1583 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.107",
     date: "2026-09-09",
