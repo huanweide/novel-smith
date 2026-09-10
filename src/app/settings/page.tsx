@@ -337,6 +337,7 @@ export default function SettingsPage() {
               />
               <button
                 onClick={() => setShowKey(!showKey)}
+                aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--nv-text-muted)] hover:text-[var(--nv-text-tertiary)] transition-colors"
               >
                 <Icon name={showKey ? "eyeOff" : "eye"} size={15} />

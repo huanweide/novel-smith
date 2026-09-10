@@ -221,13 +221,13 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <button onClick={() => importBackupRef.current?.click()} className="btn-ghost hidden md:inline-flex text-xs h-8 w-8 rounded-xl items-center justify-center tooltip-trigger" data-tooltip="从 .nfproject 备份包导入" aria-label="导入备份">
               <Icon name="package" size={13} />
             </button>
-            <input ref={importBackupRef} type="file" accept=".nfproject,application/json" className="hidden" onChange={handleImportBackup} />
+            <input ref={importBackupRef} type="file" accept=".nfproject,application/json" className="hidden" aria-label="从 .nfproject 备份包导入" onChange={handleImportBackup} />
           </div>
         </div>
       </header>
 
       {/* Hero 欢迎区 */}
-      <section className="relative z-10 overflow-hidden border-b border-[var(--nv-border-2)] bg-gradient-to-b from-[var(--nv-surface-1)] to-transparent">
+      <section aria-label="欢迎" className="relative z-10 overflow-hidden border-b border-[var(--nv-border-2)] bg-gradient-to-b from-[var(--nv-surface-1)] to-transparent">
         <div className="relative max-w-7xl mx-auto px-6 py-14 md:py-20">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
@@ -431,7 +431,7 @@ const GENRE_LUCIDE: Record<string, IconName> = {
 function GenreWall({ onPick, loadingId }: { onPick: (genre: string) => void; loadingId: string | null }) {
   const featured = GENRE_TEMPLATES;
   return (
-    <section className="relative z-10 max-w-7xl mx-auto px-6 py-14">
+      <section aria-label="灵感文体墙" className="relative z-10 max-w-7xl mx-auto px-6 py-14">
       <div className="mb-7 max-w-2xl relative">
         <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[11px] text-[var(--nv-text-tertiary)]">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--nv-primary)] glow-dot" /> 灵感文体墙 · Genre Wall
@@ -534,7 +534,7 @@ function InspirationSpark({ onStart }: { onStart: (genreId: string, text: string
   const spine = genreColor([genre.name]);
 
   return (
-    <section className="relative z-10 max-w-7xl mx-auto px-6 py-14">
+    <section aria-label="灵感火花" className="relative z-10 max-w-7xl mx-auto px-6 py-14">
       <div className="mb-7 max-w-2xl relative">
         <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[11px] text-[var(--nv-text-tertiary)]">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--nv-accent)] glow-dot" /> 灵感火花 · Inspiration Spark
