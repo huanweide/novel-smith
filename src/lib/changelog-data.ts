@@ -25,13 +25,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.109";
+export const LATEST_VERSION = "v3.1.110";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "新增: 项目卫生——一键识别历史测试残留的空壳项目，勾选后移入回收站（软删可恢复）",
-  "安全: 有正文的项目永不列入候选；默认全部不勾选，删除必须你自己确认，零误删风险",
-  "规矩: CONTRIBUTING 新增「E2E-TEMP- 前缀 + try/finally 清理」硬规矩，防止残留再长出来",
+  "修复: 首页移动端横向溢出——375px 实测溢出 +202px，顶栏按钮组加收缩 + 横向滚动兜底，归零",
+  "实测: Chrome 真机视口验证——/read 移动优先 0 溢出、首页修复后 0 溢出，有数据证据",
+  "移动端: 顶栏副标题与 ⌘K 快捷键隐藏省空间，Logo/标题加 shrink-0/truncate 防挤压",
 ];
 
 /**
@@ -86,6 +86,36 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.110",
+    date: "2026-09-10",
+    title: "首页移动端横向溢出修复（Chrome 真机视口实测）",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "首页顶栏按钮组在 375px 视口溢出 +202px（实测 scrollWidth 577 vs innerWidth 375），罪魁是含「开始创作」的按钮组固定 483px 不收缩",
+          "按钮组加 min-w-0 + overflow-x-auto + 隐藏滚动条：放不下时组内横向滚动，绝不撑破页面",
+          "顶栏内边距 px-6 → px-4 sm:px-6；副标题移动端 hidden sm:block；⌘K 快捷键移动端隐藏",
+          "Logo 加 shrink-0、标题加 truncate，防挤压变形",
+        ],
+      },
+      {
+        label: "实测依据",
+        items: [
+          "用本机 Chrome CDP（--remote-debugging-port=9222）精确视口实测，不再靠响应式类名猜",
+          "/read/<id> @375px overflow=0 —— 移动优先主张成立；首页修复后 overflow=-14（≤0）",
+          "修复前首页 @375px overflow=+202 是真实 bug，截图 tmp/home-m375.png 留档",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 153 文件 1593 测试全绿 + next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.109",
     date: "2026-09-10",
