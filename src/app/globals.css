@@ -1832,3 +1832,31 @@ html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.
 .reader-scope h2 { font-size: calc(var(--reader-fs, 18px) * 1.3) !important; }
 .reader-scope h3 { font-size: calc(var(--reader-fs, 18px) * 1.15) !important; }
 .reader-scope pre, .reader-scope code { font-size: calc(var(--reader-fs, 18px) * 0.85) !important; }
+
+/* 阅读主题：在 /read 根容器内局部改写「虚空玻璃」色板变量。
+   CSS 自定义属性会向下级联，所以整个阅读环境（顶栏/目录/正文/底栏）
+   都会跟着进入夜间 / 纸感，无需逐组件改色。default 不覆盖，跟随全局主题。 */
+.reader-theme-night {
+  --nv-void: #101014;
+  --nv-surface: #16161c;
+  --nv-surface-2: #1d1d25;
+  --nv-surface-3: #26262f;
+  --nv-text-primary: #e8e8ef;
+  --nv-text-secondary: #cfcfd8;
+  --nv-text-tertiary: #a8a8b4;
+  --nv-text-muted: #8b8b98;
+  --nv-border-2: #2a2a35;
+  --nv-border-3: #35353f;
+}
+.reader-theme-sepia {
+  --nv-void: #f6efdd;
+  --nv-surface: #fbf5e6;
+  --nv-surface-2: #f1e9d4;
+  --nv-surface-3: #e8dfc8;
+  --nv-text-primary: #3a3128;
+  --nv-text-secondary: #4a3f33;
+  --nv-text-tertiary: #645646;
+  --nv-text-muted: #7d6c59;
+  --nv-border-2: #ded2b8;
+  --nv-border-3: #cfc2a6;
+}
