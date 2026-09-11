@@ -93,7 +93,7 @@ const REASONING_MIN_MAX_TOKENS = 2500;
  * - 否则回退到既有 requested/fallback（= config.maxTokensPerRequest）。
  * - 推理模型最低预算保护（N1）仍优先于上述结果。
  */
-function resolveMaxTokens(
+export function resolveMaxTokens(
   model: string,
   requested: number | undefined,
   fallback: number,
@@ -122,15 +122,17 @@ const DEFAULT_RETRIES = 3;
 const FAIL_ROLE_PREFIX = "fail:";
 
 /** 指数退避延迟（含 ±20% 抖动），封顶 8s */
-function backoffDelay(attempt: number, baseMs = 600, maxDelayMs = 8000): number {
+export function backoffDelay(attempt: number, baseMs = 600, maxDelayMs = 8000): number {
   const raw = baseMs * Math.pow(2, attempt - 1);
   const capped = Math.min(maxDelayMs, raw);
   const jitter = capped * 0.2 * (Math.random() * 2 - 1);
-  return Math.max(0, Math.round(capped + jitter));
+  // 抖动之后要再封一次顶：抖动加在封顶后面的话，标称「封顶 8s」实际能飙到 9.6s，
+  // 重试次数多的时候这点超出会累积成明显的等待。
+  return Math.min(maxDelayMs, Math.max(0, Math.round(capped + jitter)));
 }
 
 /** 解析供应商 429 的 Retry-After 头（支持「秒数」或「HTTP-date」），转毫秒；封顶 60s 防恶意超大值；非法返回 null */
-function parseRetryAfter(headers: Headers): number | null {
+export function parseRetryAfter(headers: Headers): number | null {
   const raw = headers.get("retry-after");
   if (!raw) return null;
   const secs = Number(raw);
@@ -148,21 +150,40 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** 是否可重试：网络层错误（无状态码）/429 限流/5xx 服务端异常可重试；4xx 鉴权与请求错误不可重试 */
-function isRetryable(status: number | null): boolean {
+export function isRetryable(status: number | null): boolean {
   if (status === null) return true;
   if (status === 429) return true;
   if (status >= 500) return true;
   return false;
 }
 
-interface ChatTarget {
+export interface ChatTarget {
   model: string;
   baseURL: string;
   apiKey: string;
 }
 
+/**
+ * 给「重试也不会变好」的错误打个标记（4xx：鉴权/参数/请求本身有问题）。
+ *
+ * 为什么需要这个标记：上层（典型是 completeText 的 JSON 模式降级）必须能区分两种失败——
+ *   - 供应商不认 response_format（4xx）：去掉这个参数再试一次是有意义的；
+ *   - 限流 / 服务端抽风（429、5xx）：再来一轮只会**让请求数翻倍**，
+ *     本来就被限流，加倍请求等于雪上加霜。
+ * 没有这个标记，上层只能对所有错误一视同仁地重试。
+ */
+function markFatal(error: Error): Error {
+  (error as Error & { llmFatal?: boolean }).llmFatal = true;
+  return error;
+}
+
+/** 判断从 chat / chatStream 抛出的错误是否属于「重试也不会好」的那类 */
+export function isFatalLLMError(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { llmFatal?: boolean }).llmFatal === true;
+}
+
 /** 构建「主模型 → 备用模型」调用链 */
-function buildChain(config: LLMConfig, primaryModel: string): ChatTarget[] {
+export function buildChain(config: LLMConfig, primaryModel: string): ChatTarget[] {
   const primary: ChatTarget = {
     model: primaryModel,
     baseURL: config.baseURL.replace(/\/+$/, ""),
@@ -479,7 +500,7 @@ export function createLLMClient(config: LLMConfig) {
             isFallback: target !== chain[0],
           });
           // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
-          if (res.fatal) throw res.error;
+          if (res.fatal) throw markFatal(res.error);
           lastError = res.error;
           if (attempt < DEFAULT_RETRIES) await sleep(res.retryAfterMs ?? backoffDelay(attempt));
         }
@@ -535,7 +556,7 @@ export function createLLMClient(config: LLMConfig) {
             isFallback: target !== chain[0],
           });
           // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
-          if (est.fatal) throw est.error;
+          if (est.fatal) throw markFatal(est.error);
           lastError = est.error;
           if (attempt < DEFAULT_RETRIES) await sleep(est.retryAfterMs ?? backoffDelay(attempt));
         }
@@ -664,9 +685,13 @@ export async function completeText(
     const res = await client.chat({ ...baseReq, ...(opts?.json ? { json: true } : {}) });
     return res.content;
   } catch (e) {
-    // JSON-mode 优雅降级：若供应商不支持 response_format（通常 4xx），去掉 json 重试一次，
-    // 避免 JSON-mode 导致"要求纯 JSON 的场景"（选角 / 去重分组）整体失败（#315 稳健性）。
-    if (opts?.json) {
+    // JSON-mode 优雅降级：仅当供应商**不认 response_format**（4xx，属"请求本身有问题"）
+    // 才去掉 json 再试一次——换个参数确实可能就成了。
+    //
+    // 这里刻意**不对** 429 / 5xx 降级：那类失败 chat() 内部已经重试过 3 次，
+    // 再补一轮等于把请求数翻倍，而在限流场景下加倍请求只会让情况更糟。
+    // （此前是不分青红皂白一律降级，与注释里写的"通常 4xx"不符。）
+    if (opts?.json && isFatalLLMError(e)) {
       const res2 = await client.chat(baseReq);
       return res2.content;
     }
