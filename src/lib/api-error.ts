@@ -119,6 +119,32 @@ export function classifyError(e: unknown): ApiErrorInfo {
     };
   }
 
+  // 3.6) 请求体不是合法 JSON —— 客户端发来的数据有问题，不是服务端故障
+  //
+  // 全站 137 个路由里有 71 个直接 `await request.json()`。客户端发畸形 JSON 时
+  // 它抛 SyntaxError，一路落到下面的默认分支，变成
+  // 「服务器内部错误，请查看日志」+ 500 ——把**客户端的锅甩给了服务器**：
+  // 用户看到 500 会以为服务挂了、还得去翻日志，而真实原因只是请求格式写错了。
+  //
+  // 权衡：服务端自己 JSON.parse 内部数据失败时同样抛 SyntaxError，理论上会被误判成 400。
+  // 但那类情况极罕见，且即使误判也不会泄露内部信息（文案是固定的），
+  // 相较之下「71 个路由把客户端错误报成 500」是每天都可能发生的真实问题。
+  // 更精确的做法是在路由层用 safeJson（语义明确、还能顺带校验字段），那一层仍然推荐；
+  // 这里只是兜底，让没改到的路由也不至于误导用户。
+  if (
+    err instanceof SyntaxError ||
+    /Unexpected token|Unexpected end of JSON|is not valid JSON|Failed to parse body|JSON\.parse/i.test(
+      err.message,
+    )
+  ) {
+    return {
+      status: 400,
+      code: "BAD_REQUEST",
+      error: "请求体不是合法 JSON",
+      hint: "请检查发送的数据格式：JSON 的键名与字符串都要用双引号，末尾不能有多余的逗号。",
+    };
+  }
+
   // 4) 默认：泛化文案（L2-003 修复）
   // 不再把原始 err.message 透传给客户端，避免泄露内部路径/SQL 片段/实现细节；
   // 明细仅留存服务端日志（保留堆栈）供排查。

@@ -124,6 +124,52 @@ describe("classifyError - 默认分支不泄露内部错误 (L2-003 修复)", ()
   });
 });
 
+describe("classifyError - 请求体不是合法 JSON 要报 400 而不是 500", () => {
+  // 背景：全站 137 个路由里有 71 个直接 await request.json()。
+  // 客户端发畸形 JSON 时抛 SyntaxError，此前会落到默认分支变成 500
+  // 「服务器内部错误，请查看日志」——把客户端的锅甩给服务器，用户还得去翻日志。
+
+  it("Node/undici 的 JSON 解析失败 → 400 BAD_REQUEST", () => {
+    const r = classifyError(new SyntaxError("Unexpected token 'b', \"{bad json\" is not valid JSON"));
+    expect(r).toMatchObject({ status: 400, code: "BAD_REQUEST", error: "请求体不是合法 JSON" });
+  });
+
+  it("空请求体（Unexpected end of JSON input）→ 400", () => {
+    const r = classifyError(new SyntaxError("Unexpected end of JSON input"));
+    expect(r.status).toBe(400);
+    expect(r.code).toBe("BAD_REQUEST");
+  });
+
+  it("Next.js 的 Failed to parse body 措辞也能识别", () => {
+    const r = classifyError(new Error("Failed to parse body as JSON"));
+    expect(r.status).toBe(400);
+  });
+
+  it("提示里要告诉用户怎么改，而不是让他去看日志", () => {
+    const r = classifyError(new SyntaxError("Unexpected token } in JSON at position 12"));
+    expect(r.hint).toContain("双引号");
+    expect(r.hint).not.toContain("查看服务端日志");
+  });
+
+  it("不把原始请求体片段回给客户端（防信息泄露）", () => {
+    const secret = "USER_SECRET_IN_BODY_4242";
+    const r = classifyError(new SyntaxError(`Unexpected token ${secret}`));
+    expect(JSON.stringify(r)).not.toContain(secret);
+  });
+
+  it("配置类中文错误不会被这条规则抢走（仍是 400 CONFIG，回到设置页而非改 JSON）", () => {
+    const r = classifyError(new Error("LLM API Key 未配置——请在设置页面填入 Key"));
+    expect(r.code).toBe("CONFIG");
+    expect(r.error).toContain("未配置");
+  });
+
+  it("数据库坏 JSON 之外的普通异常仍走 500，不被误伤", () => {
+    const r = classifyError(new Error("something totally unrelated"));
+    expect(r.status).toBe(500);
+    expect(r.code).toBe("INTERNAL");
+  });
+});
+
 describe("jsonError - 标准化响应", () => {
   it("返回 NextResponse 且 status 与 body 一致、不泄露内部信息", async () => {
     const secret = "LEAK_BODY_TEST_9988";
