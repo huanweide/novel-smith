@@ -1,5 +1,16 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.121 — 2026-09-11
+
+### 密钥脱敏统一：settings 路由复用共享 maskKey，消除与 llm-config-mask.ts 的重复实现
+
+- **问题（真实隐患）**：v3.1.120 新建 `src/lib/llm-config-mask.ts` 作为统一脱敏工具，但 `src/app/api/settings/route.ts` 仍保留一份本地 `maskKey` 拷贝（与共享版逐字重复）。下次有人只改共享版、漏改本地版，就会引入脱敏规则不一致的隐性 bug。
+- **修法**：删除 `settings/route.ts` 的本地 `maskKey`，改为 `import { maskKey } from "@/lib/llm-config-mask"` 复用共享版；同时将 `maskKey` 签名从 `string` 放宽为 `string | null`，使 `settings` 的 `llmApiKey`（可能为 `null`）与项目的 `apiKey` 走同一脱敏入口，彻底统一密钥脱敏惯例。
+- **回归测试**：新增 `src/app/api/settings/route.get.test.ts`（2 例）——GET 返回 `llmApiKey` 必须打码只留末 4 位、`hasKey` 判据正确、明文不出现；`llmApiKey` 为 `null` 时返回空串且 `hasKey=false`。
+
+### 门禁
+
+- 三道门禁：`tsc` 0 错 · `vitest` 164 文件 1794 测试全绿（新增 2）· `next build` 通过。
 ## v3.1.120 — 2026-09-11
 
 ### GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey
