@@ -27,6 +27,28 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.120",
+    date: "2026-09-11",
+    title: "GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "GET /api/projects（列表）与 GET /api/projects/[id]（详情）此前把项目的 llmConfig（Json 列，含 apiKey 明文）整个返回。本地单机无虞；但公开部署（Vercel，VERCEL 存在即放行 API）会把作者项目级密钥明文发给所有访客——是真泄露",
+          "新增 src/lib/llm-config-mask.ts 导出纯函数 maskLlmConfig（复用 settings 路由的 maskKey 逻辑：中间打码只留末 4 位），在 getProjectsForHome（列表与首页 SSR 共用的取数源头）与详情 GET 出口统一脱敏，并附加 hasApiKey 便于前端判断是否已经配置",
+        ],
+      },
+      {
+        label: "工程权衡",
+        items: [
+          "写路径（POST/PATCH）不动：作者在请求体里发送自己的密钥、拿回同源会话的同一密钥，非读取泄露；前端 src/app/workspace 无项目级 key 回填 UI，脱敏不会造成「保存清空真 key」回归",
+          "新增 3 个测试钉死脱敏：llm-config-mask.test.ts（纯函数 6 例）、projects/[id]/route.get.test.ts（详情 3 例）、projects/route.get.test.ts（列表 1 例，mock 底层 findMany 让真实 getProjectsForHome 跑起来）",
+        ],
+      },
+    ],
+  },
+
+  {
     version: "v3.1.119",
     date: "2026-09-11",
     title: "API 路由越权裸写防护：lore-tables / rules PUT 改为字段白名单",

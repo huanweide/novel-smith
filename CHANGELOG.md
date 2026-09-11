@@ -1,4 +1,16 @@
 ﻿# Novel Smith 更新公告
+
+## v3.1.120 — 2026-09-11
+
+### GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey
+
+- **问题（真实隐患）**：`GET /api/projects`（列表）与 `GET /api/projects/[id]`（详情）此前把项目的 `llmConfig`（Json 列，含 `apiKey` 明文）整个返回。本地单机无虞；但公开部署（Vercel，`VERCEL` 存在即放行 API）会把作者项目级密钥明文发给所有访客——是真泄露。
+- **修法**：新增 `src/lib/llm-config-mask.ts` 导出纯函数 `maskLlmConfig`（复用 settings 路由的 `maskKey` 逻辑：中间打码只留末 4 位），在 `getProjectsForHome`（列表与首页 SSR 共用的取数源头）与详情 GET 出口统一脱敏，并附加 `hasApiKey` 便于前端判断是否已经配置；写路径（`POST`/`PATCH`）不动。
+- **回归测试**：新增 3 个测试钉死脱敏——`llm-config-mask.test.ts`（纯函数 6 例）、`projects/[id]/route.get.test.ts`（详情 3 例）、`projects/route.get.test.ts`（列表 1 例，mock 底层 `findMany` 让真实 `getProjectsForHome` 跑起来）。
+
+### 门禁
+
+- 三道门禁：`tsc` 0 错 · `vitest` 163 文件 1792 测试全绿（新增 10）· `next build` 通过。
 ## v3.1.119 — 2026-09-11
 
 ### API 路由越权裸写防护：lore-tables / rules PUT 改为字段白名单

@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.119";
+export const LATEST_VERSION = "v3.1.120";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "API 路由越权裸写防护：堵上两个把整个请求体直接写库的 PUT 路由——projects/[id]/lore-tables/[tableId] 此前 data: { ...body } as any、rules/[id] 此前 data: body，客户端可借请求体把表格或规则挪到别的项目、篡改主键、倒签创建时间",
-  "两条路由改为显式字段白名单写入并去掉 as any 恢复类型检查，与 characters/[id]、rules POST（readValidatedBody）既有约定保持一致；POST 路由本就只取白名单字段且 projectId 来自 URL，不受影响",
-  "新增 route.test.ts 两个：用 mock prisma 断言 PUT 写入的 data 只含白名单字段、且经请求体注入的 projectId / id / createdAt 被彻底剥离",
-  "三道门禁：tsc 0 错 + vitest 160 文件 1782 测试全绿（新增 4）+ next build 通过",
+  "GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey——本地单机无虞，但公开部署（Vercel，VERCEL 存在即放行 API）会把作者项目级密钥明文发给所有访客，是真泄露",
+  "新增 src/lib/llm-config-mask.ts 导出纯函数 maskLlmConfig（复用 settings 的 maskKey 逻辑：中间打码只留末 4 位），在 getProjectsForHome（列表 + 首页 SSR 共用源头）与详情 GET 出口统一脱敏，并附加 hasApiKey 便于前端判断是否已配置",
+  "写路径（POST/PATCH）不动：作者在请求体里发送自己的密钥、拿回同源会话的同一密钥，非读取泄露；前端无项目级 key 回填 UI，脱敏不造成保存清空真 key 回归",
+  "三道门禁：tsc 0 错 + vitest 163 文件 1792 测试全绿（新增 10）+ next build 通过",
 ];

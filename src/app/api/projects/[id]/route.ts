@@ -10,6 +10,7 @@ import {
   optBool,
   optObj,
 } from "@/lib/validators";
+import { maskLlmConfig } from "@/lib/llm-config-mask";
 
 // GET /api/projects/[id]
 export async function GET(
@@ -34,7 +35,12 @@ export async function GET(
     if (!project) {
       return NextResponse.json({ error: "项目不存在" }, { status: 404 });
     }
-    return NextResponse.json(project);
+    // v3.1.120：llmConfig.apiKey 含项目级密钥明文，GET 出口脱敏（写路径 PATCH 不动）。
+    const safeProject = {
+      ...project,
+      llmConfig: maskLlmConfig(project.llmConfig),
+    };
+    return NextResponse.json(safeProject);
   } catch (err) {
     return jsonError(err);
   }
