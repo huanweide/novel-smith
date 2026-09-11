@@ -6,11 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { clearLLMCache } from "@/lib/llm";
 import { jsonError } from "@/lib/api-error";
+import { maskKey } from "@/lib/llm-config-mask";
 
-function maskKey(key: string): string {
-  if (!key || key.length <= 4) return key ? "****" : "";
-  return "*".repeat(key.length - 4) + key.slice(-4);
-}
 
 export async function GET() {
   try {

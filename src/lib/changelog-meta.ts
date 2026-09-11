@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.120";
+export const LATEST_VERSION = "v3.1.121";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey——本地单机无虞，但公开部署（Vercel，VERCEL 存在即放行 API）会把作者项目级密钥明文发给所有访客，是真泄露",
-  "新增 src/lib/llm-config-mask.ts 导出纯函数 maskLlmConfig（复用 settings 的 maskKey 逻辑：中间打码只留末 4 位），在 getProjectsForHome（列表 + 首页 SSR 共用源头）与详情 GET 出口统一脱敏，并附加 hasApiKey 便于前端判断是否已配置",
-  "写路径（POST/PATCH）不动：作者在请求体里发送自己的密钥、拿回同源会话的同一密钥，非读取泄露；前端无项目级 key 回填 UI，脱敏不造成保存清空真 key 回归",
-  "三道门禁：tsc 0 错 + vitest 163 文件 1792 测试全绿（新增 10）+ next build 通过",
+  "密钥脱敏统一：全局设置 GET 与项目列表/详情 GET 现共用同一份 src/lib/llm-config-mask.ts 的 maskKey（settings 路由删除本地重复实现），避免未来改一处漏一处引入脱敏规则不一致",
+  "放宽 maskKey 签名为 string | null，使 settings 的 llmApiKey（可能为 null）与项目的 apiKey 走同一脱敏入口",
+  "新增 settings GET 脱敏回归测试（2 例）：明文打码只留末 4 位、hasKey 判据、null 安全返回空串",
+  "三道门禁：tsc 0 错 + vitest 164 文件 1794 测试全绿（新增 2）+ next build 通过",
 ];
