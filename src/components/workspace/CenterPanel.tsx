@@ -321,6 +321,48 @@ export function CenterPanel({
     }
   };
 
+  // v3.1.114：给「本地过审自检」面板用的写回通道。
+  //
+  // 机器改完的新正文必须走和手动编辑**完全相同**的那条路：同一个 PUT、同一把乐观锁、
+  // 同一套 409 冲突处理。绝不因为「这是机器批量改的」就另开一条捷径——
+  // 否则这一章刚在别处被改过时，会悄悄覆盖掉作者后写的内容。
+  const applyHumanizeFix = async (newContent: string): Promise<{ ok: boolean; msg?: string }> => {
+    if (!selectedNode) return { ok: false, msg: "当前没有选中章节" };
+    try {
+      const body = {
+        content: newContent,
+        wordCount: newContent.length,
+        expectedVersion: editVersionRef.current ?? (selectedNode as { editVersion?: number }).editVersion,
+      };
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.status === 409 && data?.conflict) {
+        if (data.server && onConflict) {
+          onConflict({
+            nodeId: selectedNode.id,
+            mine: body as unknown as Record<string, unknown>,
+            server: data.server,
+          });
+          return { ok: false, msg: "这一章在别处被改过，已弹出冲突面板请你定夺" };
+        }
+        return { ok: false, msg: "保存冲突：这一章在别处被改过，请刷新后重试" };
+      }
+      if (!res.ok) {
+        const _f = describeHttpError(res.status, data);
+        throw new Error(_f.description);
+      }
+      if (data?.editVersion != null) editVersionRef.current = data.editVersion;
+      if (loadProject) await loadProject();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, msg: e instanceof Error ? e.message : "请重试" };
+    }
+  };
+
   // 三层自动保存 · 层2（Server 3s 防抖落库）：进入编辑态后监听正文输入，
   // 500ms 写本地兜底、3s 自动 PUT 落库（不退出编辑态、光标不跳），成功后清本地草稿。
   // 层1（LocalStorage 500ms）由本 effect 内的 lsTimer 触发；层3（手动点完成）见 saveInlineEdit。
@@ -1209,6 +1251,7 @@ export function CenterPanel({
       text={displayContent}
       chapterTitle={selectedNode?.title}
       nodeId={selectedNode?.id}
+      onApplyFixes={applyHumanizeFix}
     />
     </>
   );
