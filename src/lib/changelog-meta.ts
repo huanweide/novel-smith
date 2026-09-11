@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.118";
+export const LATEST_VERSION = "v3.1.119";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "组件层测试加固收口：故事线工作台的要素工具纯函数 stripElements / elementsFor 此前完全没单测——这两个函数按主线或支线类型过滤七要素与三要素，主线切支线时残留字段会污染保存 payload，是隐性 bug 高发点",
-  "新增 src/components/workspace/storyline-workbench/constants.test.ts，7 条用例钉死关键行为：主线条目只留三要素并丢弃七要素残留、支线条目反向丢弃主线残留、null 或 undefined 要素值归一为空串、同名 result 不冲突、空对象返回空对象",
-  "实测发现 P1-1 计划书里「组件层核心业务层缺口明显」的前提已不成立：v3.1.x 多轮迭代中 countByModule / aggregateQuality / storyline-progress / reconcile / stream-error 等核心纯函数早已被覆盖，src/lib 现有 38 个、src/core 现有 80+ 个测试文件，本次只补真正剩余的纯逻辑缺口",
-  "三道门禁：tsc 0 错 + vitest 158 文件 1778 测试全绿（新增 7）+ next build 通过；未对 useGamePage / useStorylineWorkbench 等 React hook 做脆弱的 mock 测试，避免假绿",
+  "API 路由越权裸写防护：堵上两个把整个请求体直接写库的 PUT 路由——projects/[id]/lore-tables/[tableId] 此前 data: { ...body } as any、rules/[id] 此前 data: body，客户端可借请求体把表格或规则挪到别的项目、篡改主键、倒签创建时间",
+  "两条路由改为显式字段白名单写入并去掉 as any 恢复类型检查，与 characters/[id]、rules POST（readValidatedBody）既有约定保持一致；POST 路由本就只取白名单字段且 projectId 来自 URL，不受影响",
+  "新增 route.test.ts 两个：用 mock prisma 断言 PUT 写入的 data 只含白名单字段、且经请求体注入的 projectId / id / createdAt 被彻底剥离",
+  "三道门禁：tsc 0 错 + vitest 160 文件 1782 测试全绿（新增 4）+ next build 通过",
 ];

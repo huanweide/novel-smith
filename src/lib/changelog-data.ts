@@ -27,6 +27,27 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.119",
+    date: "2026-09-11",
+    title: "API 路由越权裸写防护：lore-tables / rules PUT 改为字段白名单",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "堵上越权裸写数据库的真实隐患：projects/[id]/lore-tables/[tableId] 的 PUT 此前 data: { ...body } as any、rules/[id] 的 PUT 此前 data: body，把整个请求体（含 projectId / id / createdAt 等系统字段）直接写库——客户端可借请求体把表格或规则挪到别的项目、篡改主键、倒签创建时间",
+          "两条路由改为显式字段白名单写入并去掉 as any 恢复类型检查，与 characters/[id]、rules POST（readValidatedBody）既有约定保持一致；POST 路由本就只取白名单字段且 projectId 来自 URL，不受影响",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 route.test.ts 两个：用 mock prisma 断言 PUT 写入的 data 只含白名单字段、且经请求体注入的 projectId / id / createdAt 被彻底剥离",
+          "三道门禁：tsc 0 错 + vitest 160 文件 1782 测试全绿（新增 4）+ next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.118",
     date: "2026-09-11",
     title: "组件层测试加固收口：故事线要素纯函数 stripElements / elementsFor 补齐单测",
