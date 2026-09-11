@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.121";
+export const LATEST_VERSION = "v3.1.122";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "密钥脱敏统一：全局设置 GET 与项目列表/详情 GET 现共用同一份 src/lib/llm-config-mask.ts 的 maskKey（settings 路由删除本地重复实现），避免未来改一处漏一处引入脱敏规则不一致",
-  "放宽 maskKey 签名为 string | null，使 settings 的 llmApiKey（可能为 null）与项目的 apiKey 走同一脱敏入口",
-  "新增 settings GET 脱敏回归测试（2 例）：明文打码只留末 4 位、hasKey 判据、null 安全返回空串",
-  "三道门禁：tsc 0 错 + vitest 164 文件 1794 测试全绿（新增 2）+ next build 通过",
+  "接口安全第三轮扫描收口：game/state 的 DELETE（回退）与 GET（对账）错误响应此前直接回显原始 e.message（含 SQL / 表名 / 列名），现已接入统一 classifyError 脱敏层（SEC-LEAK-GAMESTATE）",
+  "两处 catch 改为返回泛化文案（未知错误：服务器内部错误，请查看日志；Prisma 错误：数据库表不存在等可读说明），前端只依赖 data.ok / data.summary、零回归",
+  "新增 game/state 路由脱敏回归测试（2 例）：断言响应不含原始 SQL、error 为泛化文案、status 500 / 503、带 hint",
+  "三道门禁：tsc 0 错 + vitest 165 文件 1796 测试全绿（新增 2）+ next build 通过",
 ];
