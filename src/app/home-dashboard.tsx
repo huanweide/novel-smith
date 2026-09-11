@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, useMemo, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LATEST_VERSION } from "@/lib/changelog-data";
+// 注意：这里必须引轻量版 changelog-meta，不能引 changelog-data——
+// 后者含 539 个历史版本的完整文案（14848 行），整包进首屏产物实测 819KB。
+import { LATEST_VERSION } from "@/lib/changelog-meta";
 import { safeSplit } from "@/lib/utils";
 import { pickResidueCandidates, type ResidueCandidate } from "@/lib/project-hygiene";
 import { useQuery } from "@/hooks/useApi";
