@@ -25,14 +25,14 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.111";
+export const LATEST_VERSION = "v3.1.113";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "无障碍回归：首页「欢迎 / 灵感文体墙 / 灵感火花 / 导入备份」四区补 aria-label，屏幕阅读器与 axe 检测不再报 region / button-name 违规",
-  "设置页 API Key 显隐按钮补动态 aria-label（显示/隐藏随状态切换），键盘与读屏用户能确认按钮作用",
-  "landmark 修正：首页仅保留一个 main，避免双 main 触发重复违规",
-  "静态预渲染三页 axe 实测 0 违规 + tsc 0 错 + vitest 1593 全绿 + next build 通过",
+  "新增对比度永久回归守卫：43 条断言覆盖 6 套主题，今后再改色把对比度改坏会当场变红",
+  "新增可复用模块 src/lib/wcag-contrast.ts：解析 CSS 变量、把半透明 surface 令牌合成到页面底后精算 WCAG 对比度（axe 在 jsdom 里算不了这部分）",
+  "修掉阅读器纸感主题 muted 三面全部不达标（4.40/4.17/3.80 → 5.21/4.94/4.50）、夜间主题浮起面 4.46 → 4.52",
+  "修掉苍青主题 muted 在容器面实测 4.4967 的「假达标」（旧注释 4.8:1 只对页面底成立）；并补正 v3.1.112 版漏同步的 LATEST_VERSION",
 ];
 
 /**
@@ -87,6 +87,35 @@ export const CHANGELOG_USER_BRIEF = [
 
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
+  {
+    version: "v3.1.113",
+    date: "2026-09-11",
+    title: "对比度收口（WCAG AA）+ 永久回归守卫",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "新增可复用模块 src/lib/wcag-contrast.ts（纯函数、零依赖）：解析六套主题的设计令牌，把半透明 surface-* 按 alpha 混合叠加到页面底，再算 WCAG 相对亮度与对比度",
+          "新增永久回归 src/lib/wcag-contrast.test.ts：43 条断言覆盖 6 套主题，固化四条契约——主文字落在任何表面达标 / muted 在基础面达标 / 备了专用变体的主题变体必须在浮起面达标 / 没备变体的主题必须自身全达标，另加「层级不倒挂」校验（primary > secondary > tertiary > muted）",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "阅读器纸感 .reader-theme-sepia：muted #7d6c59 三面全部不达标（void 4.40 / abyss 4.17 / surface-3 3.80）——本主题无兜底变体、前几轮对比度体检漏网 → 加深为 #706150（5.21 / 4.94 / 4.50）",
+          "阅读器夜间 .reader-theme-night：muted #8b8b98 在浮起面仅 4.46（差 0.04 未达 AA）→ 提亮为 #8c8c99（4.52）",
+          "苍青 html.azure：muted #6A807C 在容器面实测 4.4967，旧注释写的「4.8:1 达 AA」只对页面底成立，属四舍五入造成的假达标 → 提亮为 #6a817c（abyss 4.54）并订正注释",
+          "补正 v3.1.112 版漏同步的 LATEST_VERSION（此前并发编辑同一文件导致该行改动被覆盖丢失）",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 154 文件 1636 测试全绿（新增 43）+ next build 通过",
+        ],
+      },
+    ],
+  },
   {
     version: "v3.1.112",
     date: "2026-09-10",

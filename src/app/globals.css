@@ -1483,7 +1483,7 @@ html.azure {
   --nv-text-primary:   #E9F2F0;
   --nv-text-secondary: #9FB6B2;
   --nv-text-tertiary:  #7C918D;
-  --nv-text-muted:     #6A807C;   /* 苍青主题：对比度 4.8:1，达 WCAG AA */
+  --nv-text-muted:     #6a817c;   /* 对比度收口（v3.1.113）：旧注释写的「4.8:1 达 AA」只对页面底 void(#04090C) 成立（实测 4.7559），落到容器面 abyss(#081218) 实为 4.4967 —— 差 0.0033 未达 AA，属四舍五入造成的假达标；提亮至 #6a817c 后 void 4.81 / abyss 4.54 两面均 ≥4.5 达 AA，且仍弱于 tertiary #7C918D 保层级（浮起面仍由下方专用变体兜底） */
   --nv-text-muted-on-surface-3: #708885;  /* Round-4 补修：苍青 surface-3 合成 #131B1E 上，原复用 #6A807C 仅 4.149:1(<4.5 AA)；提亮为 #708885，surface-3 上 4.612:1(≥4.5 AA)，且仍低于同面 tertiary #7C918D(5.229:1)，保持 muted<tertiary 层级 */
 
   --background: #04090C;
@@ -1844,7 +1844,7 @@ html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.
   --nv-text-primary: #e8e8ef;
   --nv-text-secondary: #cfcfd8;
   --nv-text-tertiary: #a8a8b4;
-  --nv-text-muted: #8b8b98;
+  --nv-text-muted: #8c8c99;   /* 对比度收口（v3.1.113）：原 #8b8b98 落在浮起面 surface-3(#26262f) 仅 4.46:1(<4.5 AA)；提亮至 #8c8c99 后 void 5.72 / abyss 5.04 / surface-3 4.52 三面均 ≥4.5 达 AA，且仍浅于 tertiary #a8a8b4 保层级 */
   --nv-border-2: #2a2a35;
   --nv-border-3: #35353f;
 }
@@ -1856,7 +1856,7 @@ html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.
   --nv-text-primary: #3a3128;
   --nv-text-secondary: #4a3f33;
   --nv-text-tertiary: #645646;
-  --nv-text-muted: #7d6c59;
+  --nv-text-muted: #706150;   /* 对比度收口（v3.1.113）：原 #7d6c59 在 void #f6efdd 仅 4.40、abyss #f1e9d4 仅 4.17、surface-3 #e8dfc8 仅 3.80——三面全部 <4.5 AA（本主题无 muted-on-surface-3 兜底变体，前几轮对比度体检漏网）；加深至 #706150 后 void 5.21 / abyss 4.94 / surface-3 4.50 均 ≥4.5 达 AA，且仍浅于 tertiary #645646 保层级 */
   --nv-border-2: #ded2b8;
   --nv-border-3: #cfc2a6;
 }
