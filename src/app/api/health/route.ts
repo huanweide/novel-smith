@@ -18,7 +18,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/llm";
 import { classifyError } from "@/lib/api-error";
-import { LATEST_VERSION } from "@/lib/changelog-data";
+// 引轻量版：健康检查只要一个版本号，不该把几千条历史文案拖进来
+import { LATEST_VERSION } from "@/lib/changelog-meta";
 
 export const dynamic = "force-dynamic";
 

@@ -14,7 +14,7 @@
 
 [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.114** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.115** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 > **About the UI Preview**: the link above only shows **what the interface looks like** — it cannot actually be used. It runs in a read-only cloud environment, while Novel Smith needs to write into a local SQLite file. **Run it on your own machine via "Quick Start" below** — it takes about two minutes.
 
@@ -123,7 +123,8 @@ npm run build
 npm start
 ```
 
-Novel Smith has **no built-in authentication**. If you deploy to the public internet, put it behind a reverse proxy with Basic Auth, Tailscale, or an IP whitelist.
+Since v3.1.115 every `/api/*` route sits behind a built-in access guard: **only requests from localhost or your LAN are accepted** — anything else gets a 403 (`localhost` / `127.` / `10.` / `192.168.` / `172.16~31.` / `169.254.` / `::1` / `*.local` are allowed). It is a safety net against accidental public deployment, not an account system.
+If you really need to serve it publicly, set `ALLOW_PUBLIC=true` **and** still put it behind a reverse proxy with Basic Auth, Tailscale, or an IP whitelist.
 
 ---
 
