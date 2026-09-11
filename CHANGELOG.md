@@ -1,5 +1,16 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.122 — 2026-09-11
+
+### 接口安全第三轮扫描收口：game/state 错误响应接入统一脱敏层
+
+- **问题（真实隐患）**：game/state 的 DELETE（回退）与 GET（对账）两条错误路径此前在 catch 里把原始 `e.message` 直接以 500 抛给前端，绕过了全站统一的 `classifyError` 脱敏层，会把 SQL 片段 / 表名 / 列名等内部细节直接泄露给客户端（SEC-LEAK-GAMESTATE）。
+- **修法**：两处 catch 改为调用 `classifyError(e)`，返回泛化文案（未知错误：服务器内部错误，请查看日志；Prisma 错误：数据库表不存在等可读说明）+ 保留 `ok:false` 形状；前端 `useGamePage` 与 game 页面只依赖 `data.ok` / `data.summary`、从不读取 `error` 字段，本次改动零回归。
+- **回归测试**：新增 `src/app/api/game/state/route.test.ts`（2 例）——DELETE 抛未知内部错误时断言响应不含原始 SQL/列名、`error` 为泛化文案、status 500、带 hint；GET 抛 Prisma `P2021` 时断言收敛为可读 503、不含原始 prisma 调用串。
+
+### 门禁
+
+- 三道门禁：tsc 0 错 · vitest 165 文件 1796 测试全绿（新增 2）· next build 通过。
 ## v3.1.121 — 2026-09-11
 
 ### 密钥脱敏统一：settings 路由复用共享 maskKey，消除与 llm-config-mask.ts 的重复实现

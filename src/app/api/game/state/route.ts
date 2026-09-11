@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionSummary } from "@/core/game/game-engine";
+import { classifyError } from "@/lib/api-error";
 
 // DELETE /api/game/state?sessionId=...&round=N
 // 删除第 N 轮及之后所有 gameState，并回滚 session 的 currentRound/totalWords/plotProgress 到 N-1 状态，
@@ -57,7 +58,11 @@ export async function DELETE(req: NextRequest) {
     };
     return NextResponse.json({ ok: true, rolledBackTo: currentRound, summary });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const info = classifyError(e);
+    return NextResponse.json(
+      { ok: false, error: info.error, code: info.code, hint: info.hint },
+      { status: info.status }
+    );
   }
 }
 
@@ -103,6 +108,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const info = classifyError(e);
+    return NextResponse.json(
+      { ok: false, error: info.error, code: info.code, hint: info.hint },
+      { status: info.status }
+    );
   }
 }
