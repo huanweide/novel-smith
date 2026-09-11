@@ -1,4 +1,15 @@
 ﻿# Novel Smith 更新公告
+## v3.1.118 — 2026-09-11
+
+### 组件层测试加固收口：故事线要素纯函数补齐单测
+
+- **问题（隐性 bug 高发点）**：故事线工作台的要素工具纯函数 `stripElements` / `elementsFor` 此前完全没单测。它们负责按主线/支线类型过滤七要素与三要素——主线切支线时，残留字段会随保存 payload 入库，用户自己很难察觉。
+- **修法**：新增 `src/components/workspace/storyline-workbench/constants.test.ts`，7 条用例钉死关键行为：主线条目只留三要素并丢弃七要素残留、支线条目反向丢弃主线残留；`null`/`undefined` 要素值归一为空串；同名 `result` 字段不冲突；空对象返回空对象。
+- **为什么只补这两个函数**：P1-1 计划书里「组件层核心业务层缺口明显」的前提在 v3.1.x 多轮迭代中已不成立——`countByModule` / `aggregateQuality` / `storyline-progress` / `reconcile` / `stream-error` 等核心纯函数早已被覆盖（`src/lib` 38 个、`src/core` 80+ 个测试文件），本次只补真正剩余的纯逻辑缺口，不对 `useGamePage` / `useStorylineWorkbench` 等 React hook 做脆弱的 mock 测试。
+
+### 门禁
+
+- 三道门禁：`tsc` 0 错 · `vitest` 158 文件 1778 测试全绿（新增 7）· `next build` 通过。
 ## v3.1.117 — 2026-09-11
 
 ### 统一错误层兜底畸形 JSON
