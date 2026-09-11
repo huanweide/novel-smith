@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { maskLlmConfig } from "@/lib/llm-config-mask";
 
 export interface ProjectSummary {
   id: string;
@@ -39,6 +40,8 @@ export async function getProjectsForHome(): Promise<ProjectSummary[]> {
   });
   return projects.map((p) => ({
     ...p,
+    // v3.1.120：llmConfig.apiKey 含项目级密钥明文，列表/SSR 出口统一脱敏。
+    llmConfig: maskLlmConfig(p.llmConfig),
     updatedAt:
       p.updatedAt instanceof Date ? p.updatedAt.toISOString() : String(p.updatedAt),
   })) as ProjectSummary[];

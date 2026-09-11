@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.119 |
+| 包名 / 版本 | `novel-smith` v3.1.120 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.119 API 路由越权裸写防护：lore-tables / rules PUT 改为字段白名单（FIX-MASS-ASSIGNMENT）`（2026-09-11，Latest） |
+| 最新 Release | `v3.1.120 GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey（SEC-MASK-LLMKEY）`（2026-09-11，Latest） |
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -100,6 +100,9 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 ## 五、版本更新记录（最新在上）
 
+### v3.1.120 — 2026-09-11 — GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey（SEC-MASK-LLMKEY）
+
+- 新增 src/lib/llm-config-mask.ts（纯函数 maskLlmConfig，复用 settings 的 maskKey 逻辑：中间打码只留末 4 位），在 getProjectsForHome（列表 + 首页 SSR 共用源头）与详情 GET 出口统一脱敏，并附加 hasApiKey；写路径 POST/PATCH 不动。三道门禁全绿：tsc 0 错 + vitest 163 文件 1792 测试全绿（新增 10）+ next build 通过。
 ### v3.1.119 — 2026-09-11 — API 路由越权裸写防护：lore-tables / rules PUT 改为字段白名单（FIX-MASS-ASSIGNMENT）
 
 - 新增故事线工作台常量单测（`stripElements` / `elementsFor`，7 例），守住主线/支线切换时残留字段污染保存 payload 的隐性 bug；全量 158 文件 1778 测试全绿。
