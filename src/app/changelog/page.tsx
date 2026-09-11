@@ -1,10 +1,39 @@
-"use client";
-
 import Link from "next/link";
-import { VERSIONS, LATEST_VERSION } from "@/lib/changelog-data";
+import { VERSIONS } from "@/lib/changelog-data";
+import { LATEST_VERSION } from "@/lib/changelog-meta";
 import { Icon } from "@/components/ui/icons";
 
-export default function ChangelogPage() {
+/**
+ * 更新面板（服务端分页）
+ *
+ * 为什么要改成分页：
+ *   版本历史已经累积到 539 条，之前是客户端组件一次性全量渲染，
+ *   实测产出的 HTML 高达 **2.4MB**——首屏要下载两兆多，
+ *   而且屏幕阅读器得把整个节点树读一遍，等于把上一轮补好的无障碍成果又毁掉。
+ *
+ *   改成服务端分页之后：
+ *    - 首屏只渲染最近 20 条，HTML 从 2.4MB 降到几十 KB；
+ *    - 539 条历史文案**完全不进客户端 JS 包**（数据只留在服务端）；
+ *    - 想全看的人点「展开全部」即可，代价由主动选择的人承担。
+ */
+
+/** 首屏渲染条数 */
+const FIRST_PAGE = 20;
+/** 每次「加载更早」追加的条数 */
+const NEXT_PAGE = 40;
+
+export default async function ChangelogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ n?: string; all?: string }>;
+}) {
+  const sp = await searchParams;
+  const total = VERSIONS.length;
+  const showAll = sp.all === "1";
+  const parsed = Number(sp.n);
+  const want = Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.trunc(parsed), total) : FIRST_PAGE;
+  const shown = showAll ? VERSIONS : VERSIONS.slice(0, want);
+
   return (
     <div className="min-h-screen bg-[var(--nv-void)] text-[var(--nv-text-secondary)] animate-in fade-in">
       {/* 顶栏 */}
@@ -37,7 +66,7 @@ export default function ChangelogPage() {
         </div>
 
         <div className="space-y-8">
-          {VERSIONS.map((v, idx) => (
+          {shown.map((v, idx) => (
             <div key={v.version} className="relative pl-6 border-l-2 border-[var(--nv-border-2)]">
               {/* 时间线圆点 */}
               <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-[var(--nv-primary)] ring-4 ring-[var(--nv-border-3)] shadow-[0_0_8px_var(--nv-primary)]" />
@@ -82,6 +111,40 @@ export default function ChangelogPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* 分页控制：默认只给最近 20 条，想看全部的人自己点 */}
+        <div className="mt-10 flex flex-col items-center gap-2.5">
+          <p className="text-xs text-[var(--nv-text-muted)]">
+            已显示最近 {shown.length} / {total} 个版本
+          </p>
+          {showAll ? (
+            <Link
+              href="/changelog"
+              className="text-xs px-4 py-2 rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors"
+            >
+              只看最近 {FIRST_PAGE} 个
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              {want < total && (
+                <Link
+                  href={`/changelog?n=${Math.min(want + NEXT_PAGE, total)}`}
+                  className="text-xs px-4 py-2 rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors"
+                >
+                  加载更早 {Math.min(NEXT_PAGE, total - want)} 个版本
+                </Link>
+              )}
+              {want < total && (
+                <Link
+                  href="/changelog?all=1"
+                  className="text-xs px-4 py-2 rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)] transition-colors"
+                >
+                  展开全部 {total} 个（页面较大）
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         <p className="text-xs text-[var(--nv-text-primary)] text-center mt-12">
