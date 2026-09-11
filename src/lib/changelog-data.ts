@@ -27,6 +27,34 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.117",
+    date: "2026-09-11",
+    title: "统一错误层兜底畸形 JSON：71 个裸解析路由不再把客户端错误报成 500",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "src/lib/api-error.ts 的 classifyError 新增 3.6 分支：客户端发畸形 JSON（缺引号 / 多逗号 / 空 body）时，统一归为 400 BAD_REQUEST 并返回教用户怎么改的中文提示，而非落入默认分支报 500 服务器内部错误",
+          "覆盖全站 137 个 API 路由（其中 71 个直接 await request.json()），且对未来新增路由自动生效——不必逐个改造写法各异的裸解析调用",
+          "新增 src/lib/api-error.test.ts 7 条测试钉死该行为：SyntaxError / 空 body / Next.js Failed to parse body 措辞均判 400；hint 含「双引号」且不说去看日志；不泄露原始请求体片段；配置类中文错误仍走 CONFIG、普通异常仍走 500 不被误伤",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "修掉一个真实痛点：此前客户端请求格式写错 -> 用户看到 500 会以为服务挂了、还得翻服务端日志，而真实原因只是自己 JSON 写错了——把客户端的锅甩给了服务器",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 157 文件 1771 测试全绿（新增 7）+ next build 通过",
+          "权衡：批量改 71 个路由风险高且对未来路由不生效，故统一错误层一处兜底；路由层用 safeJson（语义明确、能顺带校验字段）仍推荐",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.116",
     date: "2026-09-11",
     title: "给最烧钱的模块补上 70 条测试，顺手修掉两个静默缺陷",
