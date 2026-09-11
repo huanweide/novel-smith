@@ -27,7 +27,23 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const rule = await prisma.rule.update({ where: { id }, data: body });
+    // 白名单写入：只接受规则自身可编辑字段。
+    // 此前 `data: body` 会把 projectId / id / createdAt 等系统字段一并写库，
+    // 客户端可借请求体把规则挪到别的项目；这里显式收窄（与 POST 的 readValidatedBody 一致），并去掉 `as any`。
+    const rule = await prisma.rule.update({
+      where: { id },
+      data: {
+        name: body.name,
+        content: body.content,
+        category: body.category,
+        enabled: body.enabled,
+        priority: body.priority,
+        scope: body.scope,
+        scopeType: body.scopeType,
+        specificityScore: body.specificityScore,
+        scopeConfig: body.scopeConfig,
+      },
+    });
     return NextResponse.json(rule);
   } catch (err) {
     return jsonError(err);

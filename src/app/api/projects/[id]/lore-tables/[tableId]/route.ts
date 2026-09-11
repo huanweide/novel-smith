@@ -10,7 +10,21 @@ export async function PUT(
   try {
     const { tableId } = await params;
     const body = await request.json();
-    const lt = await prisma.loreTable.update({ where: { id: tableId }, data: { ...body } } as any);
+    // 白名单写入：只接受表自身可编辑字段。
+    // 此前 `data: { ...body } as any` 会把 projectId / id / createdAt 等系统字段一并写库，
+    // 客户端可借请求体把表格挪到别的项目或篡改主键；这里显式收窄并去掉 `as any` 恢复类型检查。
+    const lt = await prisma.loreTable.update({
+      where: { id: tableId },
+      data: {
+        name: body.name,
+        key: body.key,
+        note: body.note,
+        category: body.category,
+        marker: body.marker,
+        columns: body.columns,
+        rows: body.rows,
+      },
+    });
     return NextResponse.json(lt);
   } catch (e) {
     return jsonError(e);
