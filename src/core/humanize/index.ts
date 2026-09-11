@@ -224,3 +224,6 @@ function round2(n: number): number {
 
 export * from "./types";
 export { splitParagraphs, splitSentences, countChars } from "./rules";
+// 「一键套用」执行层：纯函数，调用方（界面）点了才会跑，不会自动改写稿子
+export type { ApplyFixResult } from "./fixes";
+export { applyFixes, countFixable, deletionFix, replacementFix } from "./fixes";

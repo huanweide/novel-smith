@@ -19,9 +19,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { analyzeText } from "@/core/humanize";
+import { analyzeText, applyFixes, countFixable } from "@/core/humanize";
 import { DISCLAIMER } from "@/core/humanize/types";
-import type { HumanizeReport, ParagraphReport, Severity } from "@/core/humanize";
+import type { AiTraceHit, HumanizeReport, ParagraphReport, Severity } from "@/core/humanize";
 
 // ── 等级配色：分数越高越红，跟直觉一致 ──
 const LEVEL_STYLE: Record<
@@ -132,10 +132,58 @@ const MIN_CHARS = 50;
 export function DetectorPanel() {
   const [text, setText] = useState("");
   const [onlySerious, setOnlySerious] = useState(false);
+  /**
+   * 套用历史：机器每次改动之前把原文压栈，作者点「撤销」就能回到上一版。
+   * 敢让机器动稿子的前提就是随时能退回去——不能退的功能没人敢用。
+   */
+  const [undoStack, setUndoStack] = useState<string[]>([]);
+  const [notice, setNotice] = useState("");
 
   const report = useMemo(() => analyzeText(text), [text]);
   const chars = report.stats.chars;
   const ready = chars >= MIN_CHARS;
+
+  /** 这批命中里机器有多少把握的下手机会 */
+  const fixableCount = countFixable(report.hits);
+
+  /** 手动改过字之后旧的撤销点就不作数了，清掉以免回滚时覆盖掉作者的手动编辑 */
+  const changeText = (v: string) => {
+    setUndoStack([]);
+    setNotice("");
+    setText(v);
+  };
+
+  /** 单条套用：只改作者点下的那一处，旁边的内容一个字都不碰 */
+  const applyOne = (hit: AiTraceHit) => {
+    const r = applyFixes(text, [hit]);
+    if (r.applied === 0) return;
+    setUndoStack((s) => [...s, text]);
+    setNotice(`已套用 1 处：${hit.fix?.label ?? "修改"}`);
+    setText(r.text);
+  };
+
+  /** 全部套用：一次把机器有把握的都改掉 */
+  const applyAll = () => {
+    const r = applyFixes(text, report.hits);
+    if (r.applied === 0) return;
+    setUndoStack((s) => [...s, text]);
+    setNotice(
+      r.skipped > 0
+        ? `已套用 ${r.applied} 处${r.skipped} 处因范围重叠跳过，可手动处理`
+        : `已套用 ${r.applied} 处，分数变化见上方。机器拿不准的都不在其中，仍需你自己改写`
+    );
+    setText(r.text);
+  };
+
+  const undo = () => {
+    setUndoStack((s) => {
+      const last = s[s.length - 1];
+      if (last === undefined) return s;
+      setText(last);
+      setNotice("已撤销上一次套用");
+      return s.slice(0, -1);
+    });
+  };
 
   const shownParagraphs = useMemo(() => {
     if (!onlySerious) return report.paragraphs;
@@ -167,7 +215,7 @@ export function DetectorPanel() {
       <section className="surface-elevated rounded-2xl p-4 mb-6">
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => changeText(e.target.value)}
           placeholder="把你写的（或 AI 生成的）段落粘贴到这里……"
           aria-label="待检测文本"
           className="w-full h-44 resize-y rounded-xl bg-transparent text-sm leading-relaxed text-[var(--nv-text-primary)] placeholder:text-[var(--nv-text-muted)] outline-none"
@@ -175,13 +223,13 @@ export function DetectorPanel() {
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <span className="text-xs text-[var(--nv-text-tertiary)]">已输入 {chars} 字</span>
           <button
-            onClick={() => setText(SAMPLE_TEXT)}
+            onClick={() => changeText(SAMPLE_TEXT)}
             className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors"
           >
             载入示例
           </button>
           <button
-            onClick={() => setText("")}
+            onClick={() => changeText("")}
             disabled={!text}
             className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors disabled:opacity-40"
           >
@@ -202,6 +250,55 @@ export function DetectorPanel() {
         </section>
       ) : (
         <section className="space-y-5">
+          {/* ── 一键套用：把机器有把握的改动一次性做掉 ──
+              放在最显眼的位置是因为这才是本页最有价值的一步：
+              看完分数只是知道自己有问题，套用才是真的把稿子变干净。 */}
+          {fixableCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--nv-primary)]/30 bg-[var(--nv-primary-soft)] px-4 py-3">
+              <p className="text-[11px] leading-relaxed text-[var(--nv-text-secondary)] min-w-0 flex-1">
+                其中 <span className="font-semibold text-[var(--nv-primary)]">{fixableCount}</span>{" "}
+                处是机器有把握直接改的（删掉纯套话、破折号换逗号、删多余括号）。
+                <span className="text-[var(--nv-text-tertiary)]">
+                  机器拿不准的结构性问题不在其中，仍然要你自己动笔。
+                </span>
+              </p>
+              <button
+                onClick={applyAll}
+                className="shrink-0 text-xs px-3.5 py-2 rounded-lg border border-[var(--nv-primary)]/50 text-[var(--nv-primary)] bg-[var(--nv-surface-1)] hover:bg-[var(--nv-primary)]/15 transition-colors font-medium"
+              >
+                一键套用 {fixableCount} 处
+              </button>
+            </div>
+          )}
+
+          {/* ── 套用结果 + 撤销 ──
+              必须给撤销：敢让机器动稿子的前提，是随时能一键退回去。 */}
+          {notice && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-2)] px-4 py-2.5">
+              <p className="text-[11px] text-[var(--nv-text-secondary)] flex items-start gap-1.5 min-w-0 flex-1">
+                <span className="mt-1.5 w-1.5 h-1.5 shrink-0 rounded-full bg-[var(--nv-success)]" />
+                <span className="min-w-0">{notice}</span>
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                {undoStack.length > 0 && (
+                  <button
+                    onClick={undo}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors"
+                  >
+                    撤销
+                  </button>
+                )}
+                <button
+                  onClick={() => setNotice("")}
+                  aria-label="关闭提示"
+                  className="text-xs px-2 py-1 rounded-lg text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 总分 */}
           <div className={`rounded-2xl border ${style.border} ${style.bg} p-5 flex items-center gap-5`}>
             <div className="shrink-0">
@@ -281,6 +378,19 @@ export function DetectorPanel() {
                             </span>
                             <span className="text-[var(--nv-text-secondary)]">{h.reason}</span>
                             <span className="text-[var(--nv-text-tertiary)]"> → {h.suggestion}</span>
+                            {/* 只有机器确有把握的命中才给按钮：
+                                需要作者拿主意的结构性改写（留哪一半、重写成什么）不显示，
+                                避免给人「机器替我改了文章」的错觉。 */}
+                            {h.fix && (
+                              <button
+                                onClick={() => applyOne(h)}
+                                aria-label={`套用修改：${h.fix?.label ?? ""}`}
+                                title={`点一下即把这段改成机器建议的样子（${h.fix?.label ?? ""}），可随时撤销`}
+                                className="ml-1.5 px-1.5 py-0.5 rounded border border-[var(--nv-border-1)] text-[10px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-primary)] hover:border-[var(--nv-primary)]/50 hover:bg-[var(--nv-primary-soft)] transition-colors align-middle"
+                              >
+                                {h.fix?.label}
+                              </button>
+                            )}
                           </li>
                         ))}
                       </ul>
