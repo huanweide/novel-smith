@@ -16,6 +16,7 @@
 //  这样既能抓到机器味，又不会把正常写作刷成满屏红。
 
 import type { AiTraceHit, Severity } from "./types";
+import { deletionFix, replacementFix } from "./fixes";
 
 // ─── 文本切分工具 ────────────────────────────────────────────
 
@@ -82,90 +83,117 @@ interface VocabEntry {
   severity: Severity;
   reason: string;
   suggestion: string;
+  /**
+   * 机器能否直接改：
+   *  - 省略 / undefined —— 这条给不出安全改法，界面不显示套用按钮
+   *   （典型：这个词就是句子的主干，删了句子散架，替换成什么又得看作者想写什么）
+   *  - ""（空串）—— 表示「删除」，执行层会自动连带吞掉紧跟的逗号、「地」等尾巴符号
+   *  - 非空字符串 —— 表示「替换成这个」
+   *
+   * 判断标准只有一条：**这个词在句子里是多余装饰，还是承重结构**。
+   * 「值得注意的是」「综上所述」「不由得」属于前者，删掉句子照样站得住；
+   * 「心头一紧」「空气仿佛凝固」属于后者，删掉只剩半截话，机器不敢动手。
+   */
+  machineFix?: string;
 }
 
 /** 强特征词：真人写作极少出现，命中即标出 */
 const STRONG_VOCAB: VocabEntry[] = [
   {
     word: "值得注意的是",
+    machineFix: "",
     severity: "high",
     reason: "典型的说明文过渡腔，小说对话与叙述里几乎没人会这么起句。",
     suggestion: "直接删掉，让事实自己说话，或换成具体的人物动作。",
   },
   {
     word: "不难发现",
+    machineFix: "",
     severity: "high",
     reason: "AI 最爱用的「替读者下结论」句式，真人写作很少主动替读者总结。",
     suggestion: "删掉。读者自己能发现的事，写出来就是废话。",
   },
   {
     word: "综上所述",
+    machineFix: "",
     severity: "high",
     reason: "论文腔，出现在小说正文里非常突兀。",
     suggestion: "整句删掉，或改成人物的判断与抉择。",
   },
   {
     word: "总而言之",
+    machineFix: "",
     severity: "high",
     reason: "同上，属于总结性过渡，不适合叙事文本。",
     suggestion: "删除，用情节推进代替总结。",
   },
   {
     word: "由此可见",
+    machineFix: "",
     severity: "high",
     reason: "议论腔，叙事文里极少使用。",
     suggestion: "删除，直接写结果。",
   },
   {
     word: "简而言之",
+    machineFix: "",
     severity: "medium",
     reason: "总结腔，小说里出现会打断叙事节奏。",
     suggestion: "删除。",
   },
   {
     word: "一言以蔽之",
+    machineFix: "",
     severity: "medium",
     reason: "文言总结腔，叙事文本罕见。",
     suggestion: "删除或改成口语。",
   },
   {
     word: "某种程度上",
+    machineFix: "",
     severity: "high",
     reason: "模糊限定词，AI 为了「说得稳妥」而大量堆砌，真人很少这么绕。",
     suggestion: "删掉，直接下判断；或换成明确的条件。",
   },
   {
     word: "从某种意义上",
+    machineFix: "",
     severity: "high",
     reason: "同上的变体，属于典型的稳妥腔。",
     suggestion: "删除，直接说清楚。",
   },
   {
     word: "在一定程度上",
+    machineFix: "",
     severity: "high",
     reason: "模糊限定词，AI 高频。",
     suggestion: "删除或给出具体程度。",
   },
   {
     word: "不由得",
+    machineFix: "",
     severity: "medium",
     reason: "AI 写心理活动的万能开头，出现频率远高于真人写作。",
     suggestion: "换成具体的身体反应或动作，别用这个词概括。",
   },
   {
     word: "情不自禁",
+    machineFix: "",
     severity: "medium",
     reason: "套路心理描写词，已被大量 AI 文本用滥。",
     suggestion: "改成具体动作或直接写心理内容。",
   },
   {
     word: "下意识",
+    machineFix: "",
     severity: "low",
     reason: "套路心理副词，AI 用得比真人频繁得多。",
     suggestion: "多数情况可直接删，动作本身已经够了。",
   },
   {
     word: "心中一凛",
+    // 不给 machineFix：它本身就是谓语，删掉句子只剩主语（「他心中一凛」→「他」），
+    // 换成什么又完全取决于这个角色当下该怎么反应，机器无从判断。
     severity: "high",
     reason: "网文套路心理词，AI 生成时高频复现。",
     suggestion: "换成这个角色独有的反应方式。",
@@ -178,24 +206,28 @@ const STRONG_VOCAB: VocabEntry[] = [
   },
   {
     word: "心中暗暗",
+    machineFix: "",
     severity: "medium",
     reason: "套路心理描写，AI 高频。",
     suggestion: "删除，直接写想法内容。",
   },
   {
     word: "宛如",
+    machineFix: "像",
     severity: "low",
     reason: "书面比喻词，AI 爱用；真人写小说更常用「像」。",
     suggestion: "改成「像」，或直接删掉比喻。",
   },
   {
     word: "仿佛整个世界",
+    // 不给 machineFix：它带出的是整句的主语，删掉后半句就悬空了。
     severity: "high",
     reason: "AI 经典的夸张模板句。",
     suggestion: "删掉，换成具体的、小尺度的感受。",
   },
   {
     word: "这一刻",
+    machineFix: "",
     severity: "medium",
     reason: "AI 常用的时间强调模板，连续出现尤其明显。",
     suggestion: "删掉，叙事本身已经说明时间。",
@@ -277,15 +309,26 @@ export function detectAiVocab(text: string, offset = 0): AiTraceHit[] {
     for (;;) {
       const i = text.indexOf(v.word, from);
       if (i === -1) break;
+      const start = i;
+      const end = i + v.word.length;
       hits.push({
         ruleId: "ai-vocab",
         ruleName: "AI 高频词",
         severity: v.severity,
         excerpt: excerptAt(text, i, v.word.length),
         start: offset + i,
-        end: offset + i + v.word.length,
+        end: offset + end,
         reason: v.reason,
         suggestion: v.suggestion,
+        // 只有 machineFix 有值的词才给可机改方案。
+        // 删除要走 deletionFix（连带吞掉紧跟的逗号 / 「地」），
+        // 否则「值得注意的是，他来了」会变成「，他来了」，改完比原来还难看。
+        fix:
+          v.machineFix === undefined
+            ? undefined
+            : v.machineFix === ""
+              ? deletionFix(text, start, end, offset)
+              : replacementFix(v.machineFix, `改成「${v.machineFix}」`),
       });
       from = i + v.word.length;
     }
@@ -485,6 +528,10 @@ export function detectParenOveruse(text: string, offset = 0): AiTraceHit[] {
         end: offset + f.at + f.len,
         reason: `全文括号密度约 ${perK.toFixed(1)} 个/千字，超过 3 个/千字，读起来像在不停插话。`,
         suggestion: "把补充说明融进正文，或干脆删掉——读者能推断的就别解释。",
+        // 建议里两个选项（融进正文 / 删掉），只有「删掉」是机器能确定性执行的，
+        // 所以只给删除；想融进正文的那部分留给作者。
+        // 这里不用 deletionFix：整对括号本身就要删干净，吞尾巴符号反而可能吃掉正文标点。
+        fix: { replacement: "", label: "删掉括号" },
       });
     }
   }
@@ -580,6 +627,9 @@ export function detectDashOveruse(text: string, offset = 0): AiTraceHit[] {
     end: offset + at + 2,
     reason: `全文破折号密度 ${perK.toFixed(1)} 个/千字，远高于中文小说常见水平（约 1-3 个/千字）。`,
     suggestion: "多数破折号可以换成逗号、句号，或直接断成两句。",
+    // 换成逗号是最保守的一种处理：语义不断裂，只是把「解释/转折」的语气降下来。
+    // 作者若想断句，自己再改一个句号即可——这一步机器猜不出意图，不替作者决定。
+    fix: replacementFix("，", "换成逗号"),
   }));
 }
 

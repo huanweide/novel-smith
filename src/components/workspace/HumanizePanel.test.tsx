@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { HumanizePanel } from "./HumanizePanel";
 
 /**
@@ -111,5 +111,46 @@ describe("HumanizePanel", () => {
     render(<HumanizePanel open onClose={onClose} text={AI_TEXT} />);
     fireEvent.click(screen.getByText("知道了"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // ── 一键套用（v3.1.114）──
+  // 这三条守的是「创作主权」：没有落库能力时绝不画假按钮，动正文前必须有二次确认。
+
+  it("没给写回通道时，一个套用按钮都不显示（不给画假按钮）", () => {
+    renderPanel(AI_TEXT);
+    expect(screen.queryByText(/套用 \d+ 处到本章/)).toBeNull();
+    expect(screen.queryByText(/^删除$/)).toBeNull();
+  });
+
+  it("给了写回通道才出现套用按钮，点击后把改好的正文交给父组件", async () => {
+    const onApplyFixes = vi.fn().mockResolvedValue({ ok: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      render(<HumanizePanel open onClose={() => {}} text={AI_TEXT} onApplyFixes={onApplyFixes} />);
+      fireEvent.click(screen.getByText(/套用 \d+ 处到本章/));
+      await waitFor(() => expect(onApplyFixes).toHaveBeenCalledTimes(1));
+
+      const handed = onApplyFixes.mock.calls[0][0] as string;
+      // 机器有把握的套话被去掉了
+      expect(handed).not.toContain("值得注意的是");
+      // 但作者的句子主体必须原封不动地留着——机器只做减法，不重写内容
+      expect(handed).toContain("李明");
+      expect(handed).toContain("他缓缓地走在街道上");
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("确认框上点取消，正文一个字都不许改", async () => {
+    const onApplyFixes = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      render(<HumanizePanel open onClose={() => {}} text={AI_TEXT} onApplyFixes={onApplyFixes} />);
+      fireEvent.click(screen.getByText(/套用 \d+ 处到本章/));
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
+      expect(onApplyFixes).not.toHaveBeenCalled();
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 });

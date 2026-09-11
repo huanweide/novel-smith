@@ -10,13 +10,13 @@ import { describeHttpError } from "@/lib/stream-error";
  *  3. 说实话 —— 免责声明永远显示，不许藏进「更多」里。
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "@/store";
 import { toastSuccess, toastError } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/icons";
-import { analyzeText } from "@/core/humanize";
-import type { HumanizeReport, ParagraphReport, Severity } from "@/core/humanize";
+import { analyzeText, applyFixes, countFixable } from "@/core/humanize";
+import type { AiTraceHit, HumanizeReport, ParagraphReport, Severity } from "@/core/humanize";
 
 // ── 等级配色：分数越高越红，跟直觉一致 ──
 const LEVEL_STYLE: Record<
@@ -168,6 +168,7 @@ export function HumanizePanel({
   text,
   chapterTitle,
   nodeId,
+  onApplyFixes,
 }: {
   open: boolean;
   onClose: () => void;
@@ -176,9 +177,30 @@ export function HumanizePanel({
   chapterTitle?: string;
   /** 当前章节节点 id；传入才显示「保存过审分到本章」按钮 */
   nodeId?: string;
+  /**
+   * 写回通道。传入后，界面上才会出现「套用」按钮，改动会落到本章正文；
+   * 不传就是纯只读展示（和以前完全一样），避免在没有落库能力的场合给出假按钮。
+   */
+  onApplyFixes?: (newContent: string) => Promise<{ ok: boolean; msg?: string }>;
 }) {
+  /**
+   * 本地预览版本的正文。
+   * 套用后先把新文本铺在这里，界面立刻重算；等父组件把保存结果同步回来（props.text 变了），
+   * 这个本地版本就作废——见下面的 useEffect。
+   */
+  const [localText, setLocalText] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+
+  // 父组件把保存结果同步回来后，本地预览作废，改用最新的正本
+  useEffect(() => {
+    setLocalText(null);
+  }, [text]);
+
+  // 分析对象：优先用本地预览版，否则用传入正文
+  const workingText = localText ?? text;
+
   // 只在打开时算；text 不变就不重算。规则引擎是同步纯函数，几千字在毫秒级。
-  const report = useMemo(() => (open ? analyzeText(text) : null), [open, text]);
+  const report = useMemo(() => (open ? analyzeText(workingText) : null), [open, workingText]);
   const [onlySerious, setOnlySerious] = useState(false);
   const [savingHumanize, setSavingHumanize] = useState(false);
 
@@ -205,6 +227,39 @@ export function HumanizePanel({
       toastError("保存过审分失败：" + (e instanceof Error ? e.message : String(e)));
     } finally {
       setSavingHumanize(false);
+    }
+  };
+
+  /**
+   * 一键套用。
+   *
+   * 这里刻意保留了二次确认：/detector 页面改的是用户粘贴来的临时文本，
+   * 而这里改的是**已经落库的章节正文**，批量几十处必须让作者再确认一次。
+   * 创作主权这条底线，宁可多一点手续也不能省。
+   */
+  const fixableCount = report ? countFixable(report.hits) : 0;
+
+  const runApply = async (hits: AiTraceHit[]) => {
+    if (!report || !onApplyFixes || applying) return;
+    const r = applyFixes(workingText, hits);
+    if (r.applied === 0) return;
+    const ok = window.confirm(
+      `将对本章正文套用 ${r.applied} 处机器建议的修改` +
+        (r.skipped > 0 ? `（另有 ${r.skipped} 处因范围重叠跳过，需你手动处理）` : "") +
+        "。\n\n改动会直接写入本章，之后可用「版本历史」回滚。要继续吗？"
+    );
+    if (!ok) return;
+    setApplying(true);
+    try {
+      const res = await onApplyFixes(r.text);
+      if (!res.ok) {
+        toastError("套用失败：" + (res.msg ?? "请重试"));
+        return;
+      }
+      setLocalText(r.text);
+      toastSuccess(`已套用 ${r.applied} 处并写入本章正文`);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -236,6 +291,16 @@ export function HumanizePanel({
             全程在本机内存完成，正文不会上传任何服务器
           </span>
           <div className="flex items-center gap-2">
+            {onApplyFixes && fixableCount > 0 && (
+              <button
+                onClick={() => runApply(report?.hits ?? [])}
+                disabled={applying}
+                className="h-8 px-3 text-xs rounded-lg border border-[var(--nv-primary)]/40 text-[var(--nv-primary)] bg-[var(--nv-primary-soft)] hover:bg-[var(--nv-primary)]/15 transition-colors disabled:opacity-40"
+                title={`把 ${fixableCount} 处机器有把握的修改（删套话、破折号换逗号等）写入本章正文；机器拿不准的仍需你自己改`}
+              >
+                {applying ? "套用中…" : `套用 ${fixableCount} 处到本章`}
+              </button>
+            )}
             {nodeId && report && report.stats.chars >= 50 && (
               <button
                 onClick={handleSaveHumanize}
@@ -355,6 +420,18 @@ export function HumanizePanel({
                             <span className="text-[var(--nv-text-secondary)]">{h.reason}</span>
                             <span className="text-[var(--nv-text-tertiary)]"> · 怎么改：</span>
                             <span className="text-[var(--nv-text-secondary)]">{h.suggestion}</span>
+                            {/* 只有机器确有把握的命中才给按钮。
+                                需要作者拿主意的结构性改写不显示，避免「机器替我改了文章」的错觉。 */}
+                            {onApplyFixes && h.fix && (
+                              <button
+                                onClick={() => runApply([h])}
+                                disabled={applying}
+                                aria-label={`套用修改：${h.fix.label}`}
+                                className="ml-1.5 px-1.5 py-0.5 rounded border border-[var(--nv-border-2)] text-[10px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-primary)] hover:border-[var(--nv-primary)]/50 hover:bg-[var(--nv-primary-soft)] transition-colors disabled:opacity-40 align-middle"
+                              >
+                                {h.fix.label}
+                              </button>
+                            )}
                           </div>
                         ))}
                     </div>
