@@ -100,6 +100,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 ## 五、版本更新记录（最新在上）
 
+### v3.1.121 — 2026-09-11 — 密钥脱敏统一：settings 路由复用共享 maskKey（SEC-UNIFY-MASK）
 ### v3.1.120 — 2026-09-11 — GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey（SEC-MASK-LLMKEY）
 
 - 新增 src/lib/llm-config-mask.ts（纯函数 maskLlmConfig，复用 settings 的 maskKey 逻辑：中间打码只留末 4 位），在 getProjectsForHome（列表 + 首页 SSR 共用源头）与详情 GET 出口统一脱敏，并附加 hasApiKey；写路径 POST/PATCH 不动。三道门禁全绿：tsc 0 错 + vitest 163 文件 1792 测试全绿（新增 10）+ next build 通过。

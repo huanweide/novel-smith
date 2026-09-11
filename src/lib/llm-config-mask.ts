@@ -1,9 +1,9 @@
 /**
  * 密钥脱敏工具：GET 接口返回的 llmConfig.apiKey 必须打码，避免公开部署泄露作者密钥。
- * 复用 settings 路由的 maskKey 逻辑（中间打码、只留末 4 位）。
+ * settings 路由与 projects 路由共用此实现（中间打码、只留末 4 位）。
  */
 
-export function maskKey(key: string): string {
+export function maskKey(key: string | null): string {
   if (!key || key.length <= 4) return key ? "****" : "";
   return "*".repeat(key.length - 4) + key.slice(-4);
 }
