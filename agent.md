@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.117 |
+| 包名 / 版本 | `novel-smith` v3.1.118 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.117 统一错误层兜底畸形 JSON（API-ERR-BAD-JSON）`（2026-09-11，Latest） |
+| 最新 Release | `v3.1.118 组件层测试加固收口：故事线要素纯函数补齐单测（TEST-STORYLINE-CONSTANTS）`（2026-09-11，Latest） |
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -100,6 +100,9 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 ## 五、版本更新记录（最新在上）
 
+### v3.1.118 — 2026-09-11 — 组件层测试加固收口：故事线要素纯函数补齐单测（TEST-STORYLINE-CONSTANTS）
+
+- 新增故事线工作台常量单测（`stripElements` / `elementsFor`，7 例），守住主线/支线切换时残留字段污染保存 payload 的隐性 bug；全量 158 文件 1778 测试全绿。
 ### v3.1.117 — 2026-09-11 — 统一错误层兜底畸形 JSON（API-ERR-BAD-JSON）
 
 - **P1-3（计划书）**：`src/lib/api-error.ts` 的 `classifyError` 新增 3.6 分支，客户端发畸形 JSON 时统一报 `400 BAD_REQUEST` 而非 `500 服务器内部错误`，覆盖全站 137 路由；新增 7 条测试钉死。三道门禁全绿。

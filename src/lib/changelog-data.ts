@@ -27,6 +27,33 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.118",
+    date: "2026-09-11",
+    title: "组件层测试加固收口：故事线要素纯函数 stripElements / elementsFor 补齐单测",
+    sections: [
+      {
+        label: "新增",
+        items: [
+          "新增 src/components/workspace/storyline-workbench/constants.test.ts，给故事线工作台的要素工具纯函数补 7 条单测：stripElements 按主线或支线类型过滤七要素与三要素，elementsFor 按类型返回对应集合",
+          "钉死关键回归点：主线切支线时残留字段不再污染保存 payload、null/undefined 要素值归一为空串、同名 result 不冲突、空对象返回空对象",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "堵上一个隐性 bug 高发点：此前这两个函数零测试覆盖，类型切换时残留要素字段可能随保存 payload 入库，用户难自查",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 + vitest 158 文件 1778 测试全绿（新增 7）+ next build 通过",
+          "取舍：未对 useGamePage / useStorylineWorkbench 等 React hook 做 mock 测试——纯逻辑已抽到 storyline-progress / reconcile 等核心层且有覆盖，硬测 hook 易假绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.117",
     date: "2026-09-11",
     title: "统一错误层兜底畸形 JSON：71 个裸解析路由不再把客户端错误报成 500",
