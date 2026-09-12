@@ -135,12 +135,13 @@ export function RightPanel(props: RightPanelProps) {
   return (
     <aside className="flex w-80 max-h-full shrink-0 flex-col overflow-hidden border-l border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] backdrop-blur-sm">
       {/* 顶部三tab */}
-      <div className="flex shrink-0 border-b border-[var(--nv-border-2)]">
+      <div className="flex shrink-0 items-start border-b border-[var(--nv-border-2)]">
+        <div className="flex flex-1 flex-wrap">
         {TOP_TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTopTab(t.key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+            className={`flex flex-1 min-w-[5.5rem] items-center justify-center gap-1.5 px-1 py-2 text-xs font-medium whitespace-nowrap transition-colors ${
               topTab === t.key
                 ? "border-b-2 border-[var(--nv-primary)] bg-[var(--nv-primary-soft)] text-[var(--nv-primary)] shadow-[0_0_12px_color-mix(in_oklch,var(--nv-primary)_28%,transparent)]"
                 : "border-b-2 border-transparent text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)]"
@@ -149,7 +150,8 @@ export function RightPanel(props: RightPanelProps) {
             <Icon name={t.icon} size={13} /> {t.label}
           </button>
         ))}
-        <button onClick={onMinimize} className="shrink-0 px-2 text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-danger)]" title="最小化（可从右侧竖条随时展开）" aria-label="最小化面板"><Icon name="x" size={14} /></button>
+        </div>
+        <button onClick={onMinimize} className="shrink-0 px-2 py-2 text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-danger)]" title="最小化（可从右侧竖条随时展开）" aria-label="最小化面板"><Icon name="x" size={14} /></button>
       </div>
 
       {/* Tab 内容 */}

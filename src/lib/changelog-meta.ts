@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.133";
+export const LATEST_VERSION = "v3.1.134";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "新增对比模式：正文生成 / 精修 / 续写 / 游戏模式导出，只要目标章节已有内容（非空），生成完成后进入左右并排对比界面，由作者选择保留哪一边，不再静默覆盖原稿（COMPARE-MODE）",
-  "统一判据抽成纯函数 src/lib/compare-mode.ts：shouldEnterCompare = 原有内容非空 且 新内容非空；原有为空（首次生成）直接采用不做对比。写作生成与游戏导出两条入口共用同一套逻辑、同一个组件",
-  "新增 src/components/workspace/CompareModeModal.tsx：左右两栏同时观看（各带字数 / 段落数），点击选边高亮，底部按钮落定保留；未保留的一边仍可在版本历史找回",
-  "游戏模式导出：/api/game/end 回传作者入游时的原正文快照；导出后若原有内容非空即进入同一对比界面。门禁 tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
+  "全站端到端走查：12 个路由全部 HTTP 200、零 JS 错误；写作台 36 个可交互点逐一点击验证均有响应；其余 8 个页面（设置 / 检测 / 工坊 / 探讨 / 回收站 / 更新日志 / 拆书 / 阅读）交互点正常、零 JS 错误",
+  "修复右侧面板顶部 tab 断字：6 个 tab 在 320px 面板内被挤到 48px 宽，3 字标签被迫换行成「AI助/手」「工具/箱」；改为可换行布局（每 tab 最小 5.5rem + whitespace-nowrap），标签完整显示，最小化按钮固定在右上角",
+  "走查其余结论：全站无横向溢出；设置页 / 创意工坊 / 检测页 / 探讨模式零文字裁切；章节标题的省略属设计内 truncate；各对话框点击均正常弹出，无冗余、无重复、无失效",
+  "门禁：tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
 ];
