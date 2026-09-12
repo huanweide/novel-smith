@@ -17,7 +17,7 @@
 
 [⚡ 30 秒试用 · 不用配 Key](https://novel-forge-nu.vercel.app/detector) · [🖼 界面预览](https://novel-forge-nu.vercel.app) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
 
-**当前版本：v3.1.134** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
+**当前版本：v3.1.135** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
 
 **先花 30 秒试一下（不用配 Key、不用安装）**
 ![去 AI 味检测演示](docs/screenshots/demo.gif)
