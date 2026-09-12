@@ -25,7 +25,8 @@ import { confirmDialog, promptDialog, toastError, toastSuccess, toastInfo, toast
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useConfirmDelete } from "@/components/workspace/useConfirmDelete";
-import { RefineDiffModal } from "@/components/workspace/RefineDiffModal";
+import { CompareModeModal } from "@/components/workspace/CompareModeModal";
+import { shouldEnterCompare, compareModeLabel, type CompareSide } from "@/lib/compare-mode";
 import { useShortcut } from "@/components/ShortcutProvider";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useWorkspaceDialogs } from "@/hooks/useWorkspaceDialogs";
@@ -322,8 +323,15 @@ export default function WorkspacePage() {
   const handleRefineInstructionChange = (v: string) => {
     setRefineInstruction(v);
   };
-  // #124 精修 diff 预览：精修完成后对比原/新正文，需用户显式「应用」或「撤销」
-  const [refineDiff, setRefineDiff] = useState<{ old: string; new: string } | null>(null);
+  // v3.1.133 对比模式（统一）：任意生成操作（正文/精修/续写/游戏导出）只要目标章节原有内容非空，
+  // 生成完成后进入左右对比，由作者显式选择保留哪一边——不再静默覆盖原稿。
+  const [compareState, setCompareState] = useState<{
+    nodeId: string;
+    original: string;
+    next: string;
+    modeLabel: string;
+  } | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
 
   // ── 章纲提示词（临时态：跳转即丢，不持久化） ──
   const [chapterOutlinePrompt, setChapterOutlinePrompt] = useState("");
@@ -901,10 +909,15 @@ export default function WorkspacePage() {
               setLastChapterTitle(selectedNode?.title || "");
               lastFillInfoRef.current = null;
 
-              // #124：精修（修改/续写已有正文）完成后，先展示 diff 预览，由用户显式「应用」或「撤销」，不直接落库刷新
-              const isRefineWithExisting = event.mode === "refine" && !!selectedNode?.content && (selectedNode.content || "").trim().length > 0;
-              if (isRefineWithExisting && finalContent.trim().length > 0) {
-                setRefineDiff({ old: selectedNode.content || "", new: finalContent });
+              // v3.1.133 对比模式（统一判据）：任意生成操作，只要该章节原有内容非空（且新内容非空），
+              // 一律进入左右对比，由作者选择保留哪一边——不再只限精修，也不再静默覆盖原稿。
+              if (shouldEnterCompare(selectedNode?.content, finalContent)) {
+                setCompareState({
+                  nodeId: selectedNode!.id,
+                  original: selectedNode?.content || "",
+                  next: finalContent,
+                  modeLabel: compareModeLabel(event.mode as string),
+                });
                 onDone?.();
                 return;
               }
@@ -962,30 +975,38 @@ export default function WorkspacePage() {
     setIsGenerating(false);
   };
 
-  // #124 精修 diff 预览：应用 = 刷新采用已落库的新正文；撤销 = PUT 还原精修前的原正文
-  const applyRefine = () => {
-    setRefineDiff(null);
-    toastSuccess("已应用精修结果");
-    loadProject();
-    if (refineDiff) autoExtractChapter(refineDiff.new, selectedNode?.title || "");
-  };
-  const undoRefine = async () => {
-    const target = refineDiff;
-    setRefineDiff(null);
-    if (!target || !selectedNode?.id) { loadProject(); return; }
+  // v3.1.133 对比模式：选择保留哪一边。
+  // 语义：后端生成完成时新内容已落库，故「保留新生成」只需刷新；
+  // 「保留原有」则 PUT 回写还原（带 undo 标记，与精修撤销同一条通道）。
+  const handleCompareKeep = async (side: CompareSide) => {
+    const target = compareState;
+    if (!target || compareBusy) return;
+    setCompareBusy(true);
     try {
-      const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: target.old, wordCount: (target.old || "").length, undo: true }),
-      });
-      if (res.ok) toastSuccess("已撤销，恢复原正文");
-      else toastError("撤销失败");
+      if (side === "original") {
+        const res = await fetch(`/api/story/nodes/${target.nodeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: target.original, wordCount: target.original.length, undo: true }),
+        });
+        if (res.ok) toastSuccess("已保留原有内容");
+        else toastError("恢复原有内容失败，请重试");
+      } else {
+        toastSuccess("已保留新生成内容");
+        autoExtractChapter(target.next, selectedNode?.title || "");
+      }
     } catch {
-      toastError("撤销失败");
+      toastError("操作失败，请重试");
     } finally {
-      loadProject();
+      setCompareBusy(false);
+      setCompareState(null);
+      await loadProject();
     }
+  };
+  const closeCompare = () => {
+    if (compareBusy) return;
+    setCompareState(null);
+    loadProject();
   };
 
   const handleContinueConfirmed = async (cards: string[], notes: Record<string, string>, newChars: string[], finalAuthorNote: string, storylineId?: string, diffuseCompleted?: boolean) => {
@@ -1419,14 +1440,15 @@ export default function WorkspacePage() {
         />
       )}
 
-      {/* #124 精修 diff 预览：应用 / 撤销（恢复原正文） */}
-      <RefineDiffModal
-        open={!!refineDiff}
-        oldContent={refineDiff?.old || ""}
-        newContent={refineDiff?.new || ""}
-        onApply={applyRefine}
-        onUndo={undoRefine}
-        onClose={() => { setRefineDiff(null); loadProject(); }}
+      {/* v3.1.133 对比模式：左右两侧同时观看生成效果，作者选择保留哪一边 */}
+      <CompareModeModal
+        open={!!compareState}
+        originalContent={compareState?.original || ""}
+        newContent={compareState?.next || ""}
+        modeLabel={compareState?.modeLabel}
+        busy={compareBusy}
+        onKeep={handleCompareKeep}
+        onClose={closeCompare}
       />
 
       {/* 抽卡模式——章纲路线选择 */}

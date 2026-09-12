@@ -803,6 +803,8 @@ export async function endGameAndExport(sessionId: string): Promise<{
   autoConfirmed: boolean;
   autoFilled: boolean;
   qualityScore: number | null;
+  /** v3.1.133 对比模式：作者进入游戏时刻的原正文快照（供导出后二选一保留） */
+  originalContent: string;
 }> {
   const session = await prisma.gameSession.findUnique({
     where: { id: sessionId },
@@ -971,6 +973,7 @@ export async function endGameAndExport(sessionId: string): Promise<{
     autoConfirmed,
     autoFilled,
     qualityScore: el.score ?? null,
+    originalContent,
   };
 }
 
