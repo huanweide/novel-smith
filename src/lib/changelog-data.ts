@@ -27,6 +27,31 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.128",
+    date: "2026-09-12",
+    title: "表单标签横扫（四轮）：导出/审稿面板 PublishCheckPanel 6 控件补齐 htmlFor / aria 关联",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "顺着 v3.1.125 / v3.1.126 / v3.1.127 同类的「可见文字标签却无 htmlFor/id 关联」问题，继续横扫到导出 / 审稿面板（PublishCheckPanel）：6 个会提交的控件（目标平台 / 导出格式 / 审稿角色 / 审稿范围 / 选择章节 / 提示词（可编辑））原先是兄弟 <span> 文字 + 无 id 的控件——看得见、读屏念不出、点文字不聚焦；现把 <span> 改为 <label htmlFor>、给每个控件补 id，一一对应关联（FORM-LABEL-SWEEP-4）",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 src/components/workspace/PublishCheckPanel.test.tsx（2 例）：导出面板的目标平台 / 导出格式，以及切到模拟审稿后的审稿角色 / 审稿范围 / 提示词（可编辑）均可被 getByLabelText 取到且 id 与 htmlFor 对应",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 172 文件 1839 测试全绿（新增 2）· next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.127",
     date: "2026-09-12",
     title: "表单标签横扫（三轮）：项目设定对话框 9 字段 + 标签搜索框补齐 htmlFor / aria-label 关联",
