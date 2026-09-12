@@ -63,10 +63,17 @@ describe("v3.1.131 ThemeToggle 菜单脱离容器裁剪", () => {
     expect(bodyMenu()).toBeNull();
   });
 
-  it("右键按钮直接循环到下一档（夜航 → 白昼）", () => {
+  it("右键按钮直接循环到下一档（夜航 → 苍青）", () => {
     render(<ThemeToggle />);
     fireEvent.contextMenu(themeButton());
-    expect(document.documentElement.classList.contains("light")).toBe(true);
-    expect(localStorage.getItem("nf-theme")).toBe("light");
+    expect(document.documentElement.classList.contains("azure")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(localStorage.getItem("nf-theme")).toBe("azure");
+  });
+
+  it("菜单含全部 10 档主题（深 7 / 浅 3）", () => {
+    render(<ThemeToggle />);
+    fireEvent.click(themeButton());
+    expect(menuItems()).toHaveLength(10);
   });
 });

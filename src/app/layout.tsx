@@ -37,15 +37,17 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-/* 首屏前应用主题，避免闪烁（三档：dark 夜航 / light 白昼 / azure 苍青） */
+/* 首屏前应用主题，避免闪烁（十档主题：夜航/苍青 + GitHub/德古拉/北境/东京夜/古旧 + 白昼/曜石/拿铁） */
 (function(){
   try {
-    var t = localStorage.getItem('nf-theme');
+    var ALL = ['dark','light','azure','theme-github','theme-dracula','theme-nord','theme-tokyo','theme-gruvbox','theme-solarized','theme-catppuccin'];
+    var LIGHT = { light: 1, 'theme-solarized': 1, 'theme-catppuccin': 1 };
     var d = document.documentElement;
-    d.classList.remove('light','dark','azure');
-    if (t === 'light') { d.classList.add('light'); }
-    else if (t === 'azure') { d.classList.add('azure'); d.classList.add('dark'); } /* 苍青=深色风格，保留 dark: 变体 */
-    else { d.classList.add('dark'); }
+    var t = localStorage.getItem('nf-theme') || 'dark';
+    if (ALL.indexOf(t) < 0) t = 'dark';
+    for (var i = 0; i < ALL.length; i++) d.classList.remove(ALL[i]);
+    d.classList.add(t);
+    d.classList.add(LIGHT[t] ? 'light' : 'dark');
   } catch(e){}
 })();`,
           }}

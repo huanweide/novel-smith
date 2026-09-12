@@ -351,7 +351,7 @@
 .light .text-accent-label { color: var(--nv-accent-text-on-light); }
 
 .light body {
-  background-color: #F3EFE8;
+  background-color: var(--nv-void);
   background-image:
     radial-gradient(ellipse 70% 50% at 22% -10%, oklch(0.60 0.10 230 / 0.10), transparent 70%),
     radial-gradient(ellipse 50% 45% at 88% 8%, rgba(184, 137, 58, 0.10), transparent 70%),
@@ -455,7 +455,7 @@
 
   body {
     @apply bg-background text-foreground;
-    background-color: #0B1322;
+    background-color: var(--background);
     background-image:
       /* 玻璃拟态·柔和光源光斑：月光蓝（左上）+ 香槟金（右上）+ 淡青（底部）—— 去紫粉，无色光 */
       radial-gradient(ellipse 68% 48% at 18% -8%, oklch(0.70 0.11 230 / 0.16), transparent 70%),
@@ -1454,59 +1454,538 @@
    「苍青」主题（第三档 · 青绿深色风格）
    切 html.azure 生效（layout 防闪烁脚本 + ThemeToggle 三档选择器）
    ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   「苍青」主题（参考 改造：青绿·通透（与夜航墨蓝紫拉开））
+   切 html.azure 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
 html.azure {
-  --nv-void:        #04090C;
-  --nv-abyss:       #081218;
-  --nv-surface-1:   rgba(190, 230, 235, 0.02);
-  --nv-surface-2:   rgba(190, 230, 235, 0.045);
-  --nv-surface-3:   rgba(190, 230, 235, 0.08);
-  --nv-border-1:    rgba(190, 230, 235, 0.06);
-  --nv-border-2:    rgba(190, 230, 235, 0.10);
-  --nv-border-3:    rgba(190, 230, 235, 0.16);
+  color-scheme: dark;
 
-  --nv-primary:      oklch(0.70 0.13 200);
-  --nv-primary-soft: oklch(0.70 0.13 200 / 0.14);
-  --nv-success:      oklch(0.68 0.16 165);
-  --nv-success-soft: oklch(0.68 0.16 165 / 0.14);
-  --nv-warning:      oklch(0.74 0.15 90);
-  --nv-warning-soft: oklch(0.74 0.15 90 / 0.14);
-  --nv-danger:       oklch(0.62 0.20 20);
-  --nv-danger-soft:  oklch(0.62 0.20 20 / 0.14);
-  --nv-creative:     oklch(0.78 0.12 95);
-  --nv-creative-soft:oklch(0.78 0.12 95 / 0.16);
-  --nv-creative-fill:#9A7530;                    /* 香槟金——AI 按钮填充（苍青主题） */
-  --nv-info:         oklch(0.66 0.13 215);
-  --nv-info-soft:    oklch(0.66 0.13 215 / 0.14);
-  --nv-accent:       oklch(0.80 0.13 95);
-  --nv-accent-soft:  oklch(0.80 0.12 160 / 0.12);
+  --nv-void:        #04181A;
+  --nv-abyss:       #0A272B;
+  --nv-surface-1:   rgba(150, 240, 230, 0.025);
+  --nv-surface-2:   rgba(150, 240, 230, 0.05);
+  --nv-surface-3:   rgba(150, 240, 230, 0.08);
+  --nv-border-1:    rgba(150, 240, 230, 0.08);
+  --nv-border-2:    rgba(150, 240, 230, 0.12);
+  --nv-border-3:    rgba(150, 240, 230, 0.18);
 
-  --nv-text-primary:   #E9F2F0;
-  --nv-text-secondary: #9FB6B2;
-  --nv-text-tertiary:  #7C918D;
-  --nv-text-muted:     #6a817c;   /* 对比度收口（v3.1.113）：旧注释写的「4.8:1 达 AA」只对页面底 void(#04090C) 成立（实测 4.7559），落到容器面 abyss(#081218) 实为 4.4967 —— 差 0.0033 未达 AA，属四舍五入造成的假达标；提亮至 #6a817c 后 void 4.81 / abyss 4.54 两面均 ≥4.5 达 AA，且仍弱于 tertiary #7C918D 保层级（浮起面仍由下方专用变体兜底） */
-  --nv-text-muted-on-surface-3: #708885;  /* Round-4 补修：苍青 surface-3 合成 #131B1E 上，原复用 #6A807C 仅 4.149:1(<4.5 AA)；提亮为 #708885，surface-3 上 4.612:1(≥4.5 AA)，且仍低于同面 tertiary #7C918D(5.229:1)，保持 muted<tertiary 层级 */
+  --nv-primary:      #5FE3C8;
+  --nv-primary-soft: rgba(95, 227, 200, 0.15);
+  --nv-success:      #5FD6A8;
+  --nv-success-soft: rgba(95, 214, 168, 0.15);
+  --nv-warning:      #E8C86A;
+  --nv-warning-soft: rgba(232, 200, 106, 0.15);
+  --nv-danger:       #F2746B;
+  --nv-danger-soft:  rgba(242, 116, 107, 0.15);
+  --nv-creative:     #F0D08A;
+  --nv-creative-soft:rgba(240, 208, 138, 0.15);
+  --nv-creative-fill:#2FA98C;
+  --nv-info:         #63D8DF;
+  --nv-info-soft:    rgba(99, 216, 223, 0.15);
+  --nv-accent:       #8FF0D8;
+  --nv-accent-soft:  rgba(143, 240, 216, 0.14);
 
-  --background: #04090C;
-  --foreground: #E9F2F0;
-  --primary: oklch(0.70 0.13 200);
-  --primary-foreground: #04201F;
-  --accent: oklch(0.80 0.12 160);
-  --accent-foreground: #06211D;
-  --ring: oklch(0.70 0.13 200 / 0.5);
-  --popover: #081218;
-  --popover-foreground: #E9F2F0;
-  --card: #081218;
-  --card-foreground: #E9F2F0;
-  --muted: rgba(190, 230, 235, 0.05);
-  --muted-foreground: #7C918D;
-  --border: rgba(190, 230, 235, 0.10);
-  --input: rgba(190, 230, 235, 0.12);
+  --nv-text-primary:   #dfe5e4;
+  --nv-text-secondary: #b3c1bf;
+  --nv-text-tertiary:  #94a8a5;
+  --nv-text-muted:     #789591;
+  --nv-text-muted-on-surface-3: #789591;
+
+  --background: #04181A;
+  --foreground: #dfe5e4;
+  --card: rgba(150, 240, 230, 0.05);
+  --card-foreground: #dfe5e4;
+  --popover: #0A272B;
+  --popover-foreground: #dfe5e4;
+  --primary: #5FE3C8;
+  --primary-foreground: #04181A;
+  --secondary: rgba(150, 240, 230, 0.06);
+  --secondary-foreground: #dfe5e4;
+  --muted: rgba(150, 240, 230, 0.05);
+  --muted-foreground: #94a8a5;
+  --accent: rgba(150, 240, 230, 0.06);
+  --accent-foreground: #dfe5e4;
+  --destructive: #F2746B;
+  --border: rgba(150, 240, 230, 0.12);
+  --input: rgba(150, 240, 230, 0.14);
+  --ring: rgba(95, 227, 200, 0.5);
+  --sidebar: #04181A;
+  --sidebar-foreground: #dfe5e4;
+  --sidebar-primary: #5FE3C8;
+  --sidebar-primary-foreground: #04181A;
+  --sidebar-accent: rgba(150, 240, 230, 0.05);
+  --sidebar-accent-foreground: #dfe5e4;
+  --sidebar-border: rgba(150, 240, 230, 0.09);
+  --sidebar-ring: rgba(95, 227, 200, 0.5);
 }
 /* 苍青主题下按钮统一无色玻璃 + 香槟金/语义描边（与 dark 同构） */
 html.azure .btn-primary,
 html.azure .btn-creative { color: var(--nv-gold); border-color: rgba(228, 184, 99, 0.5); }
 html.azure .btn-success { color: oklch(0.82 0.14 165); border-color: oklch(0.68 0.16 165 / 0.55); }
 html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.20 20 / 0.55); }
+
+/* ═══════════════════════════════════════════
+   「GitHub 暗」主题（参考 GitHub Dark #0D1117 / #58A6FF）
+   切 html.theme-github 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-github {
+  color-scheme: dark;
+
+  --nv-void:        #0D1117;
+  --nv-abyss:       #161B22;
+  --nv-surface-1:   rgba(139, 148, 158, 0.025);
+  --nv-surface-2:   rgba(139, 148, 158, 0.05);
+  --nv-surface-3:   rgba(139, 148, 158, 0.08);
+  --nv-border-1:    rgba(139, 148, 158, 0.08);
+  --nv-border-2:    rgba(139, 148, 158, 0.12);
+  --nv-border-3:    rgba(139, 148, 158, 0.18);
+
+  --nv-primary:      #58A6FF;
+  --nv-primary-soft: rgba(88, 166, 255, 0.15);
+  --nv-success:      #3FB950;
+  --nv-success-soft: rgba(63, 185, 80, 0.15);
+  --nv-warning:      #D29922;
+  --nv-warning-soft: rgba(210, 153, 34, 0.15);
+  --nv-danger:       #F85149;
+  --nv-danger-soft:  rgba(248, 81, 73, 0.15);
+  --nv-creative:     #D2A8FF;
+  --nv-creative-soft:rgba(210, 168, 255, 0.15);
+  --nv-creative-fill:#8957E5;
+  --nv-info:         #58A6FF;
+  --nv-info-soft:    rgba(88, 166, 255, 0.15);
+  --nv-accent:       #79C0FF;
+  --nv-accent-soft:  rgba(121, 192, 255, 0.14);
+
+  --nv-text-primary:   #d4d7dc;
+  --nv-text-secondary: #adb4bc;
+  --nv-text-tertiary:  #919ba5;
+  --nv-text-muted:     #7c8998;
+  --nv-text-muted-on-surface-3: #7a8796;
+
+  --background: #0D1117;
+  --foreground: #d4d7dc;
+  --card: rgba(139, 148, 158, 0.05);
+  --card-foreground: #d4d7dc;
+  --popover: #161B22;
+  --popover-foreground: #d4d7dc;
+  --primary: #58A6FF;
+  --primary-foreground: #0D1117;
+  --secondary: rgba(139, 148, 158, 0.06);
+  --secondary-foreground: #d4d7dc;
+  --muted: rgba(139, 148, 158, 0.05);
+  --muted-foreground: #919ba5;
+  --accent: rgba(139, 148, 158, 0.06);
+  --accent-foreground: #d4d7dc;
+  --destructive: #F85149;
+  --border: rgba(139, 148, 158, 0.12);
+  --input: rgba(139, 148, 158, 0.14);
+  --ring: rgba(88, 166, 255, 0.5);
+  --sidebar: #0D1117;
+  --sidebar-foreground: #d4d7dc;
+  --sidebar-primary: #58A6FF;
+  --sidebar-primary-foreground: #0D1117;
+  --sidebar-accent: rgba(139, 148, 158, 0.05);
+  --sidebar-accent-foreground: #d4d7dc;
+  --sidebar-border: rgba(139, 148, 158, 0.09);
+  --sidebar-ring: rgba(88, 166, 255, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「德古拉」主题（参考 Dracula #282A36 / #BD93F9）
+   切 html.theme-dracula 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-dracula {
+  color-scheme: dark;
+
+  --nv-void:        #1E1F29;
+  --nv-abyss:       #282A36;
+  --nv-surface-1:   rgba(189, 147, 249, 0.025);
+  --nv-surface-2:   rgba(189, 147, 249, 0.05);
+  --nv-surface-3:   rgba(189, 147, 249, 0.08);
+  --nv-border-1:    rgba(189, 147, 249, 0.08);
+  --nv-border-2:    rgba(189, 147, 249, 0.12);
+  --nv-border-3:    rgba(189, 147, 249, 0.18);
+
+  --nv-primary:      #BD93F9;
+  --nv-primary-soft: rgba(189, 147, 249, 0.15);
+  --nv-success:      #50FA7B;
+  --nv-success-soft: rgba(80, 250, 123, 0.15);
+  --nv-warning:      #F1FA8C;
+  --nv-warning-soft: rgba(241, 250, 140, 0.15);
+  --nv-danger:       #FF5555;
+  --nv-danger-soft:  rgba(255, 85, 85, 0.15);
+  --nv-creative:     #FF79C6;
+  --nv-creative-soft:rgba(255, 121, 198, 0.15);
+  --nv-creative-fill:#9A5FE0;
+  --nv-info:         #8BE9FD;
+  --nv-info-soft:    rgba(139, 233, 253, 0.15);
+  --nv-accent:       #FFB86C;
+  --nv-accent-soft:  rgba(255, 184, 108, 0.14);
+
+  --nv-text-primary:   #ecebef;
+  --nv-text-secondary: #c7c3ce;
+  --nv-text-tertiary:  #aea7b7;
+  --nv-text-muted:     #9c93aa;
+  --nv-text-muted-on-surface-3: #9a90a8;
+
+  --background: #1E1F29;
+  --foreground: #ecebef;
+  --card: rgba(189, 147, 249, 0.05);
+  --card-foreground: #ecebef;
+  --popover: #282A36;
+  --popover-foreground: #ecebef;
+  --primary: #BD93F9;
+  --primary-foreground: #1E1F29;
+  --secondary: rgba(189, 147, 249, 0.06);
+  --secondary-foreground: #ecebef;
+  --muted: rgba(189, 147, 249, 0.05);
+  --muted-foreground: #aea7b7;
+  --accent: rgba(189, 147, 249, 0.06);
+  --accent-foreground: #ecebef;
+  --destructive: #FF5555;
+  --border: rgba(189, 147, 249, 0.12);
+  --input: rgba(189, 147, 249, 0.14);
+  --ring: rgba(189, 147, 249, 0.5);
+  --sidebar: #1E1F29;
+  --sidebar-foreground: #ecebef;
+  --sidebar-primary: #BD93F9;
+  --sidebar-primary-foreground: #1E1F29;
+  --sidebar-accent: rgba(189, 147, 249, 0.05);
+  --sidebar-accent-foreground: #ecebef;
+  --sidebar-border: rgba(189, 147, 249, 0.09);
+  --sidebar-ring: rgba(189, 147, 249, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「北境」主题（参考 Nord #2E3440 / #88C0D0）
+   切 html.theme-nord 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-nord {
+  color-scheme: dark;
+
+  --nv-void:        #242933;
+  --nv-abyss:       #2E3440;
+  --nv-surface-1:   rgba(216, 222, 233, 0.025);
+  --nv-surface-2:   rgba(216, 222, 233, 0.05);
+  --nv-surface-3:   rgba(216, 222, 233, 0.08);
+  --nv-border-1:    rgba(216, 222, 233, 0.08);
+  --nv-border-2:    rgba(216, 222, 233, 0.12);
+  --nv-border-3:    rgba(216, 222, 233, 0.18);
+
+  --nv-primary:      #88C0D0;
+  --nv-primary-soft: rgba(136, 192, 208, 0.15);
+  --nv-success:      #A3BE8C;
+  --nv-success-soft: rgba(163, 190, 140, 0.15);
+  --nv-warning:      #EBCB8B;
+  --nv-warning-soft: rgba(235, 203, 139, 0.15);
+  --nv-danger:       #BF616A;
+  --nv-danger-soft:  rgba(191, 97, 106, 0.15);
+  --nv-creative:     #B48EAD;
+  --nv-creative-soft:rgba(180, 142, 173, 0.15);
+  --nv-creative-fill:#5E81AC;
+  --nv-info:         #81A1C1;
+  --nv-info-soft:    rgba(129, 161, 193, 0.15);
+  --nv-accent:       #8FBCBB;
+  --nv-accent-soft:  rgba(143, 188, 187, 0.14);
+
+  --nv-text-primary:   #ffffff;
+  --nv-text-secondary: #d1d7d9;
+  --nv-text-tertiary:  #b0bbbf;
+  --nv-text-muted:     #92a5aa;
+  --nv-text-muted-on-surface-3: #94a6ab;
+
+  --background: #242933;
+  --foreground: #ffffff;
+  --card: rgba(216, 222, 233, 0.05);
+  --card-foreground: #ffffff;
+  --popover: #2E3440;
+  --popover-foreground: #ffffff;
+  --primary: #88C0D0;
+  --primary-foreground: #242933;
+  --secondary: rgba(216, 222, 233, 0.06);
+  --secondary-foreground: #ffffff;
+  --muted: rgba(216, 222, 233, 0.05);
+  --muted-foreground: #b0bbbf;
+  --accent: rgba(216, 222, 233, 0.06);
+  --accent-foreground: #ffffff;
+  --destructive: #BF616A;
+  --border: rgba(216, 222, 233, 0.12);
+  --input: rgba(216, 222, 233, 0.14);
+  --ring: rgba(136, 192, 208, 0.5);
+  --sidebar: #242933;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #88C0D0;
+  --sidebar-primary-foreground: #242933;
+  --sidebar-accent: rgba(216, 222, 233, 0.05);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(216, 222, 233, 0.09);
+  --sidebar-ring: rgba(136, 192, 208, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「东京夜」主题（参考 Tokyo Night #1A1B26 / #7AA2F7）
+   切 html.theme-tokyo 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-tokyo {
+  color-scheme: dark;
+
+  --nv-void:        #16161E;
+  --nv-abyss:       #1A1B26;
+  --nv-surface-1:   rgba(122, 162, 247, 0.025);
+  --nv-surface-2:   rgba(122, 162, 247, 0.05);
+  --nv-surface-3:   rgba(122, 162, 247, 0.08);
+  --nv-border-1:    rgba(122, 162, 247, 0.08);
+  --nv-border-2:    rgba(122, 162, 247, 0.12);
+  --nv-border-3:    rgba(122, 162, 247, 0.18);
+
+  --nv-primary:      #7AA2F7;
+  --nv-primary-soft: rgba(122, 162, 247, 0.15);
+  --nv-success:      #9ECE6A;
+  --nv-success-soft: rgba(158, 206, 106, 0.15);
+  --nv-warning:      #E0AF68;
+  --nv-warning-soft: rgba(224, 175, 104, 0.15);
+  --nv-danger:       #F7768E;
+  --nv-danger-soft:  rgba(247, 118, 142, 0.15);
+  --nv-creative:     #BB9AF7;
+  --nv-creative-soft:rgba(187, 154, 247, 0.15);
+  --nv-creative-fill:#7C6FE8;
+  --nv-info:         #7DCFFF;
+  --nv-info-soft:    rgba(125, 207, 255, 0.15);
+  --nv-accent:       #2AC3DE;
+  --nv-accent-soft:  rgba(42, 195, 222, 0.14);
+
+  --nv-text-primary:   #dddfe3;
+  --nv-text-secondary: #b6bac3;
+  --nv-text-tertiary:  #9ba0ad;
+  --nv-text-muted:     #80899c;
+  --nv-text-muted-on-surface-3: #848c9e;
+
+  --background: #16161E;
+  --foreground: #dddfe3;
+  --card: rgba(122, 162, 247, 0.05);
+  --card-foreground: #dddfe3;
+  --popover: #1A1B26;
+  --popover-foreground: #dddfe3;
+  --primary: #7AA2F7;
+  --primary-foreground: #16161E;
+  --secondary: rgba(122, 162, 247, 0.06);
+  --secondary-foreground: #dddfe3;
+  --muted: rgba(122, 162, 247, 0.05);
+  --muted-foreground: #9ba0ad;
+  --accent: rgba(122, 162, 247, 0.06);
+  --accent-foreground: #dddfe3;
+  --destructive: #F7768E;
+  --border: rgba(122, 162, 247, 0.12);
+  --input: rgba(122, 162, 247, 0.14);
+  --ring: rgba(122, 162, 247, 0.5);
+  --sidebar: #16161E;
+  --sidebar-foreground: #dddfe3;
+  --sidebar-primary: #7AA2F7;
+  --sidebar-primary-foreground: #16161E;
+  --sidebar-accent: rgba(122, 162, 247, 0.05);
+  --sidebar-accent-foreground: #dddfe3;
+  --sidebar-border: rgba(122, 162, 247, 0.09);
+  --sidebar-ring: rgba(122, 162, 247, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「古旧」主题（参考 Gruvbox #282828 / #FABD2F）
+   切 html.theme-gruvbox 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-gruvbox {
+  color-scheme: dark;
+
+  --nv-void:        #1D2021;
+  --nv-abyss:       #282828;
+  --nv-surface-1:   rgba(235, 219, 178, 0.025);
+  --nv-surface-2:   rgba(235, 219, 178, 0.05);
+  --nv-surface-3:   rgba(235, 219, 178, 0.08);
+  --nv-border-1:    rgba(235, 219, 178, 0.08);
+  --nv-border-2:    rgba(235, 219, 178, 0.12);
+  --nv-border-3:    rgba(235, 219, 178, 0.18);
+
+  --nv-primary:      #FABD2F;
+  --nv-primary-soft: rgba(250, 189, 47, 0.15);
+  --nv-success:      #B8BB26;
+  --nv-success-soft: rgba(184, 187, 38, 0.15);
+  --nv-warning:      #FABD2F;
+  --nv-warning-soft: rgba(250, 189, 47, 0.15);
+  --nv-danger:       #FB4934;
+  --nv-danger-soft:  rgba(251, 73, 52, 0.15);
+  --nv-creative:     #D3869B;
+  --nv-creative-soft:rgba(211, 134, 155, 0.15);
+  --nv-creative-fill:#D65D0E;
+  --nv-info:         #83A598;
+  --nv-info-soft:    rgba(131, 165, 152, 0.15);
+  --nv-accent:       #FABD2F;
+  --nv-accent-soft:  rgba(250, 189, 47, 0.14);
+
+  --nv-text-primary:   #f2f1ef;
+  --nv-text-secondary: #cdc9c2;
+  --nv-text-tertiary:  #b3aea2;
+  --nv-text-muted:     #9b9380;
+  --nv-text-muted-on-surface-3: #a09886;
+
+  --background: #1D2021;
+  --foreground: #f2f1ef;
+  --card: rgba(235, 219, 178, 0.05);
+  --card-foreground: #f2f1ef;
+  --popover: #282828;
+  --popover-foreground: #f2f1ef;
+  --primary: #FABD2F;
+  --primary-foreground: #1D2021;
+  --secondary: rgba(235, 219, 178, 0.06);
+  --secondary-foreground: #f2f1ef;
+  --muted: rgba(235, 219, 178, 0.05);
+  --muted-foreground: #b3aea2;
+  --accent: rgba(235, 219, 178, 0.06);
+  --accent-foreground: #f2f1ef;
+  --destructive: #FB4934;
+  --border: rgba(235, 219, 178, 0.12);
+  --input: rgba(235, 219, 178, 0.14);
+  --ring: rgba(250, 189, 47, 0.5);
+  --sidebar: #1D2021;
+  --sidebar-foreground: #f2f1ef;
+  --sidebar-primary: #FABD2F;
+  --sidebar-primary-foreground: #1D2021;
+  --sidebar-accent: rgba(235, 219, 178, 0.05);
+  --sidebar-accent-foreground: #f2f1ef;
+  --sidebar-border: rgba(235, 219, 178, 0.09);
+  --sidebar-ring: rgba(250, 189, 47, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「曜石」主题（参考 Solarized Light #FDF6E3 / #268BD2）
+   切 html.theme-solarized 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-solarized {
+  color-scheme: light;
+
+  --nv-void:        #FDF6E3;
+  --nv-abyss:       #FFFBF0;
+  --nv-surface-1:   rgba(15, 18, 30, 0.025);
+  --nv-surface-2:   rgba(15, 18, 30, 0.05);
+  --nv-surface-3:   rgba(15, 18, 30, 0.08);
+  --nv-border-1:    rgba(15, 18, 30, 0.07);
+  --nv-border-2:    rgba(15, 18, 30, 0.12);
+  --nv-border-3:    rgba(15, 18, 30, 0.18);
+
+  --nv-primary:      #268BD2;
+  --nv-primary-soft: rgba(38, 139, 210, 0.15);
+  --nv-success:      #859900;
+  --nv-success-soft: rgba(133, 153, 0, 0.15);
+  --nv-warning:      #B58900;
+  --nv-warning-soft: rgba(181, 137, 0, 0.15);
+  --nv-danger:       #DC322F;
+  --nv-danger-soft:  rgba(220, 50, 47, 0.15);
+  --nv-creative:     #6C71C4;
+  --nv-creative-soft:rgba(108, 113, 196, 0.15);
+  --nv-creative-fill:#B58900;
+  --nv-info:         #2AA198;
+  --nv-info-soft:    rgba(42, 161, 152, 0.15);
+  --nv-accent:       #CB4B16;
+  --nv-accent-soft:  rgba(203, 75, 22, 0.14);
+
+  --nv-text-primary:   #1a2730;
+  --nv-text-secondary: #2c4252;
+  --nv-text-tertiary:  #39566a;
+  --nv-text-muted:     #4b708b;
+  --nv-text-muted-on-surface-3: #456780;
+
+  --background: #FDF6E3;
+  --foreground: #1a2730;
+  --card: rgba(15, 18, 30, 0.7);
+  --card-foreground: #1a2730;
+  --popover: #FFFBF0;
+  --popover-foreground: #1a2730;
+  --primary: #268BD2;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(15, 18, 30, 0.06);
+  --secondary-foreground: #1a2730;
+  --muted: rgba(15, 18, 30, 0.05);
+  --muted-foreground: #39566a;
+  --accent: rgba(15, 18, 30, 0.06);
+  --accent-foreground: #1a2730;
+  --destructive: #DC322F;
+  --border: rgba(15, 18, 30, 0.12);
+  --input: rgba(15, 18, 30, 0.14);
+  --ring: rgba(38, 139, 210, 0.5);
+  --sidebar: #f6efdd;
+  --sidebar-foreground: #1a2730;
+  --sidebar-primary: #268BD2;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(15, 18, 30, 0.05);
+  --sidebar-accent-foreground: #1a2730;
+  --sidebar-border: rgba(15, 18, 30, 0.09);
+  --sidebar-ring: rgba(38, 139, 210, 0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「拿铁」主题（参考 Catppuccin Latte #EFF1F5 / #1E66F5）
+   切 html.theme-catppuccin 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
+   ═══════════════════════════════════════════ */
+html.theme-catppuccin {
+  color-scheme: light;
+
+  --nv-void:        #EFF1F5;
+  --nv-abyss:       #FFFFFF;
+  --nv-surface-1:   rgba(15, 18, 30, 0.025);
+  --nv-surface-2:   rgba(15, 18, 30, 0.05);
+  --nv-surface-3:   rgba(15, 18, 30, 0.08);
+  --nv-border-1:    rgba(15, 18, 30, 0.07);
+  --nv-border-2:    rgba(15, 18, 30, 0.12);
+  --nv-border-3:    rgba(15, 18, 30, 0.18);
+
+  --nv-primary:      #1E66F5;
+  --nv-primary-soft: rgba(30, 102, 245, 0.15);
+  --nv-success:      #40A02B;
+  --nv-success-soft: rgba(64, 160, 43, 0.15);
+  --nv-warning:      #DF8E1D;
+  --nv-warning-soft: rgba(223, 142, 29, 0.15);
+  --nv-danger:       #D20F39;
+  --nv-danger-soft:  rgba(210, 15, 57, 0.15);
+  --nv-creative:     #8839EF;
+  --nv-creative-soft:rgba(136, 57, 239, 0.15);
+  --nv-creative-fill:#1E66F5;
+  --nv-info:         #04A5E5;
+  --nv-info-soft:    rgba(4, 165, 229, 0.15);
+  --nv-accent:       #FE640B;
+  --nv-accent-soft:  rgba(254, 100, 11, 0.14);
+
+  --nv-text-primary:   #1b2133;
+  --nv-text-secondary: #313c5b;
+  --nv-text-tertiary:  #404e78;
+  --nv-text-muted:     #55679e;
+  --nv-text-muted-on-surface-3: #4e5e90;
+
+  --background: #EFF1F5;
+  --foreground: #1b2133;
+  --card: rgba(15, 18, 30, 0.7);
+  --card-foreground: #1b2133;
+  --popover: #FFFFFF;
+  --popover-foreground: #1b2133;
+  --primary: #1E66F5;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(15, 18, 30, 0.06);
+  --secondary-foreground: #1b2133;
+  --muted: rgba(15, 18, 30, 0.05);
+  --muted-foreground: #404e78;
+  --accent: rgba(15, 18, 30, 0.06);
+  --accent-foreground: #1b2133;
+  --destructive: #D20F39;
+  --border: rgba(15, 18, 30, 0.12);
+  --input: rgba(15, 18, 30, 0.14);
+  --ring: rgba(30, 102, 245, 0.5);
+  --sidebar: #e8eaef;
+  --sidebar-foreground: #1b2133;
+  --sidebar-primary: #1E66F5;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(15, 18, 30, 0.05);
+  --sidebar-accent-foreground: #1b2133;
+  --sidebar-border: rgba(15, 18, 30, 0.09);
+  --sidebar-ring: rgba(30, 102, 245, 0.5);
+}
 
 /* ═══════════════════════════════════════════
    我的作品区 · 交互/视觉增强（v0.46.50）
