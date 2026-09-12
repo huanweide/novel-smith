@@ -145,10 +145,11 @@ export function PreGenConfirm({
         {!loading && !error && (
           <div className="space-y-4">
             <div>
-              <label className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)] mb-1 block">
+              <label htmlFor="pregen-characters" className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)] mb-1 block">
                 <Icon name="user" size={12} /> 人物（可选，期望本章出场，逗号分隔）
               </label>
               <input
+                id="pregen-characters"
                 value={charInput}
                 onChange={(e) => setCharInput(e.target.value)}
                 placeholder="例如：樊斯瑞、欧阳佩（留空则自动调度）"
@@ -159,10 +160,11 @@ export function PreGenConfirm({
               </p>
             </div>
             <div>
-              <label className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)] mb-1 block">
+              <label htmlFor="pregen-author-note" className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)] mb-1 block">
                 <Icon name="file" size={12} /> 作者指令（本章权重，与大纲等同）
               </label>
               <textarea
+                id="pregen-author-note"
                 value={localAuthorNote}
                 onChange={(e) => { setLocalAuthorNote(e.target.value); onAuthorNoteChange(e.target.value); }}
                 placeholder="本章基调、特殊情节约束、写作要求..."
@@ -173,7 +175,7 @@ export function PreGenConfirm({
             {nodeId && (
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)]">
+                  <label htmlFor="pregen-chapter-outline" className="flex items-center gap-1 text-xs text-[var(--nv-text-secondary)]">
                     <Icon name="book" size={12} /> 章纲（可选步骤）
                   </label>
                   <div className="flex items-center gap-2">
@@ -194,6 +196,7 @@ export function PreGenConfirm({
                 {outlineErr && <p className="text-[10px] text-[var(--nv-danger)] mb-1">{outlineErr}</p>}
                 {outlineLoaded ? (
                   <textarea
+                    id="pregen-chapter-outline"
                     value={outlineText}
                     onChange={(e) => setOutlineText(e.target.value)}
                     rows={5}

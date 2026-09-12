@@ -1,5 +1,31 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.126 — 2026-09-12
+
+### 表单标签横扫第二轮：三个面板补齐字段标签 / 可访问名（FORM-LABEL-SWEEP / LABEL-WITHOUT-FOR）
+
+上一轮修好了世界书的新建表单，这一轮顺着**同一类问题**把全站表单控件过了一遍，又揪出三处「输入框没有可被读出的字段名」。
+
+- **① 项目设置面板 11 个裸 input**：正则后处理规则的「规则名 / 正则 pattern / flags / 替换为」（列表内与新增弹窗各一组）+ 项目级 LLM 覆盖的「模型名 / Base URL / API Key」，此前全部只有 placeholder——**一打字提示就消失**，用户填到一半认不出这一格是什么，读屏软件也念不出字段名。现全部补上可见标签，`id` 按规则下标生成（`rule-{idx}-name` 等），列表增删不会串号。
+- **② 生成确认弹窗 3 处「看得见、念不出、点不到」**：标签明明写着字（人物 / 作者指令 / 章纲），却**既没有 `htmlFor`、也没有把输入框包进去**，与控件之间没有任何语义关联——读屏软件念不出，鼠标点标签也不会聚焦到输入框。现补 `htmlFor` + `id`。
+- **③ 一致性事实录入行 5 个控件**（分类 / 主体 / 属性 / 事实值 / 置信度）：该行按设计要保持紧凑纵向版式，加可见标签会明显撑高，故改用 `aria-label`——**不破版式，但读屏与自动化都能定位**。
+- **顺手消除重复**：把上一轮写在 `WorldEditor` 内部的 `FormLabel` 提取为共享组件 `src/components/ui/FormLabel.tsx`（含完整用法说明与「行内紧凑控件请改用 `aria-label`、`id` 必须唯一」的边界提示），`WorldEditor` 改为从共享处引用。
+
+### 顺带修复：两个 Json 数组字段「保存必 400」（PATCH-ARRAY-400）
+
+- **问题（真实功能缺陷）**：项目配置里的「保存规则」、内容安全里的「保存自定义黑名单」，点下去**永远提示保存失败（400）**——用户改完的正则规则、自定义违禁词**根本存不进去**。根因是 `PATCH /api/projects/[id]` 用 `optObj` 校验这两个字段，而 `optObj` 会**明确拒绝数组**（`Array.isArray(v)` → 抛「必须是对象」）；但这两个字段在 schema 里是 `Json @default("'[]'")`（**数组**）、前端发的也是数组、消费端（`src/core/presets/*` 与生成路由的正则后处理）也一律 `Array.isArray` 读取——**全链路都是数组，只有校验器把它当对象**。
+- **修法**：新增 `optObjArray`（`undefined` 不更新 / `null` 清空 / 元素必须是普通对象，否则报错并**指出下标**，如 `postProcessingRules[1] 必须是对象`），PATCH 的 `postProcessingRules`、`customSafetyRules` 改用它；`llmConfig` 仍按对象校验（它确实是对象字段）。
+- **回归测试**：`validators.test.ts` +4 例；`route.test.ts` +6 例（数组 200 且原样落库 / 单个对象 400 且不落库 / 混入非对象 400 / `null` 清空 / `llmConfig` 传数组仍 400）。
+
+### 回归测试
+
+- 新增 `ProjectConfigPanel.test.tsx`（3 例）：规则列表四字段与 LLM 三字段均可被 `getByLabelText` 取到，且 `id` 与 `htmlFor` 一一对应。
+- 新增 `PreGenConfirm.test.tsx`（3 例）：人物框与作者指令框可被标签文本定位；章纲标签的 `htmlFor` 必须指向 `pregen-chapter-outline`。
+- 新增 `ConsistencyPanel.test.tsx`（3 例）：分类下拉与四个输入框均有可访问名，且可访问名与 `placeholder` 语义一致（防止改一处忘另一处）。
+
+### 门禁
+
+- 三道门禁：tsc 0 错 · vitest 170 文件 1833 测试全绿（新增 19）· next build 通过。
 ## v3.1.125 — 2026-09-12
 
 ### 世界书新建表单补齐字段标签（FORM-NO-LABEL）

@@ -9,6 +9,7 @@ import {
   optInt,
   optBool,
   optObj,
+  optObjArray,
 } from "@/lib/validators";
 import { maskLlmConfig } from "@/lib/llm-config-mask";
 
@@ -63,9 +64,11 @@ export async function PATCH(
       authorNote: optStr(raw.authorNote, "authorNote", 5000),
       globalPrompt: optStr(raw.globalPrompt, "globalPrompt", 50000),
       llmConfig: optObj(raw.llmConfig, "llmConfig"),
-      postProcessingRules: optObj(raw.postProcessingRules, "postProcessingRules"),
+      // v3.1.126：这两个字段在 schema 里是 Json 数组、消费端一律 Array.isArray，
+      // 误用 optObj 会拒绝数组 → UI「保存规则 / 保存黑名单」永远 400（FORM-LABEL-SWEEP 顺带修复）
+      postProcessingRules: optObjArray(raw.postProcessingRules, "postProcessingRules"),
       // 2.0 P2-1：用户可配置内容安全黑名单（增量叠加默认基线）
-      customSafetyRules: optObj(raw.customSafetyRules, "customSafetyRules"),
+      customSafetyRules: optObjArray(raw.customSafetyRules, "customSafetyRules"),
       // Max Loop Round4·P8：智能审阅开关 API 写入入口（此前仅 DB/UI 可切，自动化/测试无法配置）
       autoConfirmEnabled: optBool(raw.autoConfirmEnabled),
       // v1.1.0：全书智能交付自动执行开关 API 写入入口

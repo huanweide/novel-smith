@@ -77,3 +77,48 @@ describe("v1.6.40 PATCH 漏同步修复", () => {
     expect(syncMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * v3.1.126：这两个字段是 Json 数组（schema `@default("'[]'")`），前端保存时发的也是数组，
+ * 消费端（core/presets、生成路由的正则后处理）一律 Array.isArray。
+ * 之前 PATCH 用 optObj 校验 → 合法数组被判「必须是对象」→ UI「保存规则 / 保存黑名单」永远 400。
+ */
+describe("v3.1.126 PATCH 的 Json 数组字段", () => {
+  it("postProcessingRules 传数组 → 200，且原样落库（UI「保存规则」不再 400）", async () => {
+    const rules = [{ name: "去空格", pattern: "\\s+", flags: "g", replace: "" }];
+    const res = await PATCH(makePatch({ postProcessingRules: rules }), params);
+    expect(res.status).toBe(200);
+    expect(updateCalls[0].data.postProcessingRules).toEqual(rules);
+  });
+
+  it("customSafetyRules 传数组 → 200，且原样落库（UI「保存黑名单」不再 400）", async () => {
+    const rules = [{ id: "r1", pattern: "违禁词", enabled: true }];
+    const res = await PATCH(makePatch({ customSafetyRules: rules }), params);
+    expect(res.status).toBe(200);
+    expect(updateCalls[0].data.customSafetyRules).toEqual(rules);
+  });
+
+  it("postProcessingRules 传单个对象 → 400，且绝不落库", async () => {
+    const res = await PATCH(makePatch({ postProcessingRules: { name: "x" } }), params);
+    expect(res.status).toBe(400);
+    expect(updateCalls.length).toBe(0);
+  });
+
+  it("数组里混入非对象元素 → 400，且绝不落库", async () => {
+    const res = await PATCH(makePatch({ postProcessingRules: [{ name: "x" }, "坏数据"] }), params);
+    expect(res.status).toBe(400);
+    expect(updateCalls.length).toBe(0);
+  });
+
+  it("null 仍是清空语义（200，写 null 而不是报错）", async () => {
+    const res = await PATCH(makePatch({ postProcessingRules: null }), params);
+    expect(res.status).toBe(200);
+    expect(updateCalls[0].data.postProcessingRules).toBeNull();
+  });
+
+  it("llmConfig 仍按对象校验（别把数组规则误套到对象字段上）", async () => {
+    const res = await PATCH(makePatch({ llmConfig: [{ model: "x" }] }), params);
+    expect(res.status).toBe(400);
+    expect(updateCalls.length).toBe(0);
+  });
+});

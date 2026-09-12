@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon, type IconName } from "@/components/ui/icons";
+import { FormLabel } from "@/components/ui/FormLabel";
 import type { ModuleKey, WorldFieldDef } from "./worldPanelData";
 
 interface ModuleInfo {
@@ -20,30 +21,6 @@ interface WorldEditorProps {
   onSetShowCreate: (v: boolean) => void;
   onChangeField: (key: string, value: string) => void;
   onCreate: () => void;
-}
-
-/**
- * 表单字段标签。
- *
- * 为什么非要有它（v3.1.125）：这个新建表单原先每个输入框只有一个灰色 placeholder
- * （「大陆/国家/城市/宗门/秘境/禁地」这种提示语），**一打字提示就消失了**——
- * 用户填到一半回头看，根本认不出这一格是「类型」还是「所属上层地域」；
- * 读屏软件也只能念出提示语，念不出字段名。
- *
- * 关键在于字段的中文名 `f.label`（类型 / 所属上层地域 / 描述 …）**本来就在数据里**，
- * 只是从来没渲染给用户看过（它只被拿去拼正文的【标签】）。同表单的「记忆注入方式」
- * 下拉框早就有自己的标签，输入框却一直没有 —— 这里把两者统一。
- *
- * 用 htmlFor + id 显式关联（而不是像某些地方那样把 label 套在控件外面），
- * 保证读屏能真正念出字段名，而不是退回 placeholder 兜底。
- */
-function FormLabel({ htmlFor, text, required }: { htmlFor: string; text: string; required?: boolean }) {
-  return (
-    <label htmlFor={htmlFor} className="mb-0.5 block text-[10px] text-[var(--nv-text-muted)]">
-      {text}
-      {required && <span className="ml-0.5 text-[var(--nv-danger)]">*</span>}
-    </label>
-  );
 }
 
 export function WorldEditor({
