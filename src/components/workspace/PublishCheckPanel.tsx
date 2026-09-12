@@ -390,9 +390,9 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
       {/* 共享控制条 */}
       <div className="px-3 py-2 border-b border-[var(--nv-border-2)] space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">目标平台</span>
+          <label htmlFor="pc-platform" className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">目标平台</label>
           <select
-            value={platform}
+            id="pc-platform" value={platform}
             onChange={(e) => setPlatform(e.target.value as PlatformId)}
             className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
           >
@@ -516,9 +516,9 @@ function ExportTab({
 
       <div className="px-3 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">导出格式</span>
+          <label htmlFor="pc-format" className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">导出格式</label>
           <select
-            value={format}
+            id="pc-format" value={format}
             onChange={(e) => setFormat(e.target.value)}
             className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
           >
@@ -782,9 +782,9 @@ function ReviewTab({
 
       <div className="px-3 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">审稿角色</span>
+          <label htmlFor="pc-role" className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">审稿角色</label>
           <select
-            value={role}
+            id="pc-role" value={role}
             onChange={(e) => setRole(e.target.value)}
             className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
           >
@@ -797,9 +797,9 @@ function ReviewTab({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">审稿范围</span>
+          <label htmlFor="pc-scope" className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">审稿范围</label>
           <select
-            value={scope}
+            id="pc-scope" value={scope}
             onChange={(e) => setScope(e.target.value)}
             className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
           >
@@ -813,9 +813,9 @@ function ReviewTab({
 
         {scope === "single" && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">选择章节</span>
+            <label htmlFor="pc-single-node" className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">选择章节</label>
             <select
-              value={singleNodeId}
+              id="pc-single-node" value={singleNodeId}
               onChange={(e) => setSingleNodeId(e.target.value)}
               className="flex-1 rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-1.5 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
             >
@@ -831,7 +831,7 @@ function ReviewTab({
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[var(--nv-text-tertiary)]">提示词（可编辑）</span>
+            <label htmlFor="pc-system-prompt" className="text-[10px] text-[var(--nv-text-tertiary)]">提示词（可编辑）</label>
             <button
               onClick={saveCustom}
               className="flex items-center gap-1 text-[10px] text-[var(--nv-primary)] hover:underline"
@@ -840,7 +840,7 @@ function ReviewTab({
             </button>
           </div>
           <textarea
-            value={systemPrompt}
+            id="pc-system-prompt" value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
             rows={6}
             className="w-full rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1.5 text-[10px] leading-snug text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)] font-mono resize-y"
