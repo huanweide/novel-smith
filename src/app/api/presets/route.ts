@@ -5,21 +5,25 @@ import { validatePresetContent } from "@/core/presets/validate";
 
 // GET /api/presets?type=&tag=&q= —— 创意工坊浏览（公开预设）
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get("type");
-  const tag = searchParams.get("tag");
-  const q = searchParams.get("q");
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+    const tag = searchParams.get("tag");
+    const q = searchParams.get("q");
 
-  const where: any = { isPublic: true };
-  if (type) where.type = type;
-  if (tag) where.tags = { contains: tag };
-  if (q) where.OR = [{ title: { contains: q } }, { description: { contains: q } }];
+    const where: any = { isPublic: true };
+    if (type) where.type = type;
+    if (tag) where.tags = { contains: tag };
+    if (q) where.OR = [{ title: { contains: q } }, { description: { contains: q } }];
 
-  const presets = await prisma.preset.findMany({
-    where,
-    orderBy: [{ downloads: "desc" }, { createdAt: "desc" }],
-  });
-  return NextResponse.json(presets);
+    const presets = await prisma.preset.findMany({
+      where,
+      orderBy: [{ downloads: "desc" }, { createdAt: "desc" }],
+    });
+    return NextResponse.json(presets);
+  } catch (err) {
+    return jsonError(err);
+  }
 }
 
 // POST /api/presets —— 用户上传共享预设（创意工坊共创）

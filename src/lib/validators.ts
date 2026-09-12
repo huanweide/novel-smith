@@ -39,6 +39,15 @@ export function asStr(v: unknown, field: string, opts: StrOpts = {}): string {
     return opts.fallback ?? "";
   }
   if (typeof v !== "string") throw new ValidationError(field, `${field} 必须是字符串`);
+  // 「必填」不等于「传了 undefined」——空串和纯空格同样是「没填」。
+  //
+  // 此前 required 只挡 undefined/null，于是 `POST /api/projects { name: "" }` 能建出
+  // 一个**没有名字的项目**：首页列表里一张空白卡片，用户既认不出是哪个、也删不干净。
+  // 同理，空的 projectId 会造出查不到的孤儿行。v3.1.124 黑箱实测暴露（BLANK-REQUIRED）。
+  //
+  // 只做校验、不做 trim 后再返回：保留作者原文（正文里的首尾空白可能是有意的）。
+  if (opts.required && v.trim() === "")
+    throw new ValidationError(field, `${field} 不能为空`);
   if (opts.max && v.length > opts.max)
     throw new ValidationError(field, `${field} 长度不能超过 ${opts.max}`);
   return v;

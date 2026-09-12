@@ -27,6 +27,28 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.124",
+    date: "2026-09-12",
+    title: "API 健壮性收口：读取路由补齐统一错误契约 + Prisma P2025（记录不存在）收敛为 404（dev 下不再透传内部错误栈）",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "5 个读取路由此前缺少 try/catch 兜底：projects/[id]/chapters GET（整文件无兜底）、presets GET、projects/[id]/lore-tables GET、projects/[id]/lore-tables/[tableId] DELETE、storylines/[id] GET（ROBUST-UNGUARDED-ROUTES）",
+          "dev 模式下这些路由一旦抛错会冒泡成 Next 错误页（透传内部错误栈 / 文件路径 / 依赖细节），生产下也只是无提示的 500；统一接入 jsonError 兜底，返回泛化 {error, code, hint}，成功路径零变化（仅在错误路径上加护栏）",
+          "统一错误层补 Prisma P2025（记录不存在）→ 404：此前用 jsonError 的 delete / update 路由删除一条已被删除的记录时，会落到「其它 Prisma 错误」兜底分支，返回 503「数据库访问出错」并引导用户去跑 npx prisma db push——把「记录不存在」误导成「数据库没起来」（P2025-SAYS-DB-DOWN）",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 projects/[id]/chapters 路由错误兜底用例（1 例）：prisma 抛含 SQL/表名的异常时，断言收敛为统一脱敏响应、不透传 SQLITE_ERROR / no such table 等内部串",
+          "新增统一错误层 P2025 用例（2 例）：P2025 必须返回 404、且 hint 不再引导 npx prisma db push；P2025 命中已知映射、不被「Prisma 通用 / schema 不匹配」分支（消息含 does not exist）抢走",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.123",
     date: "2026-09-11",
     title: "接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 错误响应脱敏、ProjectCard 时间渲染确定性化",

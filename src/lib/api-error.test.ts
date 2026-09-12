@@ -48,6 +48,29 @@ describe("classifyError - Prisma 已知错误码中文映射", () => {
     const r = classifyError(e);
     expect(r).toMatchObject({ status: 503, code: "P2024", error: "数据库连接池耗尽" });
   });
+
+  it("P2025 记录不存在 → 404（不得误报成 503 数据库访问出错）", () => {
+    const e = Object.assign(
+      new Error(
+        "An operation failed because it depends on one or more records that were required but not found.",
+      ),
+      { code: "P2025" },
+    );
+    const r = classifyError(e);
+    expect(r).toMatchObject({ status: 404, code: "P2025", error: "记录不存在（可能已被删除）" });
+    // 关键回归：不能再引导用户去 prisma db push（数据库好好的，只是这行没了）
+    expect(r.hint).not.toContain("npx prisma db push");
+  });
+
+  it("P2025 命中已知映射，不被通用 Prisma / schema 不匹配分支抢走", () => {
+    const e = Object.assign(new Error("Record to delete does not exist."), {
+      code: "P2025",
+      name: "PrismaClientKnownRequestError",
+    });
+    const r = classifyError(e);
+    expect(r.status).toBe(404);
+    expect(r.code).toBe("P2025");
+  });
 });
 
 describe("classifyError - Prisma 客户端与结构不匹配", () => {
