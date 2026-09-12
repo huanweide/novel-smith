@@ -27,6 +27,38 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.126",
+    date: "2026-09-12",
+    title: "表单标签横扫（二轮）：三个面板补齐字段标签 / 可访问名 + FormLabel 提取为共享组件",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "顺带修掉一个真实功能缺陷（PATCH-ARRAY-400）：项目配置的「保存规则」与内容安全的「保存自定义黑名单」此前点下去永远保存失败——PATCH /api/projects/[id] 用 optObj 校验这两个字段，而 optObj 明确拒绝数组（Array.isArray → 抛「必须是对象」），可这两个字段在 schema 里是 Json @default('[]')（数组）、前端发的也是数组、消费端（core/presets 与生成路由的正则后处理）也一律 Array.isArray 读取，全链路都是数组、只有校验器把它当对象，于是合法数组被 400 挡在门外",
+          "项目设置面板的 11 个输入框此前全是裸 input + placeholder（正则后处理规则：规则名 / 正则 pattern / flags / 替换为，各两组；项目级 LLM 覆盖：模型名 / Base URL / API Key）——一打字提示就消失，用户填到一半认不出这一格是什么，读屏软件也念不出字段名；现全部补上可见标签，id 按规则下标生成（rule-{idx}-name 等），列表增删不会串号（FORM-LABEL-SWEEP）",
+          "生成确认弹窗的 3 处标签属于「看得见、念不出、点不到」：label 明明写着字（人物 / 作者指令 / 章纲），却既没有 htmlFor、也没有把输入框包裹进去，与控件没有任何语义关联；现补 htmlFor + id（pregen-characters / pregen-author-note / pregen-chapter-outline）（LABEL-WITHOUT-FOR）",
+          "一致性事实录入行的 5 个控件（分类 / 主体 / 属性 / 事实值 / 置信度）按设计要保持紧凑纵向版式，故改用 aria-label 而非可见标签——不增高度，但读屏与自动化都能取到字段名",
+          "把上一轮写在 WorldEditor 内部的 FormLabel 提取为共享组件 src/components/ui/FormLabel.tsx（含完整用法说明与「行内紧凑控件请改用 aria-label、id 必须唯一」的边界提示），WorldEditor 改为从共享处引用，消除重复实现",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "validators.test.ts +4 例（optObjArray：undefined 不更新 / null 清空 / 对象数组通过 / 单对象与混入非对象按下标报错）；route.test.ts +6 例（postProcessingRules 与 customSafetyRules 传数组必须 200 且原样落库，传单个对象或混入非对象必须 400 且绝不落库，null 仍为清空语义，llmConfig 传数组仍按对象校验返回 400）",
+          "新增 src/components/workspace/ProjectConfigPanel.test.tsx（3 例）：规则列表四字段与 LLM 三字段均可被 getByLabelText 取到，且 id 与 htmlFor 一一对应",
+          "新增 src/components/workspace/PreGenConfirm.test.tsx（3 例）：人物框与作者指令框可被标签文本定位；章纲标签的 htmlFor 必须指向 pregen-chapter-outline",
+          "新增 src/components/workspace/ConsistencyPanel.test.tsx（3 例）：分类下拉与四个输入框均有可访问名，且可访问名与 placeholder 语义一致（防止改一处忘另一处）",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 170 文件 1833 测试全绿（新增 19）· next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.125",
     date: "2026-09-12",
     title: "世界书新建表单补齐字段标签 + 提交按钮文案统一（表单一致性与可访问性）",
