@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.128";
+export const LATEST_VERSION = "v3.1.129";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "表单标签横扫第四轮：顺着 v3.1.125 / v3.1.126 / v3.1.127 同类的「输入框没有可被读出的字段名」问题，继续横扫到导出 / 审稿面板（PublishCheckPanel）",
-  "该面板 6 个会提交的控件（目标平台 / 导出格式 / 审稿角色 / 审稿范围 / 选择章节 / 提示词（可编辑））原先是兄弟 <span> 文字 + 无 id 的控件——看得见、读屏念不出、点文字不聚焦；现把 <span> 改为 <label htmlFor>、给每个控件补 id，一一对应关联（FORM-LABEL-SWEEP-4）",
-  "新增 PublishCheckPanel.test.tsx（2 例）：导出面板的目标平台 / 导出格式，以及切到模拟审稿后的审稿角色 / 审稿范围 / 提示词（可编辑）均可被 getByLabelText 取到且 id 与 htmlFor 对应",
-  "三道门禁：tsc 0 错 + vitest 172 文件 1839 测试全绿（新增 2）+ next build 通过",
+  "表单标签横扫第五轮：写作主面板 CenterPanel 的 3 个 placeholder-only 输入（本节点大纲草稿 / 章纲预览提示词 / 作者指令·微调指令）原先只有占位提示、读屏念不出字段名、无语义关联；现补 aria-label 让读屏能正确念出字段名（FORM-LABEL-SWEEP-5）",
+  "这 3 处是「只有 placeholder」型控件，没有兄弟可见文字标签，补可见 FormLabel 会挤占紧凑的写作工具栏版式；按 v3.1.126 一致性录入行的既定决策，用 aria-label 兜底，不破坏版式",
+  "CenterPanel 依赖 useWriterStore + 30+ props，完整渲染测试需构造复杂 selectedNode 易假绿；依 v3.1.126 先例与「避免脆弱 hook 测试」纪律，本轮未写脆弱单测，改用 tsc + 既有 1839 测试全绿 + 黑箱核心旅程 + grep 验证兜底",
+  "三道门禁：tsc 0 错 · vitest 172 文件 1839 测试全绿 · next build 通过",
 ];

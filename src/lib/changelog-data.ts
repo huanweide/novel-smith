@@ -27,6 +27,31 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.129",
+    date: "2026-09-12",
+    title: "表单标签横扫（五轮）：写作主面板 CenterPanel 3 个 placeholder-only 输入补 aria-label 关联",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "写作主面板 CenterPanel 的 3 个 placeholder-only 输入（本节点大纲草稿 / 章纲预览提示词 / 作者指令·微调指令）原先只有占位提示、读屏念不出字段名、无语义关联；现补 aria-label 让读屏能正确念出字段名（FORM-LABEL-SWEEP-5）",
+        ],
+      },
+      {
+        label: "决策",
+        items: [
+          "这 3 处是「只有 placeholder」型控件，没有兄弟可见文字标签，补可见 FormLabel 会挤占紧凑的写作工具栏版式；按 v3.1.126 一致性录入行的既定决策，用 aria-label 兜底，不破坏版式",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 172 文件 1839 测试全绿 · next build 通过；CenterPanel 依赖 useWriterStore + 30+ props，完整渲染测试需构造复杂 selectedNode 易假绿，依 v3.1.126 先例未写脆弱单测，改用 tsc + 既有 1839 测试 + 黑箱核心旅程 + grep 验证兜底",
+        ],
+      },
+    ],
+  },
+{
     version: "v3.1.128",
     date: "2026-09-12",
     title: "表单标签横扫（四轮）：导出/审稿面板 PublishCheckPanel 6 控件补齐 htmlFor / aria 关联",
