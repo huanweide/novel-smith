@@ -144,3 +144,24 @@ export function optObj(v: unknown, field: string): Record<string, unknown> | nul
   }
   return v as Record<string, unknown>;
 }
+
+/**
+ * 可选的对象数组字段（postProcessingRules / customSafetyRules 这类）。
+ *
+ * 为什么单独有它（v3.1.126 实修）：这两个字段在 schema 里都是 `Json @default("'[]'")`，
+ * 即**存的是数组**；消费端（`src/core/presets/*`、生成路由的正则后处理）也一律按
+ * `Array.isArray(...)` 读取，前端 `ProjectConfigPanel` / `SafetyTab` 保存时同样发数组。
+ * 只有 PATCH 路由误用了 `optObj`——它会明确拒绝数组（`Array.isArray(v)` → 抛「必须是对象」），
+ * 于是「保存规则」与「自定义黑名单保存」在 UI 上永远是 400「保存失败」，改动根本存不进去。
+ */
+export function optObjArray(v: unknown, field: string): Record<string, unknown>[] | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (!Array.isArray(v)) throw new ValidationError(field, `${field} 必须是数组`);
+  v.forEach((item, i) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw new ValidationError(field, `${field}[${i}] 必须是对象`);
+    }
+  });
+  return v as Record<string, unknown>[];
+}

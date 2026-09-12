@@ -19,6 +19,7 @@ import {
   optInt,
   optBool,
   optObj,
+  optObjArray,
 } from "./validators";
 
 describe("ValidationError", () => {
@@ -255,5 +256,35 @@ describe("optObj", () => {
     expect(() => optObj([], "a")).toThrow(ValidationError);
     expect(() => optObj("x", "a")).toThrow(ValidationError);
     expect(optObj({ k: 1 }, "a")).toEqual({ k: 1 });
+  });
+});
+
+/**
+ * v3.1.126：postProcessingRules / customSafetyRules 在 schema 里是 Json 数组
+ * （`@default("'[]'")`），前端保存时发的也是数组，消费端一律 Array.isArray。
+ * 之前 PATCH 误用 optObj 会拒绝数组 → UI「保存规则 / 保存黑名单」永远 400。
+ */
+describe("optObjArray（对象数组字段）", () => {
+  it("undefined 不更新、null 清空", () => {
+    expect(optObjArray(undefined, "a")).toBeUndefined();
+    expect(optObjArray(null, "a")).toBeNull();
+  });
+
+  it("对象数组原样通过（含空数组）", () => {
+    const rules = [{ name: "去空格", pattern: "\\s+", flags: "g", replace: "" }];
+    expect(optObjArray(rules, "a")).toEqual(rules);
+    expect(optObjArray([], "a")).toEqual([]);
+  });
+
+  it("单个对象 / 字符串 / 数字 抛错（这些是数组字段，不是对象字段）", () => {
+    expect(() => optObjArray({ name: "x" }, "a")).toThrow(ValidationError);
+    expect(() => optObjArray("x", "a")).toThrow(ValidationError);
+    expect(() => optObjArray(7, "a")).toThrow(ValidationError);
+  });
+
+  it("数组里混入 null / 数组 / 原始值 → 抛错并指出下标", () => {
+    expect(() => optObjArray([{ ok: 1 }, null], "r")).toThrow(/r\[1\]/);
+    expect(() => optObjArray([[]], "r")).toThrow(/r\[0\]/);
+    expect(() => optObjArray([{ ok: 1 }, "坏数据"], "r")).toThrow(/r\[1\]/);
   });
 });

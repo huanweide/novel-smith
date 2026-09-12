@@ -53,7 +53,8 @@ interface FactFormProps {
   submitting?: boolean;
 }
 
-function FactForm({ initial, onSubmit, onCancel, submitting }: FactFormProps) {
+// 导出供测试使用（v3.1.126：验证每个控件的 aria-label 可被读屏/测试取到）
+export function FactForm({ initial, onSubmit, onCancel, submitting }: FactFormProps) {
   const [category, setCategory] = useState<ConsistencyCategory>(initial.category);
   const [subject, setSubject] = useState(initial.subject);
   const [attribute, setAttribute] = useState(initial.attribute);
@@ -63,6 +64,7 @@ function FactForm({ initial, onSubmit, onCancel, submitting }: FactFormProps) {
   return (
     <div className="px-3 py-1.5 space-y-1 bg-[var(--nv-surface-3)]">
       <select
+        aria-label="一致性分类"
         value={category}
         onChange={(e) => setCategory(e.target.value as ConsistencyCategory)}
         className={inputCls}
@@ -73,10 +75,11 @@ function FactForm({ initial, onSubmit, onCancel, submitting }: FactFormProps) {
           </option>
         ))}
       </select>
-      <input className={inputCls} placeholder="主体（人名/地名/概念）" value={subject} onChange={(e) => setSubject(e.target.value)} />
-      <input className={inputCls} placeholder="属性（年龄/发色/势力…）" value={attribute} onChange={(e) => setAttribute(e.target.value)} />
-      <input className={inputCls} placeholder="事实值" value={value} onChange={(e) => setValue(e.target.value)} />
+      <input aria-label="主体" className={inputCls} placeholder="主体（人名/地名/概念）" value={subject} onChange={(e) => setSubject(e.target.value)} />
+      <input aria-label="属性" className={inputCls} placeholder="属性（年龄/发色/势力…）" value={attribute} onChange={(e) => setAttribute(e.target.value)} />
+      <input aria-label="事实值" className={inputCls} placeholder="事实值" value={value} onChange={(e) => setValue(e.target.value)} />
       <input
+        aria-label="置信度"
         className={inputCls}
         placeholder="置信度 0~1"
         value={confidence}

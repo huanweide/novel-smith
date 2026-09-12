@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/ui/icons";
+import { FormLabel } from "@/components/ui/FormLabel";
 import { Modal } from "@/components/ui/Modal";
 import { toastError } from "@/components/ui/toast";
 
@@ -220,7 +221,7 @@ export function ProjectConfigPanel({
                     className="flex items-center justify-between gap-3 rounded-xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex gap-2">
                         <span className="rounded-md bg-[var(--nv-primary)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--nv-primary)]">
                           {PRESET_TYPE_LABEL[p.type] || p.type}
                         </span>
@@ -309,13 +310,17 @@ export function ProjectConfigPanel({
                     key={idx}
                     className="rounded-xl border border-[var(--nv-border-1)] bg-[var(--nv-surface-1)] p-3 space-y-2"
                   >
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={r.name}
-                        onChange={(e) => updateRule(idx, "name", e.target.value)}
-                        placeholder="规则名"
-                        className="flex-1 rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-                      />
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1">
+                        <FormLabel htmlFor={`rule-${idx}-name`} text="规则名" />
+                        <input
+                          id={`rule-${idx}-name`}
+                          value={r.name}
+                          onChange={(e) => updateRule(idx, "name", e.target.value)}
+                          placeholder="规则名"
+                          className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                        />
+                      </div>
                       <button
                         onClick={() => setRules((rs) => rs.filter((_, i) => i !== idx))}
                         className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--nv-text-muted)] hover:bg-danger/10 hover:text-danger transition"
@@ -323,26 +328,38 @@ export function ProjectConfigPanel({
                         删除
                       </button>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1">
+                        <FormLabel htmlFor={`rule-${idx}-pattern`} text="正则 pattern（如 &nbsp;）" />
+                        <input
+                          id={`rule-${idx}-pattern`}
+                          value={r.pattern}
+                          onChange={(e) => updateRule(idx, "pattern", e.target.value)}
+                          placeholder="正则 pattern（如 &nbsp;）"
+                          className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                        />
+                      </div>
+                      <div className="w-16 shrink-0">
+                        <FormLabel htmlFor={`rule-${idx}-flags`} text="flags" />
+                        <input
+                          id={`rule-${idx}-flags`}
+                          value={r.flags || ""}
+                          onChange={(e) => updateRule(idx, "flags", e.target.value)}
+                          placeholder="flags"
+                          className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <FormLabel htmlFor={`rule-${idx}-replace`} text="替换为（留空=删除匹配内容）" />
                       <input
-                        value={r.pattern}
-                        onChange={(e) => updateRule(idx, "pattern", e.target.value)}
-                        placeholder="正则 pattern（如 &nbsp;）"
-                        className="flex-1 rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-                      />
-                      <input
-                        value={r.flags || ""}
-                        onChange={(e) => updateRule(idx, "flags", e.target.value)}
-                        placeholder="flags"
-                        className="w-16 rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                        id={`rule-${idx}-replace`}
+                        value={r.replace}
+                        onChange={(e) => updateRule(idx, "replace", e.target.value)}
+                        placeholder="替换为（留空=删除匹配内容）"
+                        className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
                       />
                     </div>
-                    <input
-                      value={r.replace}
-                      onChange={(e) => updateRule(idx, "replace", e.target.value)}
-                      placeholder="替换为（留空=删除匹配内容）"
-                      className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-                    />
                   </div>
                 ))}
               </div>
@@ -368,25 +385,37 @@ export function ProjectConfigPanel({
               留空则继承全局设置（设置页）。填写后，本项目生成优先使用以下配置。
             </p>
             <div className="space-y-2">
-              <input
-                value={(llm.model as string) || ""}
-                onChange={(e) => setLlm((l) => ({ ...l, model: e.target.value }))}
-                placeholder="模型名（如 deepseek-chat）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
-              <input
-                value={(llm.baseUrl as string) || ""}
-                onChange={(e) => setLlm((l) => ({ ...l, baseUrl: e.target.value }))}
-                placeholder="Base URL（如 https://api.deepseek.com）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
-              <input
-                value={(llm.apiKey as string) || ""}
-                onChange={(e) => setLlm((l) => ({ ...l, apiKey: e.target.value }))}
-                placeholder="API Key（留空继承全局）"
-                type="password"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
+              <div>
+                <FormLabel htmlFor={"proj-llm-model"} text="模型名" />
+                <input
+                  id={"proj-llm-model"}
+                  value={(llm.model as string) || ""}
+                  onChange={(e) => setLlm((l) => ({ ...l, model: e.target.value }))}
+                  placeholder="模型名（如 deepseek-chat）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
+              <div>
+                <FormLabel htmlFor={"proj-llm-baseurl"} text="Base URL" />
+                <input
+                  id={"proj-llm-baseurl"}
+                  value={(llm.baseUrl as string) || ""}
+                  onChange={(e) => setLlm((l) => ({ ...l, baseUrl: e.target.value }))}
+                  placeholder="Base URL（如 https://api.deepseek.com）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
+              <div>
+                <FormLabel htmlFor={"proj-llm-apikey"} text="API Key" />
+                <input
+                  id={"proj-llm-apikey"}
+                  value={(llm.apiKey as string) || ""}
+                  onChange={(e) => setLlm((l) => ({ ...l, apiKey: e.target.value }))}
+                  placeholder="API Key（留空继承全局）"
+                  type="password"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
             </div>
             <div className="mt-2 flex items-center gap-3">
               <button
@@ -419,30 +448,46 @@ export function ProjectConfigPanel({
               保存后，生成完成阶段会用此正则对正文做替换/清洗（后处理），不影响 AI 写作时的提示词。
             </p>
             <div className="space-y-2">
-              <input
-                value={draft.name}
-                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder="规则名（如：去除&nbsp;）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
-              <input
-                value={draft.pattern}
-                onChange={(e) => setDraft((d) => ({ ...d, pattern: e.target.value }))}
-                placeholder="正则 pattern（如 &nbsp;）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
-              <input
-                value={draft.flags || ""}
-                onChange={(e) => setDraft((d) => ({ ...d, flags: e.target.value }))}
-                placeholder="flags（默认 g）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
-              <input
-                value={draft.replace}
-                onChange={(e) => setDraft((d) => ({ ...d, replace: e.target.value }))}
-                placeholder="替换为（留空=删除匹配内容）"
-                className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
-              />
+              <div>
+                <FormLabel htmlFor={"new-rule-name"} text="规则名" />
+                <input
+                  id={"new-rule-name"}
+                  value={draft.name}
+                  onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                  placeholder="规则名（如：去除&nbsp;）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
+              <div>
+                <FormLabel htmlFor={"new-rule-pattern"} text="正则 pattern（如 &nbsp;）" />
+                <input
+                  id={"new-rule-pattern"}
+                  value={draft.pattern}
+                  onChange={(e) => setDraft((d) => ({ ...d, pattern: e.target.value }))}
+                  placeholder="正则 pattern（如 &nbsp;）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
+              <div>
+                <FormLabel htmlFor={"new-rule-flags"} text="flags" />
+                <input
+                  id={"new-rule-flags"}
+                  value={draft.flags || ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, flags: e.target.value }))}
+                  placeholder="flags（默认 g）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
+              <div>
+                <FormLabel htmlFor={"new-rule-replace"} text="替换为（留空=删除匹配内容）" />
+                <input
+                  id={"new-rule-replace"}
+                  value={draft.replace}
+                  onChange={(e) => setDraft((d) => ({ ...d, replace: e.target.value }))}
+                  placeholder="替换为（留空=删除匹配内容）"
+                  className="w-full rounded-lg border border-[var(--nv-border-1)] bg-[var(--nv-void)] px-2 py-1.5 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-primary)]"
+                />
+              </div>
             </div>
             {draftErr && <p className="text-[11px] text-[var(--nv-warning)]">{draftErr}</p>}
             <div className="flex gap-3">
