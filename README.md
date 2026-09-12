@@ -15,11 +15,30 @@
 
 `TypeScript` · `Local-First` · `分层记忆引擎` · `中文长篇` · `去 AI 味（本地过审）` · `数据不出本机 · 隐私零上传`
 
-[🖼 界面预览](https://novel-forge-nu.vercel.app) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
+[⚡ 30 秒试用 · 不用配 Key](https://novel-forge-nu.vercel.app/detector) · [🖼 界面预览](https://novel-forge-nu.vercel.app) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
 
 **当前版本：v3.1.134** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
 
-> **关于在线预览**：上面那个链接只能**看界面长什么样**，点进去做不了实际操作 —— 因为它跑在只读的云环境里，而 Novel Smith 的数据全部要写进本地 SQLite 文件。**完整功能请按下面的「快速开始」在你自己电脑上跑**，两分钟就能起来。
+**先花 30 秒试一下（不用配 Key、不用安装）**
+
+打开 **[在线 demo 里的「去 AI 味检测」](https://novel-forge-nu.vercel.app/detector)**，粘贴一段你自己的文字 —— 立刻拿到检测报告：命中了哪些 AI 痕迹、每处的原文片段、为什么算 AI 味、可以怎么改。
+
+这一步**全程在你浏览器里跑**：不联网、不上传、不需要 API Key。它用的正是本项目最核心的差异化能力（本地规则引擎）。
+
+**想用完整功能？在自己电脑上两分钟跑起来**
+
+生成正文、拆书、角色与世界书管理这些功能要写本地 SQLite 文件，所以需要在你自己的机器上运行。步骤见下方 [快速开始](#快速开始)。**你的文字不出本机。**
+
+**哪些功能不需要 Key**
+
+| 功能 | 需要 API Key |
+|---|---|
+| 去 AI 味检测、本地过审自检 | **不需要** —— 纯本地规则引擎 |
+| 字数统计、一致性检查、伏笔追踪、角色关系图 | 不需要 |
+| 拆书分析、导出 Word / EPUB | 不需要 |
+| AI 生成正文、续写、精修、角色对话 | 需要（用你自己的 Key） |
+
+> 在线 demo 跑在无状态云环境（写不了本地文件），所以只有「不需要写库」的功能能在线上体验；完整功能请在本地跑。
 
 ---
 

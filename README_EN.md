@@ -12,15 +12,30 @@
 
 `TypeScript` · `Local-First` · `Tiered Memory Engine` · `Long-Form Web Novels` · `Data Stays on Your Machine`
 
-[🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
+[⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
 **Current Version: v3.1.134** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
-> **About the UI Preview**: the link above only shows **what the interface looks like** — it cannot actually be used. It runs in a read-only cloud environment, while Novel Smith needs to write into a local SQLite file. **Run it on your own machine via "Quick Start" below** — it takes about two minutes.
+**Try it in 30 seconds — no API key, nothing to install**
 
-> **No API key yet?** You can still try the most distinctive feature right away: after starting the app, open
-> `/detector`, paste any text, and instantly see how "machine-written" it reads — a fully local rule engine,
-> no API key, no upload, and your draft never leaves your machine.
+Open the **[AI-trace detector in the live demo](https://novel-forge-nu.vercel.app/detector)** and paste any text of your own. You get a real report instantly: which AI-writing patterns were hit, the exact snippets, why each one counts, and how to fix it.
+
+This part **runs entirely in your browser** — no network calls, no upload, no API key. It is the project's core differentiator (a local rule engine) in action.
+
+**Want the full feature set? Run it locally in two minutes**
+
+Chapter generation, book dissection, character and lore management all write into a local SQLite file, so they need to run on your own machine. See [Quick Start](#quick-start). **Your drafts never leave your computer.**
+
+**What works without an API key**
+
+| Feature | Needs an API key |
+|---|---|
+| AI-trace detector, local review self-check | **No** — fully local rule engine |
+| Word count, consistency checks, foreshadow tracking, relationship graph | No |
+| Book dissection, export to Word / EPUB | No |
+| Chapter generation, continuation, refinement, character chat | Yes (bring your own key) |
+
+> The live demo runs in a stateless cloud environment (it cannot write local files), so only the parts that need no database are usable online. For everything else, run it locally.
 
 ---
 
