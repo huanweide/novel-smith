@@ -11,6 +11,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { jsonError } from "@/lib/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -115,9 +116,6 @@ export async function GET(req: Request) {
       timeSpanMs,
     });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return jsonError(e);
   }
 }
