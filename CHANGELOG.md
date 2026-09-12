@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.131 — 2026-09-12
+
+### 修主题切换：点「夜航」菜单被顶栏裁掉、无法切换（THEME-MENU-CLIP）
+
+- **修复**：首页顶栏点「夜航」主题按钮后菜单不出现、无法切换主题。根因是装主题按钮的顶栏容器带 `overflow-x-auto`，该属性会把 `overflow-y` 一并计算为 `auto`，于是 `absolute top-full` 的下拉菜单被容器裁掉，点开也看不见。
+- **修法**：主题菜单改用 React Portal 渲染到 `document.body` + `fixed` 定位（按按钮 `getBoundingClientRect` 计算），彻底脱离任何祖先 overflow / transform 裁剪；三处挂载点（首页顶栏 / 设置页「外观」区 / 系统状态横幅）一并受益。
+- **交互增强**：右键主题按钮快速循环切换下一档（夜航→白昼→苍青）；Esc 关闭菜单；滚动或缩放时菜单跟随按钮重新定位；菜单项补齐 `role=menuitemradio` / `aria-checked` 语义与勾选态。
+- **测试**：新增 src/components/ui/ThemeToggle.test.tsx（5 例）——菜单必须挂在 `document.body`（防止再次落入 overflow 容器被裁）、选中后 html class 与 localStorage 生效、Esc 关闭、右键循环。
+- **门禁**：tsc 0 错 · vitest 175 文件 1853 测试全绿 · next build 通过。
 ## v3.1.130 — 2026-09-12
 
 ### 实时写作教练：把六维本地质量分析变成边写边看的体验（WRITING-COACH）
