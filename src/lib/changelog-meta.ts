@@ -32,13 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.127";
+export const LATEST_VERSION = "v3.1.128";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "表单标签横扫第三轮：顺着 v3.1.125 / v3.1.126 同类的「输入框没有可被读出的字段名」问题，继续横扫到「项目设定」保存对话框（BUILD-CONFIG-DIALOG）",
-  "该对话框 9 个配置字段（书名 / 类型 / 受众 / 字数 / 情节结构 / 风格偏好 / 力量体系 / 金手指 / 核心冲突）原先是裸 <label> 兄弟节点 + 无 id 的控件——看得见、读屏念不出、点标签不聚焦；现给每个控件补 id、给 Field 补 htmlFor，一一对应关联",
-  "流派标签搜索框原先只有 placeholder、无可见标签也无 aria-label，补 aria-label=「搜索流派标签」，纳入读屏与自动化可定位范围",
-  "新增 BuildConfigDialog.test.tsx（4 例）：9 字段均可被 getByLabelText 取到且 id 与 htmlFor 对应、搜索框通过 aria-label 获得可访问名、标签的 htmlFor 指向真实存在的控件 id",
-  "三道门禁：tsc 0 错 + vitest 171 文件 1837 测试全绿（新增 4）+ next build 通过",
+  "表单标签横扫第四轮：顺着 v3.1.125 / v3.1.126 / v3.1.127 同类的「输入框没有可被读出的字段名」问题，继续横扫到导出 / 审稿面板（PublishCheckPanel）",
+  "该面板 6 个会提交的控件（目标平台 / 导出格式 / 审稿角色 / 审稿范围 / 选择章节 / 提示词（可编辑））原先是兄弟 <span> 文字 + 无 id 的控件——看得见、读屏念不出、点文字不聚焦；现把 <span> 改为 <label htmlFor>、给每个控件补 id，一一对应关联（FORM-LABEL-SWEEP-4）",
+  "新增 PublishCheckPanel.test.tsx（2 例）：导出面板的目标平台 / 导出格式，以及切到模拟审稿后的审稿角色 / 审稿范围 / 提示词（可编辑）均可被 getByLabelText 取到且 id 与 htmlFor 对应",
+  "三道门禁：tsc 0 错 + vitest 172 文件 1839 测试全绿（新增 2）+ next build 通过",
 ];
