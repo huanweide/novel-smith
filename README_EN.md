@@ -17,6 +17,8 @@
 **Current Version: v3.1.134** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
+![AI Trace Detector Demo](docs/screenshots/demo.gif)
+
 
 Open the **[AI-trace detector in the live demo](https://novel-forge-nu.vercel.app/detector)** and paste any text of your own. You get a real report instantly: which AI-writing patterns were hit, the exact snippets, why each one counts, and how to fix it.
 
