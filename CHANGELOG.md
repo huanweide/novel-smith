@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.130 — 2026-09-12
+
+### 实时写作教练：把六维本地质量分析变成边写边看的体验（WRITING-COACH）
+
+- **新功能**：写作台右侧新增「教练」顶栏 tab（src/components/workspace/WritingCoachPanel.tsx）。作者写作时实时（300ms 防抖）对当前节点正文跑六维本地质量分析——废词率、展示vs讲述比、视角一致性、句式多样性、对话自然度、主语多样性——边打字边给出综合质量分、各维分数条、具体问题清单，以及可落手的中文改法建议。
+- **护城河**：复用 src/core/quality/quality-analyzer 的纯本地规则引擎（正则+统计、零 Token），全部在浏览器本地计算、文本不出本机，契合「数据本地零外泄 + 本地规则引擎」护城河。分析内核抽成 src/core/quality/coach.ts 纯函数（含中文教练话术映射），不依赖任何云端。
+- **测试**：新增 src/core/quality/coach.test.ts（6 例）+ src/components/workspace/WritingCoachPanel.test.tsx（3 例）；完整 vitest 174 文件 1848 测试全绿（新增 9）。
+- **门禁**：tsc 0 错 · vitest 174 文件 1848 测试全绿 · next build 通过。
+
 ## v3.1.129 — 2026-09-12
 
 ### 表单标签横扫（五轮）：写作主面板 CenterPanel 3 个 placeholder-only 输入补 aria-label 关联（FORM-LABEL-SWEEP-5）

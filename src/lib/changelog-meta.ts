@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.129";
+export const LATEST_VERSION = "v3.1.130";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "表单标签横扫第五轮：写作主面板 CenterPanel 的 3 个 placeholder-only 输入（本节点大纲草稿 / 章纲预览提示词 / 作者指令·微调指令）原先只有占位提示、读屏念不出字段名、无语义关联；现补 aria-label 让读屏能正确念出字段名（FORM-LABEL-SWEEP-5）",
-  "这 3 处是「只有 placeholder」型控件，没有兄弟可见文字标签，补可见 FormLabel 会挤占紧凑的写作工具栏版式；按 v3.1.126 一致性录入行的既定决策，用 aria-label 兜底，不破坏版式",
-  "CenterPanel 依赖 useWriterStore + 30+ props，完整渲染测试需构造复杂 selectedNode 易假绿；依 v3.1.126 先例与「避免脆弱 hook 测试」纪律，本轮未写脆弱单测，改用 tsc + 既有 1839 测试全绿 + 黑箱核心旅程 + grep 验证兜底",
-  "三道门禁：tsc 0 错 · vitest 172 文件 1839 测试全绿 · next build 通过",
+  "新增「教练」右侧顶栏 tab（WritingCoachPanel）：作者写作时实时（300ms 防抖）对当前节点正文跑六维本地质量分析——废词率 / 展示vs讲述 / 视角一致性 / 句式多样性 / 对话自然度 / 主语多样性，边打字边给分数、问题清单与中文改法建议（WRITING-COACH）",
+  "六维分析复用 src/core/quality/quality-analyzer 的纯本地规则引擎（正则+统计、零 Token），全部在浏览器本地计算、文本不出本机，契合「数据本地零外泄 + 本地规则引擎」护城河",
+  "分析内核抽成 src/core/quality/coach.ts 纯函数（含中文教练话术映射），不依赖任何云端；组件/WritingCoachPanel 标注本地实时·零外泄",
+  "三道门禁：tsc 0 错 · vitest 174 文件 1848 测试全绿 · next build 通过（新增 coach.test.ts 6 例 + WritingCoachPanel.test.tsx 3 例）"
 ];

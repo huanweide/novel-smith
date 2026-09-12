@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.129 |
+| 包名 / 版本 | `novel-smith` v3.1.130 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.129 表单标签横扫（五轮）：写作主面板 CenterPanel 3 个 placeholder-only 输入补 aria-label 关联（FORM-LABEL-SWEEP-5）`（2026-09-12，Latest） |
+| 最新 Release | `v3.1.130 实时写作教练：把六维本地质量分析变成边写边看的体验（WRITING-COACH）`（2026-09-12，Latest）
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -100,6 +100,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 ## 五、版本更新记录（最新在上）
 
+### v3.1.130 — 2026-09-12 — 实时写作教练：把六维本地质量分析变成边写边看的体验（WRITING-COACH）
 ### v3.1.129 — 2026-09-12 — 表单标签横扫（五轮）：写作主面板 CenterPanel 3 个 placeholder-only 输入补 aria-label（FORM-LABEL-SWEEP-5）
 ### v3.1.128 — 2026-09-12 — 表单标签横扫（四轮）：导出/审稿面板 PublishCheckPanel 6 控件补齐 htmlFor / aria 关联（FORM-LABEL-SWEEP-4）
 ### v3.1.127 — 2026-09-12 — 表单标签横扫（三轮）：项目设定对话框 9 字段 + 标签搜索框补齐 htmlFor / aria-label 关联（FORM-LABEL-SWEEP-3）
