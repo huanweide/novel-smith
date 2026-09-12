@@ -32,16 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.126";
+export const LATEST_VERSION = "v3.1.127";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "表单标签横扫第二轮：继上一轮修好世界书新建表单后，顺着同一类问题把全站表单控件过了一遍，又揪出三处「输入框没有可被读出的字段名」（FORM-LABEL-SWEEP）",
-  "顺带揪出并修掉一个真实功能缺陷：项目配置的「保存规则」与内容安全的「保存自定义黑名单」点下去**永远提示保存失败**——PATCH 把这两个 Json 数组字段误当对象校验，合法数组被判「必须是对象」直接 400，用户改完规则根本存不进去（PATCH-ARRAY-400）",
-  "① 项目设置面板 11 个裸 input 补可见标签：正则后处理规则的 规则名 / 正则 pattern / flags / 替换为（列表内与新增弹窗各一组）+ 项目级 LLM 覆盖的 模型名 / Base URL / API Key；id 按规则下标生成，列表增删不串号",
-  "② 生成确认弹窗 3 处「看得见、念不出、点不到」：标签明明写着字却没有 htmlFor、也没把控件包进去，与输入框毫无语义关联；现补 htmlFor + id（LABEL-WITHOUT-FOR）",
-  "③ 一致性事实录入行的 5 个控件（分类 / 主体 / 属性 / 事实值 / 置信度）按设计要保持紧凑，改用 aria-label——不破版式，读屏与自动化都能定位",
-  "把上一轮写在 WorldEditor 内部的 FormLabel 提取为共享组件 src/components/ui/FormLabel.tsx（含「行内紧凑控件请改用 aria-label、id 必须唯一」的边界说明），WorldEditor 改为引用，消除重复",
-  "新增测试 19 例：3 个组件测试文件 9 例（标签与可访问名）、validators 对象数组校验 4 例、PATCH 路由数组字段 6 例（数组 200 且原样落库 / 单个对象 400 且不落库 / 混入非对象 400 / null 清空 / llmConfig 传数组仍 400）",
-  "三道门禁：tsc 0 错 + vitest 170 文件 1833 测试全绿 + next build 通过",
+  "表单标签横扫第三轮：顺着 v3.1.125 / v3.1.126 同类的「输入框没有可被读出的字段名」问题，继续横扫到「项目设定」保存对话框（BUILD-CONFIG-DIALOG）",
+  "该对话框 9 个配置字段（书名 / 类型 / 受众 / 字数 / 情节结构 / 风格偏好 / 力量体系 / 金手指 / 核心冲突）原先是裸 <label> 兄弟节点 + 无 id 的控件——看得见、读屏念不出、点标签不聚焦；现给每个控件补 id、给 Field 补 htmlFor，一一对应关联",
+  "流派标签搜索框原先只有 placeholder、无可见标签也无 aria-label，补 aria-label=「搜索流派标签」，纳入读屏与自动化可定位范围",
+  "新增 BuildConfigDialog.test.tsx（4 例）：9 字段均可被 getByLabelText 取到且 id 与 htmlFor 对应、搜索框通过 aria-label 获得可访问名、标签的 htmlFor 指向真实存在的控件 id",
+  "三道门禁：tsc 0 错 + vitest 171 文件 1837 测试全绿（新增 4）+ next build 通过",
 ];
