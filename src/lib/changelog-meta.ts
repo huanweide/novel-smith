@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.130";
+export const LATEST_VERSION = "v3.1.131";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "新增「教练」右侧顶栏 tab（WritingCoachPanel）：作者写作时实时（300ms 防抖）对当前节点正文跑六维本地质量分析——废词率 / 展示vs讲述 / 视角一致性 / 句式多样性 / 对话自然度 / 主语多样性，边打字边给分数、问题清单与中文改法建议（WRITING-COACH）",
-  "六维分析复用 src/core/quality/quality-analyzer 的纯本地规则引擎（正则+统计、零 Token），全部在浏览器本地计算、文本不出本机，契合「数据本地零外泄 + 本地规则引擎」护城河",
-  "分析内核抽成 src/core/quality/coach.ts 纯函数（含中文教练话术映射），不依赖任何云端；组件/WritingCoachPanel 标注本地实时·零外泄",
-  "三道门禁：tsc 0 错 · vitest 174 文件 1848 测试全绿 · next build 通过（新增 coach.test.ts 6 例 + WritingCoachPanel.test.tsx 3 例）"
-];
+  "修复「点主题按钮没反应、无法切换」：首页顶栏「夜航」按钮的下拉菜单原为 absolute top-full，而父容器带 overflow-x-auto（会把 overflow-y 一并算成 auto）导致菜单被整块裁掉，点开也看不见（THEME-MENU-CLIP）",
+  "主题菜单改用 React Portal 渲染到 document.body + fixed 定位（按按钮 rect 计算），彻底脱离任何祖先 overflow / transform 裁剪；首页顶栏 / 设置页外观区 / 系统状态横幅三处挂载点一并受益",
+  "交互增强：右键主题按钮快速循环切换下一档（夜航→白昼→苍青）；Esc 关闭；滚动或缩放时菜单跟随定位；菜单项补齐 role=menuitemradio 与 aria-checked 语义",
+  "门禁：tsc 0 错 · vitest 175 文件 1853 测试全绿（新增 ThemeToggle.test.tsx 5 例）· next build 通过"
+]
