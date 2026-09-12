@@ -1,5 +1,18 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.123 — 2026-09-11
+
+### 接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 脱敏、ProjectCard 时间渲染确定性化
+
+- **问题①（真实隐患）**：generation-metrics 路由（生成延迟硬指标聚合）的 GET 在 catch 里把原始 `e.message` 直接以 500 抛给前端，绕过全站统一的 `jsonError` 脱敏层，会把 SQL 片段 / 表名 / 列名等内部细节泄露给客户端（SEC-LEAK-GENMETRICS）。
+- **修法①**：catch 改为调用 `jsonError(e)`，返回统一 `{error, code, hint}` 泛化形态；前端 `GenerationLatencyPanel` 仅在 `!d.ok` 时显示泛化错误文案、从不渲染原始异常，零回归。
+- **问题②（真实隐患）**：首页 `ProjectCard` 在渲染期用 `new Date()` 计算相对时间，SSR 与客户端 hydrate 时刻不同 → 文本不一致，触发 **React #418** 水合告警（首屏会丢弃并重渲染）。
+- **修法②**：改为「SSR/首屏渲染确定性绝对日期（`formatAbsoluteDate`：固定 UTC+8、不用 ICU、不依赖当前时间）+ 挂载后经 `useEffect` 升级为相对时间并每 60s 自更新」，与同文件 `InspirationSpark` 既有范式一致。
+- **回归测试**：新增 `src/app/api/generation-metrics/route.test.ts` 错误脱敏用例（1 例）；前端 Playwright 黑箱 3 轮（首页/设置页/更新页）——密钥脱敏、版本号、零 JS 异常全通过。
+
+### 门禁
+
+- 三道门禁：tsc 0 错 · vitest 165 文件 1797 测试全绿（新增 1）· next build 通过。
 ## v3.1.122 — 2026-09-11
 
 ### 接口安全第三轮扫描收口：game/state 错误响应接入统一脱敏层

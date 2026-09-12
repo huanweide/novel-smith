@@ -587,7 +587,15 @@ function InspirationSpark({ onStart }: { onStart: (genreId: string, text: string
 // ─── 子组件：项目卡片 ───────────────────────────────────────
 
 function ProjectCard({ project, onDelete, deletingId, onRenamed, index = 0 }: { project: ProjectSummary; onDelete: () => void; deletingId: string | null; onRenamed?: () => void; index?: number; }) {
-  const timeAgo = getTimeAgo(new Date(project.updatedAt));
+  // SSR/水合首屏渲染确定性绝对日期（不依赖当前时间，避免 hydration #418 文本不匹配）；
+  // 挂载后升级为相对时间并每分钟自更新。与 InspirationSpark 的「确定性初值 + useEffect」范式一致。
+  const [timeAgo, setTimeAgo] = useState(() => formatAbsoluteDate(new Date(project.updatedAt)));
+  useEffect(() => {
+    const update = () => setTimeAgo(getTimeAgo(new Date(project.updatedAt)));
+    update();
+    const timer = window.setInterval(update, 60000);
+    return () => window.clearInterval(timer);
+  }, [project.updatedAt]);
   const spine = genreColor(project.genre);
   // 虚空特效位置随作品变化（每本书的悬浮"虚空"不同）
   const vx = 18 + (index * 37) % 64;
@@ -829,6 +837,13 @@ function getTimeAgo(date: Date): string {
   if (hours < 24) return `${hours} 小时前`;
   if (days < 30) return `${days} 天前`;
   return date.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" });
+}
+
+// 固定 Asia/Shanghai（UTC+8）手工格式化 YYYY-MM-DD：
+// 只依赖 updatedAt、不依赖「当前时间」与 ICU，保证 SSR 与客户端首屏逐字一致（hydration 安全）。
+function formatAbsoluteDate(date: Date): string {
+  const t = new Date(date.getTime() + 8 * 3600 * 1000);
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
 function formatWordCount(n: number): string {

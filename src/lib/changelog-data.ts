@@ -27,6 +27,28 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.123",
+    date: "2026-09-11",
+    title: "接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 错误响应脱敏、ProjectCard 时间渲染确定性化",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "generation-metrics 路由（生成延迟硬指标聚合）的 GET 在 catch 里把原始 e.message 直接以 500 抛给前端，绕过了全站统一的 jsonError 脱敏层，会把 SQL 片段 / 表名 / 列名等内部细节泄露给客户端（SEC-LEAK-GENMETRICS）",
+          "catch 改为调用 jsonError(e)，返回统一 {error, code, hint} 泛化形态（未知错误：服务器内部错误，请查看日志；Prisma 错误：数据库表不存在等可读说明）；前端 GenerationLatencyPanel 仅在 !d.ok 时显示泛化错误文案、从不渲染原始异常，本次改动零回归",
+          "修复首页水合不一致（React #418）：ProjectCard 此前在渲染期用 new Date() 计算相对时间，SSR 与客户端 hydrate 时刻不同 → 文本不匹配报警；改为 SSR/首屏渲染确定性绝对日期（formatAbsoluteDate，固定 UTC+8、不用 ICU、不依赖当前时间），挂载后经 useEffect 升级为相对时间并每 60s 自更新，与同文件 InspirationSpark 的「确定性初值 + useEffect」范式一致",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 src/app/api/generation-metrics/route.test.ts 错误脱敏用例（1 例）：findMany 抛含原始 SQL 的异常时，断言响应不含 llm_call_log / does not exist 等内部串、error 为泛化文案、status 500、带 hint",
+          "前端黑箱（Playwright + 系统 Chrome，3 轮）：首页渲染无未捕获 JS 异常、/api/settings 网络响应密钥已打码且输入框不含明文、更新页含最新版本号 —— 修复后首页 #418 消失，全轮通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.122",
     date: "2026-09-11",
     title: "接口安全第三轮扫描收口：game/state 错误响应接入统一脱敏层，不再回显原始异常",
