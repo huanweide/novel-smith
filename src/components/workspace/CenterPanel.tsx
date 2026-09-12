@@ -820,7 +820,7 @@ export function CenterPanel({
               {editingOutline ? (
                 <div className="flex gap-2">
                   <textarea className="input-glass flex-1 rounded-lg px-3 py-2 text-xs resize-none" rows={3}
-                    value={outlineDraft} onChange={(e) => setOutlineDraft(e.target.value)} placeholder="输入本节点大纲…" />
+                    value={outlineDraft} onChange={(e) => setOutlineDraft(e.target.value)} placeholder="输入本节点大纲…" aria-label="本节点大纲草稿" />
                   <div className="flex flex-col gap-1">
                     <button onClick={() => { onEditOutline(outlineDraft); setEditingOutline(false); }} className="text-xs text-[var(--nv-success)] hover:text-[var(--nv-success)]/70 font-medium">保存</button>
                     <button onClick={() => setEditingOutline(false)} className="text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)]">取消</button>
@@ -858,7 +858,7 @@ export function CenterPanel({
                           <>
                             <input value={chapterOutlinePrompt} onChange={(e) => onChapterOutlinePromptChange(e.target.value)}
                               placeholder="预览提示词（留空自动）"
-                              className="input-glass w-36 rounded-lg px-2 py-1 text-[10px] focus:border-[var(--nv-primary)]" />
+                              className="input-glass w-36 rounded-lg px-2 py-1 text-[10px] focus:border-[var(--nv-primary)]" aria-label="章纲预览提示词" />
                             <button onClick={() => onGenerateChapterOutline(chapterOutlinePrompt)}
                               className="flex items-center gap-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1 text-[10px] text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)]"
                               title="快速预览——轻量生成本章草稿章纲，不绑定角色、可随时重生成，仅作写作前的快速参考（正式大纲请用「抽卡分镜」）"><Icon name="sparkles" size={10} /> 快速预览</button>
@@ -963,7 +963,7 @@ export function CenterPanel({
               <input placeholder={refineMode ? "微调指令（改对话/加描写/续写500字）…" : "作者指令（高优先级）…"}
                 value={refineMode ? refineInstruction : authorNote}
                 onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
-                className="input-glass w-full rounded-lg px-3 py-2 text-xs" />
+                className="input-glass w-full rounded-lg px-3 py-2 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />
               {refineMode && !isGenerating && (
                 <p className="text-[10px] text-accent-label">微调模式：不重写正文，按指令修改现有内容或续写补长。字数不够会自动补，中途打断可续写。</p>
               )}
