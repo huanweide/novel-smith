@@ -78,24 +78,24 @@ export function BuildConfigDialog({ projectId, buildConfig, onSaved, onClose }: 
         <div className="space-y-5">
           {/* 基础信息 */}
           <Section title="基础信息" icon="book" index={0}>
-            <Field label="书名">
-              <input value={cfg.novelName} onChange={(e) => set("novelName", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="小说书名" />
+            <Field htmlFor="build-novel-name" label="书名">
+              <input id="build-novel-name" value={cfg.novelName} onChange={(e) => set("novelName", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="小说书名" />
             </Field>
-            <Field label="类型">
-              <select value={cfg.genre} onChange={(e) => set("genre", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
+            <Field htmlFor="build-genre" label="类型">
+              <select id="build-genre" value={cfg.genre} onChange={(e) => set("genre", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
                 {GENRE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             </Field>
-            <Field label="受众">
-              <select value={cfg.audience} onChange={(e) => set("audience", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
+            <Field htmlFor="build-audience" label="受众">
+              <select id="build-audience" value={cfg.audience} onChange={(e) => set("audience", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
                 {AUDIENCE_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </Field>
-            <Field label="字数">
-              <input value={cfg.wordCount} onChange={(e) => set("wordCount", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：50-200万字" />
+            <Field htmlFor="build-word-count" label="字数">
+              <input id="build-word-count" value={cfg.wordCount} onChange={(e) => set("wordCount", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：50-200万字" />
             </Field>
-            <Field label="情节结构">
-              <select value={cfg.plotStructure} onChange={(e) => set("plotStructure", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
+            <Field htmlFor="build-plot-structure" label="情节结构">
+              <select id="build-plot-structure" value={cfg.plotStructure} onChange={(e) => set("plotStructure", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
                 {PLOT_STRUCTURES.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.desc}</option>)}
               </select>
             </Field>
@@ -103,26 +103,26 @@ export function BuildConfigDialog({ projectId, buildConfig, onSaved, onClose }: 
 
           {/* 风格与设定 */}
           <Section title="风格与设定" icon="palette" index={1}>
-            <Field label="风格偏好">
-              <select value={cfg.stylePreference} onChange={(e) => set("stylePreference", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
+            <Field htmlFor="build-style-preference" label="风格偏好">
+              <select id="build-style-preference" value={cfg.stylePreference} onChange={(e) => set("stylePreference", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm">
                 <option value="">（未指定）</option>
                 {STYLE_PREFERENCES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="力量体系">
-              <input value={cfg.powerSystem} onChange={(e) => set("powerSystem", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：修仙体系" />
+            <Field htmlFor="build-power-system" label="力量体系">
+              <input id="build-power-system" value={cfg.powerSystem} onChange={(e) => set("powerSystem", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：修仙体系" />
             </Field>
-            <Field label="金手指">
-              <input value={cfg.goldenFinger} onChange={(e) => set("goldenFinger", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：系统金手指" />
+            <Field htmlFor="build-golden-finger" label="金手指">
+              <input id="build-golden-finger" value={cfg.goldenFinger} onChange={(e) => set("goldenFinger", e.target.value)} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="如：系统金手指" />
             </Field>
-            <Field label="核心冲突">
-              <textarea value={cfg.coreConflict} onChange={(e) => set("coreConflict", e.target.value)} rows={3} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="小说的核心矛盾" />
+            <Field htmlFor="build-core-conflict" label="核心冲突">
+              <textarea id="build-core-conflict" value={cfg.coreConflict} onChange={(e) => set("coreConflict", e.target.value)} rows={3} className="input-glass w-full rounded-xl px-3 py-2 text-sm" placeholder="小说的核心矛盾" />
             </Field>
           </Section>
 
           {/* 流派标签 */}
           <Section title={`流派标签（已选 ${cfg.styleTags.length}）`} icon="tag" index={2}>
-            <input value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} placeholder="搜索流派标签…" className="input-glass w-full rounded-xl px-3 py-2 text-xs mb-2" />
+            <input value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} aria-label="搜索流派标签" placeholder="搜索流派标签…" className="input-glass w-full rounded-xl px-3 py-2 text-xs mb-2" />
             <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
               {filteredTags.map((t) => (
                 <button
@@ -252,10 +252,10 @@ function Section({ title, icon, index = 0, children }: { title: string; icon?: I
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ htmlFor, label, children }: { htmlFor: string; label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs text-[var(--nv-text-tertiary)]">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs text-[var(--nv-text-tertiary)]">{label}</label>
       <div className="mt-1">{children}</div>
     </div>
   );

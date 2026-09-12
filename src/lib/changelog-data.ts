@@ -27,6 +27,32 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.127",
+    date: "2026-09-12",
+    title: "表单标签横扫（三轮）：项目设定对话框 9 字段 + 标签搜索框补齐 htmlFor / aria-label 关联",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "顺着 v3.1.125 / v3.1.126 同类的「可见文字标签却无 htmlFor/id 关联」问题，继续横扫到「项目设定」保存对话框（BuildConfigDialog）：9 个配置字段（书名 / 类型 / 受众 / 字数 / 情节结构 / 风格偏好 / 力量体系 / 金手指 / 核心冲突）原先是裸 <label> 兄弟节点 + 无 id 的控件——看得见、读屏念不出、点标签不聚焦；现给每个控件补 id、给 Field 补 htmlFor，一一对应关联（FORM-LABEL-SWEEP-3）",
+          "流派标签搜索框原先只有 placeholder、无可见标签也无 aria-label，补 aria-label=「搜索流派标签」，纳入读屏与自动化可定位范围",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 src/components/workspace/BuildConfigDialog.test.tsx（4 例）：9 字段均可被 getByLabelText 取到且 id 与 htmlFor 对应；搜索框通过 aria-label 获得可访问名；标签的 htmlFor 指向真实存在的控件 id（关联真实生效）",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 171 文件 1837 测试全绿（新增 4）· next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.126",
     date: "2026-09-12",
     title: "表单标签横扫（二轮）：三个面板补齐字段标签 / 可访问名 + FormLabel 提取为共享组件",
