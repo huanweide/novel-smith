@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.132",
+    date: "2026-09-12",
+    title: "十档主题系统：夜航/苍青拉开差距 + 新增 7 套参考配色（THEME-10）",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "主题从 3 档扩展到 10 档：深色 7 档（夜航·墨蓝紫 / 苍青·青绿 / GitHub 暗 / 德古拉 / 北境 / 东京夜 / 古旧）+ 浅色 3 档（白昼 / 曜石 Solarized / 拿铁 Catppuccin）",
+          "苍青主题重做配色：底色 #04181A（青黑）+ 主色 #5FE3C8（青绿），与夜航 #0B1322（墨蓝紫）明显拉开，解决此前两档过于相似的反馈",
+          "新主题参考成熟产品官方色值：GitHub Dark #0D1117 / Dracula #282A36 / Nord #2E3440 / Tokyo Night #1A1B26 / Gruvbox #282828 / Solarized Light #FDF6E3 / Catppuccin Latte #EFF1F5",
+        ],
+      },
+      {
+        label: "交互",
+        items: [
+          "ThemeToggle 菜单按深色/浅色分组，每项带该主题页面底色的色点预览；10 项菜单超高自动可滚动（max-h + overflow-y-auto）",
+          "根布局首屏防闪烁脚本同步支持 10 档主题：按 nf-theme 值加对应 class，浅色系补 light、深色系补 dark，复用既有适配规则",
+          "右键主题按钮仍可快速循环切换下一档；Esc 关闭；菜单沿用 Portal + fixed 定位，不受祖先 overflow 裁剪",
+        ],
+      },
+      {
+        label: "质量",
+        items: [
+          "所有新主题的四级文字色（primary / secondary / tertiary / muted）由生成器按 WCAG 2.1 AA 程序化精算：在三类表面（页面底 / 容器面 / 浮起面合成）上均 ≥4.5:1，且层级严格不倒挂（primary > secondary > tertiary > muted）",
+          "WCAG 对比度回归守卫从 43 断言扩到 92 断言（随主题块从 6 套增到 13 套自动覆盖）",
+          "tsc 0 错 · vitest 175 文件 1903 测试全绿 · next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.131",
     date: "2026-09-12",
     title: "修主题切换：点「夜航」菜单被顶栏裁掉、无法切换（THEME-MENU-CLIP）",
