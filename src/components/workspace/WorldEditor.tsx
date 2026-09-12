@@ -22,6 +22,30 @@ interface WorldEditorProps {
   onCreate: () => void;
 }
 
+/**
+ * 表单字段标签。
+ *
+ * 为什么非要有它（v3.1.125）：这个新建表单原先每个输入框只有一个灰色 placeholder
+ * （「大陆/国家/城市/宗门/秘境/禁地」这种提示语），**一打字提示就消失了**——
+ * 用户填到一半回头看，根本认不出这一格是「类型」还是「所属上层地域」；
+ * 读屏软件也只能念出提示语，念不出字段名。
+ *
+ * 关键在于字段的中文名 `f.label`（类型 / 所属上层地域 / 描述 …）**本来就在数据里**，
+ * 只是从来没渲染给用户看过（它只被拿去拼正文的【标签】）。同表单的「记忆注入方式」
+ * 下拉框早就有自己的标签，输入框却一直没有 —— 这里把两者统一。
+ *
+ * 用 htmlFor + id 显式关联（而不是像某些地方那样把 label 套在控件外面），
+ * 保证读屏能真正念出字段名，而不是退回 placeholder 兜底。
+ */
+function FormLabel({ htmlFor, text, required }: { htmlFor: string; text: string; required?: boolean }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-0.5 block text-[10px] text-[var(--nv-text-muted)]">
+      {text}
+      {required && <span className="ml-0.5 text-[var(--nv-danger)]">*</span>}
+    </label>
+  );
+}
+
 export function WorldEditor({
   activeModule, moduleInfo, currentFields, showCreate, createForm, saving,
   onSetShowCreate, onChangeField, onCreate,
@@ -49,36 +73,47 @@ export function WorldEditor({
       {showCreate && (
         <div className="shrink-0 border-b border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 backdrop-blur-sm">
           {activeModule !== "character_relationship" && (
-            <input
-              value={createForm["title"] || ""}
-              onChange={(e) => onChangeField("title", e.target.value)}
-              placeholder={`${moduleInfo?.label}名称`}
-              className="input-glass mb-2 w-full rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
-            />
+            <>
+              <FormLabel htmlFor="wf-title" text={`${moduleInfo?.label ?? ""}名称`} required />
+              <input
+                id="wf-title"
+                value={createForm["title"] || ""}
+                onChange={(e) => onChangeField("title", e.target.value)}
+                placeholder={`${moduleInfo?.label}名称`}
+                className="input-glass mb-2 w-full rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
+              />
+            </>
           )}
           {currentFields.map((f) =>
             f.type === "textarea" ? (
-              <textarea
-                key={f.key}
-                value={createForm[f.key] || ""}
-                onChange={(e) => onChangeField(f.key, e.target.value)}
-                placeholder={f.placeholder}
-                rows={2}
-                className="input-glass mb-1.5 w-full resize-none rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
-              />
+              <div key={f.key}>
+                <FormLabel htmlFor={`wf-${f.key}`} text={f.label} />
+                <textarea
+                  id={`wf-${f.key}`}
+                  value={createForm[f.key] || ""}
+                  onChange={(e) => onChangeField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  rows={2}
+                  className="input-glass mb-1.5 w-full resize-none rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
+                />
+              </div>
             ) : (
-              <input
-                key={f.key}
-                value={createForm[f.key] || ""}
-                onChange={(e) => onChangeField(f.key, e.target.value)}
-                placeholder={f.placeholder}
-                className="input-glass mb-1.5 w-full rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
-              />
+              <div key={f.key}>
+                <FormLabel htmlFor={`wf-${f.key}`} text={f.label} />
+                <input
+                  id={`wf-${f.key}`}
+                  value={createForm[f.key] || ""}
+                  onChange={(e) => onChangeField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  className="input-glass mb-1.5 w-full rounded px-2 py-1 text-xs placeholder:text-[var(--nv-text-muted)]"
+                />
+              </div>
             )
           )}
           <div className="mb-2 mt-1">
-            <label className="mb-0.5 block text-[10px] text-[var(--nv-text-muted)]">记忆注入方式（常驻=始终在场 · 触发=关键词命中才出现）</label>
+            <FormLabel htmlFor="wf-depth" text="记忆注入方式（常驻=始终在场 · 触发=关键词命中才出现）" />
             <select
+              id="wf-depth"
               value={createForm["depth"] || "3"}
               onChange={(e) => onChangeField("depth", e.target.value)}
               className="input-glass w-full rounded px-2 py-1 text-xs"
@@ -93,7 +128,9 @@ export function WorldEditor({
           <div className="mt-1 flex gap-2">
             <button onClick={onCreate} disabled={saving}
               className="btn-primary rounded px-2 py-1 text-[10px] font-medium disabled:opacity-50">
-              {saving ? <span className="flex items-center gap-1"><Icon name="loader" size={11} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="save" size={11} /> 保存</span>}
+              {/* 文案统一为「创建」：角色弹窗、章节弹窗都是「创建」，只有这里写「保存」，
+                  同一个动作两套词会让人以为「保存」是保存草稿而不是新建条目（v3.1.125）。 */}
+              {saving ? <span className="flex items-center gap-1"><Icon name="loader" size={11} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="plus" size={11} /> 创建</span>}
             </button>
             <button onClick={() => onSetShowCreate(false)}
               className="btn-ghost rounded border border-[var(--nv-border-2)] px-2 py-1 text-[10px]"

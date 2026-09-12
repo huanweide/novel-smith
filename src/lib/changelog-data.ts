@@ -27,6 +27,35 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.125",
+    date: "2026-09-12",
+    title: "世界书新建表单补齐字段标签 + 提交按钮文案统一（表单一致性与可访问性）",
+    sections: [
+      {
+        label: "修复",
+        items: [
+          "世界书（世界观模块）的新建表单，每个输入框此前只有一个灰色 placeholder（「大陆/国家/城市/宗门/秘境/禁地」之类提示语），一打字提示即消失——用户填到一半回头看认不出这一格是「类型」还是「所属上层地域」；读屏软件也只能念提示语、念不出字段名（FORM-NO-LABEL）",
+          "字段的中文名（类型 / 所属上层地域 / 描述 …）本来就在数据里（MODULE_FIELDS 的 f.label），只是从来没渲染给用户看过——它只被拿去拼正文的【标签】。新增 FormLabel 组件，用 label htmlFor + id 显式关联，把已有字段名渲染出来，覆盖标题与全部字段",
+          "同表单的「记忆注入方式」下拉框早就有自己的标签、输入框却一直没有，属同一表单两种待遇；本次下拉一并接入 FormLabel，两类控件统一",
+          "提交按钮文案由「保存」改为「创建」，图标由 save 换成 plus：角色弹窗、章节弹窗都是「创建」，只有这里写「保存」，同一个新建动作两套词会让人误以为「保存」是存草稿（BTN-TEXT-INCONSISTENT）",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 src/components/workspace/WorldEditor.test.tsx（6 例）：逐字段断言 getByLabelText 能取到标签、标题必填带星号、「记忆注入方式」有标签、提交按钮为「创建」且 queryByRole 不存在「保存」、保存中显示「创建中...」并禁用、showCreate=false 不渲染标签",
+          "前端黑箱 blackbox-ui.cjs 新增 runCoreJourney：真实点击「建角色 → 建世界书 → 手动加章节 → 后端补正文 → 阅读模式核验 → 回读 GET /api/projects/[id] 核对 characters/lorebookEntries 真落库」，全程零 LLM 调用；前端断言 74 → 91，实测 91/91 全过",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 167 文件 1814 测试全绿（新增 6）· next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.124",
     date: "2026-09-12",
     title: "API 健壮性收口：读取路由补齐统一错误契约 + Prisma P2025（记录不存在）收敛为 404（dev 下不再透传内部错误栈）",

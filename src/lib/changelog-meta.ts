@@ -32,13 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.124";
+export const LATEST_VERSION = "v3.1.125";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "API 健壮性收口：5 个此前缺少 try/catch 兜底的读取路由（projects/[id]/chapters GET、presets GET、projects/[id]/lore-tables GET、projects/[id]/lore-tables/[tableId] DELETE、storylines/[id] GET）统一接入 jsonError 兜底（ROBUST-UNGUARDED-ROUTES）",
-  "此前 dev 模式下这些路由一旦抛错会冒泡成 Next 错误页（透传内部错误栈 / 文件路径），生产下也只是无提示 500；现在统一返回 {error, code, hint} 泛化形态，成功路径零变化（仅包裹错误路径）",
-  "新增 projects/[id]/chapters 路由错误兜底用例（1 例）：prisma 抛含 SQL/表名的错时，断言收敛为统一脱敏响应、不透传内部串",
-  "统一错误层补 Prisma P2025（记录不存在）→ 404：此前「删除一条已被删除的记录」会返回 503「数据库访问出错」并引导用户去跑 npx prisma db push，把「记录不存在」误导成「数据库没起来」（P2025-SAYS-DB-DOWN）",
-  "三道门禁：tsc 0 错 + vitest 165 文件 1800 测试全绿（新增 3）+ next build 通过",
+  "世界书（世界观模块）的新建表单补齐字段标签：此前每个输入框只有一个灰色 placeholder（「大陆/国家/城市」这种提示语），一打字提示就消失，用户填到一半认不出这一格是「类型」还是「所属上层地域」，读屏软件也念不出字段名（FORM-NO-LABEL）",
+  "修法：字段的中文名本就存在数据里（只被拿去拼正文【标签】），现用 <label htmlFor> + id 显式关联渲染给用户，覆盖标题与全部字段，并与同表单早就有的「记忆注入方式」下拉标签统一；提交按钮文案「保存」统一为「创建」，与角色/章节弹窗同词（BTN-TEXT-INCONSISTENT）",
+  "新增 WorldEditor 组件测试（6 例）：逐字段断言 getByLabelText 能取到标签、标题必填带星号、提交按钮为「创建」且不存在「保存」、保存中显示「创建中...」并禁用",
+  "前端黑箱新增「核心用户旅程」环节：真实点击建角色 → 建世界书 → 手动加章节 → 后端补正文 → 阅读模式核验 → 回读 API 核对真落库（全程零 LLM 调用，前端断言 74 → 91）",
+  "三道门禁：tsc 0 错 + vitest 167 文件 1814 测试全绿（新增 6）+ next build 通过",
 ];
