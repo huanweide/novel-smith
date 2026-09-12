@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.133",
+    date: "2026-09-12",
+    title: "对比模式：任意生成发现原有内容一律左右并排二选一（COMPARE-MODE）",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "新增对比模式：正文生成 / 精修 / 续写 / 游戏模式导出，只要目标章节已有内容（非空），生成完成后进入左右并排对比界面，由作者选择保留哪一边，不再静默覆盖原稿",
+          "统一判据抽成纯函数 src/lib/compare-mode.ts（shouldEnterCompare = 原有内容非空 且 新内容非空）；原有为空（首次生成）直接采用，不做对比",
+          "新增 src/components/workspace/CompareModeModal.tsx：左右两栏同时观看生成效果（各带字数 / 段落数），点击任一栏即选中高亮，底部按钮落定要保留的一边；未保留的一边仍可在版本历史找回",
+        ],
+      },
+      {
+        label: "接入范围",
+        items: [
+          "写作主流程：生成完成事件统一改判——原先只有「精修 + 原有内容非空」才弹 diff 预览，现放宽为任意生成模式（write / refine / continue）只要原有内容非空即进对比",
+          "游戏模式导出：endGameAndExport 回传作者入游时刻的原正文快照（originalContent），/api/game/end 一并透出；导出后若原有内容非空即进入同一对比界面，由作者选择保留游戏导出结果还是原正文",
+          "两条入口共用同一套判定与同一个组件，行为一致（逻辑统一）",
+        ],
+      },
+      {
+        label: "质量",
+        items: [
+          "保留原有的回写走与手动编辑完全相同的 PUT 通道（带 undo 标记，与精修撤销同一条路），受乐观锁保护，不会绕过冲突检测",
+          "新增 src/lib/compare-mode.test.ts（12 例）+ src/components/workspace/CompareModeModal.test.tsx（6 例）",
+          "tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.132",
     date: "2026-09-12",
     title: "十档主题系统：夜航/苍青拉开差距 + 新增 7 套参考配色（THEME-10）",

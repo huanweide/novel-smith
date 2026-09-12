@@ -18,6 +18,7 @@ import { useState, useEffect, useCallback, useRef, useId } from "react";
 import { useParams, useRouter } from "next/navigation";
 import GameCanvas from "@/components/game/GameCanvas";
 import GameParticles, { type GameParticlesHandle } from "@/components/game/GameParticles";
+import { CompareModeModal } from "@/components/workspace/CompareModeModal";
 import GameOutlineEditor from "@/components/game/GameOutlineEditor";
 import { PointerGlow } from "@/components/game/PointerGlow";
 import { Icon, type IconName } from "@/components/ui/icons";
@@ -33,7 +34,7 @@ import type { GameState, TurnRecord } from "@/components/game/page/types";
 import { QUICK_ACTIONS, LEFT_TABS, RIGHT_TABS } from "@/components/game/page/constants";
 
 export default function GamePage() {
-  const { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, showStartScreen } = useGamePage();
+  const { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen } = useGamePage();
 
   // ── 加载状态 ────────────────────────────────────────────
   if (state.status === "loading") {
@@ -833,6 +834,17 @@ export default function GamePage() {
           </div>
         </div>
       )}
+
+      {/* ═══ v3.1.133 对比模式：导出后若该章原有正文非空，左右并排二选一 ═══ */}
+      <CompareModeModal
+        open={!!compareState}
+        originalContent={compareState?.original || ""}
+        newContent={compareState?.next || ""}
+        modeLabel="游戏模式导出"
+        busy={compareBusy}
+        onKeep={handleCompareKeep}
+        onClose={closeCompare}
+      />
 
       {/* ═══ 结束并导出 · 影子确认浮层（游戏模式设置预览） ═══ */}
       {showEndConfirm && (

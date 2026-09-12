@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       autoConfirmed: result.autoConfirmed,
       autoFilled: result.autoFilled,
       qualityScore: result.qualityScore,
+      originalContent: result.originalContent,
     });
   } catch (err: any) {
     console.error("[game/end] 错误:", err);

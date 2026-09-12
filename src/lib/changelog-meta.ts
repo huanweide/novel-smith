@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.132";
+export const LATEST_VERSION = "v3.1.133";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "主题从 3 档扩到 10 档：深色 7（夜航·墨蓝紫 / 苍青·青绿 / GitHub 暗 / 德古拉 / 北境 / 东京夜 / 古旧）+ 浅色 3（白昼 / 曜石 Solarized / 拿铁 Catppuccin），各主题底色与主色相互区分",
-  "苍青重做配色（底 #04181A 青黑 + 主色 #5FE3C8 青绿），与夜航（#0B1322 墨蓝紫）明显拉开；新主题参考官方色值：GitHub #0D1117 / Dracula #282A36 / Nord #2E3440 / Tokyo Night #1A1B26 / Gruvbox #282828 / Solarized #FDF6E3 / Catppuccin #EFF1F5",
-  "切换器升级：菜单按深色/浅色分组 + 每项带底色色点预览 + 超高可滚动；根布局防闪烁脚本同步支持 10 档；右键仍可快速循环切换",
-  "文字色全部按 WCAG AA 程序化精算：新增主题的四级文字色在三类表面上均 ≥4.5:1 且层级不倒挂；对比度回归守卫从 43 断言扩到 92 断言（13 套主题块）"
+  "新增对比模式：正文生成 / 精修 / 续写 / 游戏模式导出，只要目标章节已有内容（非空），生成完成后进入左右并排对比界面，由作者选择保留哪一边，不再静默覆盖原稿（COMPARE-MODE）",
+  "统一判据抽成纯函数 src/lib/compare-mode.ts：shouldEnterCompare = 原有内容非空 且 新内容非空；原有为空（首次生成）直接采用不做对比。写作生成与游戏导出两条入口共用同一套逻辑、同一个组件",
+  "新增 src/components/workspace/CompareModeModal.tsx：左右两栏同时观看（各带字数 / 段落数），点击选边高亮，底部按钮落定保留；未保留的一边仍可在版本历史找回",
+  "游戏模式导出：/api/game/end 回传作者入游时的原正文快照；导出后若原有内容非空即进入同一对比界面。门禁 tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
 ];

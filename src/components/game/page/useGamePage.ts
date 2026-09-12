@@ -9,13 +9,14 @@ import { asArray } from "@/lib/utils";
 import { useState, useEffect, useCallback, useRef, useId } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { toastInfo } from "@/components/ui/toast";
+import { toastError, toastInfo, toastSuccess } from "@/components/ui/toast";
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import type { GameParticlesHandle } from "@/components/game/GameParticles";
 import type { GameOption, GameEntity, GameItem } from "@/core/game/types";
 import { reconcileFromSummary, applyFrontendItemChanges } from "@/core/game/reconcile";
 import type { GameState, TurnRecord } from "./types";
 import { QUICK_ACTIONS, LEFT_TABS, RIGHT_TABS } from "./constants";
+import { shouldEnterCompare, type CompareSide } from "@/lib/compare-mode";
 
 export function useGamePage() {
   const params = useParams();
@@ -42,6 +43,9 @@ export function useGamePage() {
   });
 
   const [customInput, setCustomInput] = useState("");
+  // v3.1.133 对比模式：游戏导出时若目标章节此前已有正文，进入左右对比由作者选择保留哪一边
+  const [compareState, setCompareState] = useState<{ nodeId: string; original: string; next: string } | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
   const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [rightTab, setRightTab] = useState<"text" | "backpack" | "world">("text");
   const [leftTab, setLeftTab] = useState<"plot" | "characters" | "factions">("plot");
@@ -535,6 +539,14 @@ export function useGamePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "导出失败");
 
+      // v3.1.133 对比模式（统一判据）：该章节此前已有正文 → 进入左右对比，由作者选择保留哪一边
+      if (shouldEnterCompare(data.originalContent, data.finalContent)) {
+        setCompareState({
+          nodeId: data.nodeId,
+          original: data.originalContent || "",
+          next: data.finalContent || "",
+        });
+      }
       setEndingNarrative(data.finalContent);
       setState((s) => ({
         ...s,
@@ -553,6 +565,36 @@ export function useGamePage() {
     }
   };
 
+  // ── v3.1.133 对比模式：选择保留哪一边 ──────────────────
+  // 语义：导出时新内容已落库，故「保留新生成」只需关闭；「保留原有」则 PUT 回写还原。
+  const handleCompareKeep = async (side: CompareSide) => {
+    const target = compareState;
+    if (!target || compareBusy) return;
+    setCompareBusy(true);
+    try {
+      if (side === "original") {
+        const res = await fetch(`/api/story/nodes/${target.nodeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: target.original, wordCount: target.original.length, undo: true }),
+        });
+        if (res.ok) toastSuccess("已保留原有内容");
+        else toastError("恢复原有内容失败，请到工作区重试");
+      } else {
+        toastSuccess("已保留游戏模式导出内容");
+      }
+    } catch {
+      toastError("操作失败，请到工作区重试");
+    } finally {
+      setCompareBusy(false);
+      setCompareState(null);
+    }
+  };
+  const closeCompare = () => {
+    if (compareBusy) return;
+    setCompareState(null);
+  };
+
   // ── 返回工作区 ──────────────────────────────────────────
   const handleBack = () => {
     router.push(`/workspace/${projectId}`);
@@ -562,5 +604,5 @@ export function useGamePage() {
   const showStartScreen =
     state.status === "ready" || (state.status === "ended" && !state.narrative);
 
-  return { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, showStartScreen };
+  return { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen };
 }
