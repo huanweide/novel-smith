@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.131";
+export const LATEST_VERSION = "v3.1.132";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "修复「点主题按钮没反应、无法切换」：首页顶栏「夜航」按钮的下拉菜单原为 absolute top-full，而父容器带 overflow-x-auto（会把 overflow-y 一并算成 auto）导致菜单被整块裁掉，点开也看不见（THEME-MENU-CLIP）",
-  "主题菜单改用 React Portal 渲染到 document.body + fixed 定位（按按钮 rect 计算），彻底脱离任何祖先 overflow / transform 裁剪；首页顶栏 / 设置页外观区 / 系统状态横幅三处挂载点一并受益",
-  "交互增强：右键主题按钮快速循环切换下一档（夜航→白昼→苍青）；Esc 关闭；滚动或缩放时菜单跟随定位；菜单项补齐 role=menuitemradio 与 aria-checked 语义",
-  "门禁：tsc 0 错 · vitest 175 文件 1853 测试全绿（新增 ThemeToggle.test.tsx 5 例）· next build 通过"
-]
+  "主题从 3 档扩到 10 档：深色 7（夜航·墨蓝紫 / 苍青·青绿 / GitHub 暗 / 德古拉 / 北境 / 东京夜 / 古旧）+ 浅色 3（白昼 / 曜石 Solarized / 拿铁 Catppuccin），各主题底色与主色相互区分",
+  "苍青重做配色（底 #04181A 青黑 + 主色 #5FE3C8 青绿），与夜航（#0B1322 墨蓝紫）明显拉开；新主题参考官方色值：GitHub #0D1117 / Dracula #282A36 / Nord #2E3440 / Tokyo Night #1A1B26 / Gruvbox #282828 / Solarized #FDF6E3 / Catppuccin #EFF1F5",
+  "切换器升级：菜单按深色/浅色分组 + 每项带底色色点预览 + 超高可滚动；根布局防闪烁脚本同步支持 10 档；右键仍可快速循环切换",
+  "文字色全部按 WCAG AA 程序化精算：新增主题的四级文字色在三类表面上均 ≥4.5:1 且层级不倒挂；对比度回归守卫从 43 断言扩到 92 断言（13 套主题块）"
+];
