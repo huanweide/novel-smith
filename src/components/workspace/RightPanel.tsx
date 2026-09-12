@@ -13,12 +13,13 @@ import { AIChatBar } from "./AIChatBar";
 import { MonitorPanel } from "./MonitorPanel";
 import { NarrativeEnergyPanel } from "./NarrativeEnergyPanel";
 import { GenerationLatencyPanel } from "./GenerationLatencyPanel";
+import { WritingCoachPanel } from "./WritingCoachPanel";
 import { StatRow } from "./SharedUI";
 import type { StoryNodeData } from "./types";
 import { useProjectStore } from "@/store";
 import type { ToolboxItem } from "./ToolboxDialog";
 
-type TopTab = "ai" | "entities" | "toolbox" | "stats" | "publish";
+type TopTab = "ai" | "entities" | "toolbox" | "stats" | "publish" | "coach";
 type EntitySubTab = "entities" | "foreshadowing" | "relationships" | "consistency" | "search";
 
 interface RightPanelProps {
@@ -48,6 +49,7 @@ interface RightPanelProps {
 const TOP_TABS: Array<{ key: TopTab; icon: IconName; label: string }> = [
   { key: "ai", icon: "bot", label: "AI助手" },
   { key: "entities", icon: "search", label: "实体" },
+  { key: "coach", icon: "sparkles", label: "教练" },
   { key: "toolbox", icon: "wrench", label: "工具箱" },
   { key: "stats", icon: "chart", label: "统计" },
   { key: "publish", icon: "rocket", label: "发布" },
@@ -318,6 +320,16 @@ export function RightPanel(props: RightPanelProps) {
         {topTab === "publish" && (
           <div className="flex-1 flex flex-col overflow-hidden">
             <PublishCheckPanel projectId={project.id} />
+          </div>
+        )}
+
+        {/* ── 教练 tab（v3.1.130 新开创功能：实时写作教练，100% 本地零外泄） ── */}
+        {topTab === "coach" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <WritingCoachPanel
+              content={selectedNode?.content ?? ""}
+              characterNames={project.characters.map((c) => c.name)}
+            />
           </div>
         )}
       </div>

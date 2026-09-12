@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.130",
+    date: "2026-09-12",
+    title: "实时写作教练：把六维本地质量分析变成边写边看的体验（WRITING-COACH）",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "新增「教练」右侧顶栏 tab 与 src/components/workspace/WritingCoachPanel.tsx：作者写作时实时（300ms 防抖）对当前节点正文跑六维本地质量分析（废词率 / 展示vs讲述 / 视角一致性 / 句式多样性 / 对话自然度 / 主语多样性），边打字边给出综合质量分、各维分数条、具体问题清单与可落手的中文改法建议",
+        ],
+      },
+      {
+        label: "护城河",
+        items: [
+          "复用 src/core/quality/quality-analyzer 的纯本地规则引擎（正则+统计、零 Token），全部在浏览器本地计算、文本不出本机，契合「数据本地零外泄 + 本地规则引擎」护城河；内核抽成 src/core/quality/coach.ts 纯函数（附中文教练话术映射）便于单测",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 src/core/quality/coach.test.ts（6 例）+ src/components/workspace/WritingCoachPanel.test.tsx（3 例）：九例全绿；完整 vitest 174 文件 1848 测试全绿（新增 9）",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 174 文件 1848 测试全绿 · next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.129",
     date: "2026-09-12",
     title: "表单标签横扫（五轮）：写作主面板 CenterPanel 3 个 placeholder-only 输入补 aria-label 关联",
