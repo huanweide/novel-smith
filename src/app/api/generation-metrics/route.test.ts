@@ -41,6 +41,24 @@ describe("generation-metrics 路由", () => {
     expect(body.thresholdMs).toBe(2000);
   });
 
+
+  it("错误时返回脱敏响应不回显原始异常（SEC-LEAK-GENMETRICS）", async () => {
+    findMany.mockRejectedValueOnce(
+      new Error('column llm_call_log.duration_ms does not exist — SELECT "duration_ms" FROM "llm_call_log"')
+    );
+    const res = await GET(makeReq("http://localhost/api/generation-metrics?projectId=proj-x"));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.ok).not.toBe(true);
+    expect(body.code).toBeTruthy();
+    // 关键断言：原始 SQL / 表名不得回显给前端
+    expect(JSON.stringify(body)).not.toContain("llm_call_log");
+    expect(JSON.stringify(body)).not.toContain("does not exist");
+    expect(typeof body.error).toBe("string");
+    expect(body.error.length).toBeGreaterThan(0);
+    expect(body.hint).toBeTruthy();
+  });
+
   it("projectId 过滤条件被传入查询", async () => {
     findMany.mockResolvedValueOnce([]);
     await GET(makeReq("http://localhost/api/generation-metrics?projectId=abc"));

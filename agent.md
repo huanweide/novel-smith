@@ -16,7 +16,7 @@
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.122 |
+| 包名 / 版本 | `novel-smith` v3.1.123 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
@@ -85,7 +85,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | 仓库 | `huanweide/novel-smith`，**公开** |
 | Star / Fork | 1 / 0 |
 | 默认分支 | `main`（陈旧的 `master` 分支已于 2026-09-02 删除；其 2 个独有提交——Postgres 直连旧方向的 `14c00be`/`ae4ceb9`——用 `backup/master-legacy-20260902` 标签异地保护，可随时还原） |
-| 最新 Release | `v3.1.122 接口安全第三轮扫描收口：game/state 错误响应接入统一脱敏层，不再回显原始异常（SEC-LEAK-GAMESTATE）`（2026-09-11，Latest） |
+| 最新 Release | `v3.1.123 接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 错误响应脱敏、ProjectCard 时间渲染确定性化（SEC-LEAK-GENMETRICS / FIX-HYDRATION-418）`（2026-09-11，Latest） |
 | 最近推送 | `0fb601d`（ci: 快照标签不触发流水线，2026-09-01） |
 | CI | 最近 5 次全部 success |
 | 今日实测（2026-09-02 全站灰度） | HTTP 11/11 页面 200、浏览器实测 8/8 主页面零 JS 错误、写作视图完整渲染、API 链路通；**未发现严重 bug**；3 个体验痛点（首屏 10-12s 黑屏、写作区视野不够、章节首写引导弱）见 `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md` |
@@ -100,6 +100,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 ## 五、版本更新记录（最新在上）
 
+### v3.1.123 — 2026-09-11 — 接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 错误响应脱敏、ProjectCard 时间渲染确定性化（SEC-LEAK-GENMETRICS / FIX-HYDRATION-418）
 ### v3.1.122 — 2026-09-11 — 接口安全第三轮扫描收口：game/state 错误响应接入统一脱敏层（SEC-LEAK-GAMESTATE）
 ### v3.1.121 — 2026-09-11 — 密钥脱敏统一：settings 路由复用共享 maskKey（SEC-UNIFY-MASK）
 ### v3.1.120 — 2026-09-11 — GET 接口密钥脱敏：project 列表/详情不再明文返回 llmConfig.apiKey（SEC-MASK-LLMKEY）
