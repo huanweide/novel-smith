@@ -52,4 +52,16 @@ describe("GET /api/projects/[id]/chapters", () => {
     expect(res.payload.chapters[0].words).toBe("夜色中他睁开了眼。".replace(/\s+/g, "").length);
     expect(res.payload.meta.total).toBe(2);
   });
+
+  it("prisma 抛错 → 统一脱敏错误（不透传内部 SQL / 表名）", async () => {
+    prismaMock.project.findUnique.mockRejectedValueOnce(
+      new Error("SQLITE_ERROR: no such table: Project")
+    );
+    const res: any = await GET({} as any, makeParams("p1"));
+    expect(res.status).toBe(500);
+    expect(res.payload.code).toBeTruthy();
+    expect(res.payload.hint).toBeTruthy();
+    expect(JSON.stringify(res.payload)).not.toContain("SQLITE_ERROR");
+    expect(JSON.stringify(res.payload)).not.toContain("no such table");
+  });
 });

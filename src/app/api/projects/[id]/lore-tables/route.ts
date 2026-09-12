@@ -7,12 +7,16 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const tables = await prisma.loreTable.findMany({
-    where: { projectId: id },
-    orderBy: { createdAt: "asc" },
-  });
-  return NextResponse.json(tables);
+  try {
+    const { id } = await params;
+    const tables = await prisma.loreTable.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: "asc" },
+    });
+    return NextResponse.json(tables);
+  } catch (err) {
+    return jsonError(err);
+  }
 }
 
 // POST /api/projects/[id]/lore-tables —— 新建结构化表格
