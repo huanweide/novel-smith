@@ -20,6 +20,8 @@
 **当前版本：v3.1.134** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
 
 **先花 30 秒试一下（不用配 Key、不用安装）**
+![去 AI 味检测演示](docs/screenshots/demo.gif)
+
 
 打开 **[在线 demo 里的「去 AI 味检测」](https://novel-forge-nu.vercel.app/detector)**，粘贴一段你自己的文字 —— 立刻拿到检测报告：命中了哪些 AI 痕迹、每处的原文片段、为什么算 AI 味、可以怎么改。
 
