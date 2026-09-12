@@ -70,6 +70,27 @@ describe("asStr", () => {
     expect(() => asStr("abcdef", "a", { max: 5 })).toThrow(ValidationError);
     expect(asStr("abcdef", "a", { max: 10 })).toBe("abcdef");
   });
+
+  // v3.1.124 黑箱实测暴露 BLANK-REQUIRED：
+  // 此前 required 只挡 undefined/null，导致 POST /api/projects { name: "" } 能建出
+  // 没有名字的项目（列表里一张空白卡片，认不出也删不干净）。
+  it("必填但传空串 → 抛 ValidationError（不能再建出无名记录）", () => {
+    expect(() => asStr("", "name", { required: true })).toThrow(ValidationError);
+  });
+
+  it("必填但传纯空白 → 抛 ValidationError", () => {
+    expect(() => asStr("   ", "name", { required: true })).toThrow(ValidationError);
+    expect(() => asStr("\t\n ", "name", { required: true })).toThrow(ValidationError);
+  });
+
+  it("非必填时空串照旧放行（不误伤「先建空壳后补内容」的流程）", () => {
+    expect(asStr("", "note")).toBe("");
+    expect(asStr("   ", "note")).toBe("   ");
+  });
+
+  it("必填的非空串保留原文（首尾空白不 trim，正文空白可能是有意的）", () => {
+    expect(asStr(" 我的项目 ", "name", { required: true })).toBe(" 我的项目 ");
+  });
 });
 
 describe("asStrOrNull", () => {

@@ -1,5 +1,22 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.124 — 2026-09-12
+
+### API 健壮性收口：为缺兜底的读取路由补齐统一错误契约
+
+- **问题（真实隐患）**：黑箱横扫发现 5 个读取路由缺少 try/catch 兜底——`projects/[id]/chapters` GET（整文件无兜底）、`presets` GET、`projects/[id]/lore-tables` GET、`projects/[id]/lore-tables/[tableId]` DELETE、`storylines/[id]` GET。**dev 模式**（本地写作常见运行方式）下一旦抛错，异常会冒泡成 Next.js 错误页，把内部错误栈 / 文件路径透传给使用者；生产下也只是无提示的 500（ROBUST-UNGUARDED-ROUTES）。
+- **修法**：统一接入 `jsonError` 兜底，返回泛化 `{error, code, hint}`（未知错误：服务器内部错误，请查看日志）。**成功路径零变化**，仅在错误路径上加护栏。
+- **回归测试**：新增 `projects/[id]/chapters` 路由错误兜底用例（1 例）——prisma 抛含 SQL/表名的异常时，断言收敛为统一脱敏响应、不透传 `SQLITE_ERROR` / `no such table` 等内部串。
+
+### 错误契约补强：Prisma P2025（记录不存在）收敛为 404
+
+- **问题（真实隐患）**：黑箱实测「删除一条已被删除的结构化表格」返回 **503「数据库访问出错」+「请确认数据库已启动且已执行 npx prisma db push 建表」**——数据库好好的，只是那行记录没了。根因是统一错误层 `classifyError` 未收录 Prisma `P2025`，异常落到「其它 Prisma 错误」兜底分支（P2025-SAYS-DB-DOWN）。
+- **修法**：`PRISMA_HINTS` 新增 `P2025 → 404「记录不存在（可能已被删除）」`，提示改为「该记录可能已被删除，或 ID 不正确；请刷新列表后重试。」。查表在前、message 关键词判断在后，确保 P2025 不会被「schema 不匹配」分支（消息含 `does not exist`）抢走。全站所有走 `jsonError` 的 delete / update 路由一并受益。
+- **回归测试**：`src/lib/api-error.test.ts` 新增 2 例——P2025 必须 404 且 hint 不再引导 `npx prisma db push`；P2025 命中已知映射、不被通用 Prisma / schema 不匹配分支抢走。
+
+### 门禁
+
+- 三道门禁：tsc 0 错 · vitest 165 文件 1800 测试全绿（新增 3）· next build 通过。
 ## v3.1.123 — 2026-09-11
 
 ### 接口安全第四轮收口 + 首页 hydration 修复：generation-metrics 脱敏、ProjectCard 时间渲染确定性化

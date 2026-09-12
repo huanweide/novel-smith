@@ -36,7 +36,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; tableId: string }> },
 ) {
-  const { tableId } = await params;
-  await prisma.loreTable.delete({ where: { id: tableId } });
-  return NextResponse.json({ ok: true });
+  try {
+    const { tableId } = await params;
+    await prisma.loreTable.delete({ where: { id: tableId } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return jsonError(err);
+  }
 }

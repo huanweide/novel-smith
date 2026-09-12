@@ -32,12 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.123";
+export const LATEST_VERSION = "v3.1.124";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "接口安全第四轮扫描收口：generation-metrics 路由（生成延迟硬指标聚合）错误响应接入统一 jsonError 脱敏层，不再回显原始 e.message（含 SQL / 表名），（SEC-LEAK-GENMETRICS）",
-  "修复首页水合不一致（React #418）：ProjectCard 此前在渲染期用 new Date() 算相对时间，SSR 与客户端文本不一致；改为「SSR 渲染确定性绝对日期 + 挂载后升级相对时间并每分钟自更新」，与 InspirationSpark 既有范式一致",
-  "新增 generation-metrics 路由脱敏回归测试（1 例）；前端 Playwright 黑箱 3 轮验证首页/设置页/更新页，密钥脱敏与版本号全通过、首页零 JS 异常",
-  "三道门禁：tsc 0 错 + vitest 165 文件 1797 测试全绿（新增 1）+ next build 通过",
+  "API 健壮性收口：5 个此前缺少 try/catch 兜底的读取路由（projects/[id]/chapters GET、presets GET、projects/[id]/lore-tables GET、projects/[id]/lore-tables/[tableId] DELETE、storylines/[id] GET）统一接入 jsonError 兜底（ROBUST-UNGUARDED-ROUTES）",
+  "此前 dev 模式下这些路由一旦抛错会冒泡成 Next 错误页（透传内部错误栈 / 文件路径），生产下也只是无提示 500；现在统一返回 {error, code, hint} 泛化形态，成功路径零变化（仅包裹错误路径）",
+  "新增 projects/[id]/chapters 路由错误兜底用例（1 例）：prisma 抛含 SQL/表名的错时，断言收敛为统一脱敏响应、不透传内部串",
+  "统一错误层补 Prisma P2025（记录不存在）→ 404：此前「删除一条已被删除的记录」会返回 503「数据库访问出错」并引导用户去跑 npx prisma db push，把「记录不存在」误导成「数据库没起来」（P2025-SAYS-DB-DOWN）",
+  "三道门禁：tsc 0 错 + vitest 165 文件 1800 测试全绿（新增 3）+ next build 通过",
 ];

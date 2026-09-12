@@ -13,13 +13,17 @@ import { completeStorylineElements } from "@/core/storyline/complete";
 import { runStorylineGeneration } from "@/app/api/storylines/generate/route";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const storyline = await prisma.storyline.findUnique({
-    where: { id },
-    include: { events: { orderBy: { position: "asc" } } },
-  });
-  if (!storyline) return NextResponse.json({ error: "故事线不存在" }, { status: 404 });
-  return NextResponse.json(storyline);
+  try {
+    const { id } = await params;
+    const storyline = await prisma.storyline.findUnique({
+      where: { id },
+      include: { events: { orderBy: { position: "asc" } } },
+    });
+    if (!storyline) return NextResponse.json({ error: "故事线不存在" }, { status: 404 });
+    return NextResponse.json(storyline);
+  } catch (err) {
+    return jsonError(err);
+  }
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
