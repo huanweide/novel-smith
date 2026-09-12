@@ -46,6 +46,19 @@ function useStaggerOnView(ready: boolean) {
 export default function HomeDashboard({ initialProjects }: { initialProjects?: ProjectSummary[] }) {
   const [hasUpdate, setHasUpdate] = useState(false);
 
+  // v3.1.135 零门槛引导：检测 AI 是否已配置。未配置时在 Hero 区引导访客先去
+  // 「去 AI 味检测」（纯本地规则引擎，不需要 Key / 不联网 / 不上传）拿到一次真实体验，
+  // 而不是在「要配 Key」这一步直接流失。
+  const [llmReady, setLlmReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/health", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d && d.llm) setLlmReady(Boolean(d.llm.ok)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   // FE-9：项目列表走轻量服务端状态层（进程内缓存 + 失效），删除/重试即 refetch。
   // initialProjects 由服务端预取注入（SSR）：首屏直接用、不再发客户端请求；
   // 服务端取数失败时为空，则回退到原有客户端 fetch 逻辑（加载/错误 UI 不变）。
@@ -252,6 +265,30 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
               </Link>
             </div>
           </div>
+
+          {/* v3.1.135 零门槛试用引导：仅在 AI 未配置时出现，命中流失风险最高的访客 */}
+          {llmReady === false && (
+            <Link
+              href="/detector"
+              className="nf-hero-rise mt-8 flex flex-col gap-3 rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-4 transition-colors hover:border-[var(--nv-accent)] sm:flex-row sm:items-center sm:gap-4"
+              style={{ animationDelay: "480ms" }}
+            >
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--nv-accent-soft)] text-[var(--nv-accent)]">
+                <Icon name="shield" size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-[var(--nv-text-primary)]">
+                  还没配 AI Key？先试这个 —— 完全不需要 Key
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+                  粘贴一段文字，30 秒看出它有多像 AI 写的。纯本地规则引擎：不联网、不上传、零成本。
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--nv-accent)]">
+                立即试用 <Icon name="arrowRight" size={13} />
+              </span>
+            </Link>
+          )}
         </div>
       </section>
 

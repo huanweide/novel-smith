@@ -27,6 +27,34 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.135",
+    date: "2026-09-12",
+    title: "吸星改造 1：首页零门槛引导 + README 首屏重构（STAR-READINESS-1）",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "首页 Hero 区新增零门槛试用引导条：启动时探测 /api/health 的 llm.ok，仅当 AI 未配置时显示，引导访客先去「去 AI 味检测」拿到一次真实体验",
+          "引导文案强调「完全不需要 Key」+「纯本地规则引擎：不联网、不上传、零成本」，直击访客「要配 Key 才能用」的流失点",
+        ],
+      },
+      {
+        label: "文档",
+        items: [
+          "README 首屏（中英同步）重构：把「在线预览只能看界面、做不了实际操作」这段劝退式说明，替换为价值前置的「先花 30 秒试一下（不用配 Key、不用安装）」",
+          "新增「哪些功能不需要 Key」对照表：去 AI 味检测 / 过审自检 / 字数统计 / 一致性检查 / 伏笔追踪 / 关系图 / 拆书 / 导出均不需要 Key，只有 AI 生成类需要",
+          "导航行新增「30 秒试用 · 不用配 Key」直达 https://novel-forge-nu.vercel.app/detector",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.134",
     date: "2026-09-12",
     title: "全站 UI 走查收口：右侧面板 tab 断字修复（TAB-WRAP）",
