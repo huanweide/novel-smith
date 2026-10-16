@@ -5,7 +5,7 @@
 > 本版综合三份输入整理为**单一真相源**：
 > - `PROCESS/analysis/novel-smith-精进分析-2026-09-02.md`（用户视角差异化调研，保留为需求输入）
 > - `会议/2.0-plan/chair-integration.md`（董事会 2.0 共识：可靠性优先、游戏模式降级卫星）
-> - `agent.md` 版本台账（真实交付记录）
+> - `docs/internal/agent.md` 版本台账（真实交付记录）
 
 ---
 
@@ -108,4 +108,4 @@
 - `npx vitest run` → 全绿（基线 129 文件 / 1363 测试）
 - `CODEBUDDY_SAFE_DELETE_ENABLED=0 npx next build` → EXIT=0
 
-> 本路线图为「活文档」：每完成一个 P0/P1 项，在 `agent.md` 版本台账登记，并视情况回填本文件的「已交付快照」。
+> 本路线图为「活文档」：每完成一个 P0/P1 项，在 `docs/internal/agent.md` 版本台账登记，并视情况回填本文件的「已交付快照」。
