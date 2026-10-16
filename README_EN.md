@@ -14,7 +14,7 @@
 
 [⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.135** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.136** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
@@ -141,7 +141,20 @@ npm start
 ```
 
 Since v3.1.115 every `/api/*` route sits behind a built-in access guard: **only requests from localhost or your LAN are accepted** — anything else gets a 403 (`localhost` / `127.` / `10.` / `192.168.` / `172.16~31.` / `169.254.` / `::1` / `*.local` are allowed). It is a safety net against accidental public deployment, not an account system.
-If you really need to serve it publicly, set `ALLOW_PUBLIC=true` **and** still put it behind a reverse proxy with Basic Auth, Tailscale, or an IP whitelist.
+
+**From v3.1.136 that guard is tiered by trust.** Previously the client IP was taken from headers such as `X-Forwarded-For`, which the client writes itself — so connecting directly to the port with a hand-made `X-Forwarded-For: 192.168.1.5` was enough to be treated as LAN and let through. Now the trusted source depends on how traffic actually reaches the app:
+
+| `TRUSTED_PROXY_MODE` | What is trusted | When |
+| --- | --- | --- |
+| `trust-proxy-header` (default) | `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP` → `Host` | There is a reverse proxy you trust to sanitize headers. **Backwards compatible.** |
+| `trust-cf-only` | Only `CF-Connecting-IP` (written by Cloudflare's edge, overriding forged values) | **Recommended when exposed publicly** |
+| `direct` | No headers at all — only the TCP peer address | No proxy in front |
+
+When no trustworthy source is available the request is **blocked** rather than allowed. `ALLOW_UNKNOWN_SOURCE=true` is the temporary escape hatch.
+
+To serve publicly, `ALLOW_PUBLIC=true` must be set **together with** `ALLOW_PUBLIC_TOKEN=<a long random string>`. Setting only `ALLOW_PUBLIC` will not open access — that is deliberate, so a single mistyped variable cannot leave the app exposed for months. See [SECURITY.md](SECURITY.md).
+
+> This is an **IP allow-list, not authentication**. It protects against accidental public deployment, not against other people on the same LAN. Under `trust-cf-only`, an attacker who can reach the port directly around Cloudflare can still forge `CF-Connecting-IP` — **no code can detect that**. The real defence is binding to `127.0.0.1` plus a firewall, so the tunnel is the only way in.
 
 ---
 

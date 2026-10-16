@@ -17,7 +17,7 @@
 
 [⚡ 30 秒试用 · 不用配 Key](https://novel-forge-nu.vercel.app/detector) · [🖼 界面预览](https://novel-forge-nu.vercel.app) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
 
-**当前版本：v3.1.135** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
+**当前版本：v3.1.136** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
 
 **先花 30 秒试一下（不用配 Key、不用安装）**
 ![去 AI 味检测演示](docs/screenshots/demo.gif)
@@ -240,7 +240,20 @@ npm start              # 启动生产服务器
 ```
 
 > **公网部署前必读**：自 v3.1.115 起，全部 `/api/*` 带一层内置访问控制——**只接受来自本机或局域网的请求**，公网来源一律返回 403（放行 `localhost` / `127.` / `10.` / `192.168.` / `172.16~31.` / `169.254.` / `::1` / `*.local`）。这是防「误部署到公网」的底线，不是账号体系。
-> 若确实要对外提供服务：设置环境变量 `ALLOW_PUBLIC=true` 即可解除，**并务必自行再加一层反向代理鉴权**（Basic Auth / Tailscale / 防火墙白名单）。
+>
+> **v3.1.136 起这层防护升级为「信任分级」**。此前客户端 IP 完全采信 `X-Forwarded-For` 等请求头，而请求头是客户端自己写的——绕过前置代理直连端口时，手动加一个 `X-Forwarded-For: 192.168.1.5` 就能伪装成内网放行。现在改为按部署形态选择信任来源：
+
+> | `TRUSTED_PROXY_MODE` | 采信什么 | 适用 |
+> | --- | --- | --- |
+> | `trust-proxy-header`（默认） | `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP` → `Host` | 前面确有反代且信任它清洗头。**向后兼容原有行为** |
+> | `trust-cf-only` | 只信 `CF-Connecting-IP`（由 Cloudflare 边缘写入并覆盖伪造值） | **暴露公网时推荐** |
+> | `direct` | 一个请求头都不信，只认 TCP 对端地址 | 无前置代理 |
+
+> 拿不到可信来源时一律**拦下**（不再默认放行）。临时放行走 `ALLOW_UNKNOWN_SOURCE=true`。
+>
+> 若确实要对外提供服务：`ALLOW_PUBLIC=true` 必须**同时**设 `ALLOW_PUBLIC_TOKEN=<自定义长随机串>`（只设前者不会放行——这是刻意设计，防「一个环境变量手滑就长期裸奔」）。完整说明见 [SECURITY.md](SECURITY.md)。
+>
+> ⚠️ 这层是**网段白名单，不是身份认证**。它挡得住误部署到公网，挡不住同一内网里的其他人。`trust-cf-only` 模式下若攻击者能绕过 Cloudflare 直连端口，伪造 `CF-Connecting-IP` 仍会被采信——**代码层堵不住**，真正的防线是只监听 `127.0.0.1` + 防火墙，让隧道成为唯一入口。
 
 ---
 

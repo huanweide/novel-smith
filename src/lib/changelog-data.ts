@@ -27,6 +27,45 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.136",
+    date: "2026-10-17",
+    title: "设定库认得出你在写谁（语义召回）＋ 修复伪造 X-Forwarded-For 可绕过全部入站访问控制",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "设定召回不再只认字面：正文写「那个叛变北境的将军」、设定写「北境守将·曾率部倒戈」时，此前关键词一个都对不上，这条设定永远注入不到 prompt，AI 只会按「将军=忠臣」去写，把叛徒写成忠臣。现在补一层语义比对，意思对得上就召回",
+          "分五层落地，每层独立可测：余弦打分（纯函数）→ 向量客户端（零新增依赖）→ 数据库落 embedding 列 → 历史设定回填 → 召回时比对生效",
+          "你不需要做任何操作：没配 embedding key 时行为与更新前逐位一致；老设定由后台悄悄补，补不上也不影响正常写作",
+          "阈值 0.62 宁漏不污染：错误塞进一条无关设定会带偏 AI，比漏掉一条更伤",
+        ],
+      },
+      {
+        label: "安全",
+        items: [
+          "修复真实漏洞：入站访问控制完全采信请求头取客户端 IP，而请求头是客户端自己写的——绕过前置代理直连端口时手写一个 X-Forwarded-For: 192.168.1.5 即被判为内网放行，等于授予全部 137 个 API 的读写权（写库、改稿、白刷作者自己的 AI Key 额度）",
+          "改为信任分级三模式：trust-proxy-header（默认向后兼容）/ trust-cf-only（公网推荐，只信 CF-Connecting-IP）/ direct（只认 TCP 对端）。未知来源一律拦下",
+          "ALLOW_PUBLIC=true 现在必须配套 ALLOW_PUBLIC_TOKEN。只设前者不放行，防「一个环境变量手滑就长期裸奔」",
+          "403 响应体带机器可读 reason；攻击验证脚本 17/17，伪造 XFF / X-Real-IP / Host 三条绕过路径均已封死",
+        ],
+      },
+      {
+        label: "仓库",
+        items: [
+          "内部工作文档归置 docs/internal/（根目录 md 15→9），访客第一眼看到的是产品说明而不是作者草稿纸",
+          "补发 v3.1.135 的 tag 与 Release——此前 tag 停在 v3.1.84 而 CHANGELOG 已写到 v3.1.135，51 个版本没发版",
+          "新增版本一致性守卫 workflow：三处版本号不一致则 PR 红，tag 落后则警告并给出补发命令",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 2027 测试通过 · next build 通过 · GitHub CI 双 job 全绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.135",
     date: "2026-09-12",
     title: "吸星改造 1：首页零门槛引导 + README 首屏重构（STAR-READINESS-1）",
