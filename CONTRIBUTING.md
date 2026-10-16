@@ -69,7 +69,7 @@ npx next build                          # 生产构建：EXIT=0
 ### 3. 改了产品行为就要 bump 版本（五件套）
 
 `package.json` 的 `version`、`src/lib/changelog-data.ts` 的 `LATEST_VERSION` + `CHANGELOG_BRIEF` + `VERSIONS`、
-`CHANGELOG.md` 顶部段落、`agent.md` 版本记录——**五处版本号必须一致**。
+`CHANGELOG.md` 顶部段落、`docs/internal/agent.md` 版本记录——**五处版本号必须一致**。
 
 直接用脚本（会自动同步中英 README 的版本行）：
 
