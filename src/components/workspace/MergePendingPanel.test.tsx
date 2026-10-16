@@ -70,8 +70,13 @@ describe("MergePendingPanel（合并提案面板，v2.19 补 AbortController）"
   it("点击刷新按钮重新拉取（不传 signal 的手动调用）", async () => {
     render(<MergePendingPanel projectId="p1" />);
     await screen.findByText(/合并提案/);
+    // 必须先等挂载那次拉取结束：刷新按钮带 disabled={loading}，
+    // 在 loading 期间 fireEvent.click 会被静默忽略，fetch 调用数不涨，
+    // 断言就变成 toBeGreaterThan(1) 对 1 ——CI 上偶发失败即此竞态。
+    const refreshBtn = screen.getByRole("button", { name: /刷新合并提案/ });
+    await waitFor(() => expect(refreshBtn).toBeEnabled());
     const before = fetchMock.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: /刷新合并提案/ }));
+    fireEvent.click(refreshBtn);
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(before));
   });
 
