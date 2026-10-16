@@ -43,7 +43,8 @@ interfaces.
 | --- | --- | --- |
 | `TRUSTED_PROXY_MODE` | `trust-proxy-header` | Which source is trusted for the client IP. See below. |
 | `ALLOW_UNKNOWN_SOURCE` | `false` | Set to `true` only as a temporary escape hatch when the address cannot be determined. |
-| `ALLOW_PUBLIC` | `false` | Allow requests that are definitively **not** from localhost/LAN. Requires a public access token. |
+| `ALLOW_PUBLIC` | `false` | Allow requests that are definitively **not** from localhost/LAN. |
+| `ALLOW_PUBLIC_TOKEN` | *(unset)* | Required together with `ALLOW_PUBLIC=true`. Setting only `ALLOW_PUBLIC` will **not** open access — this is deliberate, so that one mistyped environment variable cannot leave the app exposed for months. |
 
 ### Choosing `TRUSTED_PROXY_MODE`
 
