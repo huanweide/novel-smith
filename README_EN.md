@@ -14,7 +14,7 @@
 
 [⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.134** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.135** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
