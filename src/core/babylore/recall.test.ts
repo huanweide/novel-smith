@@ -76,3 +76,84 @@ describe("recallContext - 最长匹配优先去重", () => {
     expect(hit!.score).toBe(3);
   });
 });
+
+// ───────────────────────────────────────────────────────────
+// 语义兜底（SemanticHints）——向后兼容是硬要求
+// ───────────────────────────────────────────────────────────
+
+describe("recallContext - 语义兜底：不传就与改动前完全一致", () => {
+  const LB = [
+    { title: "北境守将", content: "曾率部倒戈", keys: ["北境守将"], enabled: true },
+  ];
+
+  it("不传 semantic → 关键词没命中就是没有，行为零变化", () => {
+    // 正文写「叛变北境的将军」，关键词「北境守将」一个都没命中
+    expect(recallContext("那个叛变北境的将军握着十万兵权", LB, [])).toEqual([]);
+  });
+
+  it("传了 semantic 且相似度达标 → 这条设定被捞回来", () => {
+    const items = recallContext("那个叛变北境的将军握着十万兵权", LB, [], {
+      similarities: [0.85],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("北境守将");
+    expect(items[0].score).toBeGreaterThan(0);
+  });
+
+  it("相似度不达标 → 仍不召回（宁漏不污染上下文）", () => {
+    const items = recallContext("那个叛变北境的将军", LB, [], {
+      similarities: [0.3],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items).toEqual([]);
+  });
+
+  it("similarities 为 null（未向量化）→ 跳过，不当成 0 也不当成分", () => {
+    const items = recallContext("那个叛变北境的将军", LB, [], {
+      similarities: [null],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items).toEqual([]);
+  });
+
+  it("已命中关键词的条目不重复计入（语义只补漏，不加倍）", () => {
+    const items = recallContext("北境守将来了", LB, [], {
+      similarities: [0.99],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items).toHaveLength(1); // 不是 2
+    expect(items[0].score).toBeGreaterThan(0.9); // 关键词分（4）未被语义覆盖
+  });
+
+  it("两个数组长度不一致 → 整块忽略，绝不影响前两步结果", () => {
+    const items = recallContext("北境守将来了", LB, [], {
+      similarities: [0.9, 0.9],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items).toHaveLength(1); // 只来自关键词
+  });
+
+  it("candidates 含 null 项 → 跳过该项，不崩", () => {
+    const items = recallContext("那个叛变北境的将军", LB, [], {
+      similarities: [0.85, 0.85],
+      candidates: [
+        null as any,
+        { source: "lorebook", title: "茶馆老板", content: "卖馄饨" },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("茶馆老板");
+  });
+
+  it("similarities 含非数 → 跳过该项", () => {
+    const items = recallContext("那个叛变北境的将军", LB, [], {
+      similarities: [NaN, Infinity] as any,
+      candidates: [
+        { source: "lorebook", title: "甲", content: "甲" },
+        { source: "lorebook", title: "乙", content: "乙" },
+      ],
+    });
+    expect(items).toEqual([]);
+  });
+});
