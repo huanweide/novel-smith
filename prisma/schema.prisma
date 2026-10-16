@@ -190,6 +190,12 @@ model LorebookEntry {
   relatedEntryIds Json @default(dbgenerated("'[]'"))
   reviewStatus    String   @default("approved") // 自动填表待审：pending=待确认 approved=已确认
 
+  // 向量嵌入（语义召回用）。可空 = 尚未向量化，不可与「语义不匹配」混淆。
+  // 存 JSON 数组而非专用向量类型：SQLite 无原生向量；数百条设定全量余弦几十毫秒算完，
+  // 不需要 pgvector / 向量索引这类重量级方案。
+  // 类型层 LoreEntry.embedding 早已声明此字段，本次才在数据库侧真正落列。
+  embedding       Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
