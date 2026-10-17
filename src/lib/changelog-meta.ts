@@ -32,13 +32,14 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.151";
+export const LATEST_VERSION = "v3.1.152";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "把「服务怎么起」这套踩坑固化成 scripts/start-novel-server.cmd + 计划任务 NovelSmith-3001",
-  "以后开机自动起 3001，构建完自动拉回来，不再出现「又开不开」",
-  "四个错误做法都试过并记档：后台 & / detached 会被父 shell 带走、VBS 是 LOLBin 被拦、schtasks 直跑 node 找不到仓库根",
-  "最难查的一个：.cmd 必须是 CRLF 行尾，LF 的批处理文件 cmd.exe 直接不执行且日志一行都不写",
-  "safe-build 会在构建前自动把行尾修正回 CRLF",
+  "修：导入含人物的小说时提炼出 0 个角色，只剩「他低声」这类碎片——端到端实测抓到的真 bug",
+  "两字说话修饰剥不干净：「林川低声说道」被贪婪匹配吃成「他低声」，现按 低声/沉声/没有 等整段剥离",
+  "三字候选不再无条件放行：必须带姓氏才建卡，并挡掉「他/她/我/很/不」等代词虚词开头",
+  "世界书不再有「座青铜」「口鼎」「本宗镇派」这类量词与切分碎片",
+  "顺带修掉一个误伤：「玄天大道」这种正当设定名不再被当成切分碎片丢掉",
+  "服务归属：实测确认 SYSTEM 身份会让 Prisma 失效，已改回用户身份，导入与落库正常",
 ];
