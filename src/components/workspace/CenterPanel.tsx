@@ -97,53 +97,13 @@ const StreamingBody = memo(function StreamingBody({
 
   return (
     <>
-      {/* 章节标题 */}
+      {/* 章节标题（书籍式居中标题；正文之上只留标题，不堆工具装饰） */}
       {selectedNode?.title && (
-        <h1 className="text-xl font-bold text-[var(--nv-text-primary)] text-center mb-6 mt-2 tracking-wide">
+        <h1 className="text-xl font-bold text-[var(--nv-text-primary)] text-center mb-7 mt-1 tracking-wide">
           {selectedNode.title}
         </h1>
       )}
-      {/* AI 念书（语音朗读）：标题下方一键朗读本章正文 */}
-      {content && (
-        <div className="flex justify-center mb-5">
-          {showTTS ? (
-            <TTSPlayer text={content} title={selectedNode?.title ?? undefined} onClose={() => onShowTTSChange(false)} />
-          ) : (
-            <button
-              onClick={() => onShowTTSChange(true)}
-              className="flex items-center gap-1.5 h-8 px-3 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors"
-              title="用浏览器语音朗读本章正文"
-            >
-              <Icon name="radio" size={13} /> 朗读本章
-            </button>
-          )}
-        </div>
-      )}
-      {/* 固定色图例：角色 / 世界书各分类的标注色说明 */}
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-4 text-[10px] text-[var(--nv-text-tertiary)]">
-        {ENTITY_LEGEND.map((it) => (
-          <span key={it.key} className="inline-flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded" style={{ backgroundColor: it.color }} aria-hidden="true" />
-            {it.label}
-          </span>
-        ))}
-      </div>
-      {/* 章节实体彩色徽章：一眼看到本章涉及哪些角色 / 世界书 */}
-      {chapterEntities.length > 0 && (
-        <div className="flex flex-wrap items-center justify-center gap-1.5 mb-5">
-          {chapterEntities.map((e) => (
-            <button
-              key={e.id + "|" + e.name}
-              onClick={() => onEntityClick(e.id, e.type)}
-              className="text-[11px] px-2 py-0.5 rounded-full border transition-colors hover:brightness-125"
-              style={{ color: e.color, borderColor: e.color + "59", backgroundColor: e.color + "1a" }}
-              title={e.type === "character" ? "角色 · 点击查看 / 编辑" : "世界书 · 点击查看 / 编辑"}
-            >
-              {e.name}
-            </button>
-          ))}
-        </div>
-      )}
+
       <MarkdownViewer
         content={content}
         projectId={projectId}
@@ -151,6 +111,49 @@ const StreamingBody = memo(function StreamingBody({
         onEntityClick={onEntityClick}
         locateEntityId={locateEntityId}
       />
+
+      {/* 阅读辅助信息：朗读 / 本章实体 / 色标说明，统一沉到正文之后的页脚。
+          首屏只剩「标题 + 正文」，去掉居中堆叠的三重装饰——这是写作区「AI 工具感」的主因 */}
+      {content && (
+        <div className="mt-10 pt-4 border-t border-[var(--nv-border-2)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 text-[11px] text-[var(--nv-text-tertiary)]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {showTTS ? (
+              <TTSPlayer text={content} title={selectedNode?.title ?? undefined} onClose={() => onShowTTSChange(false)} />
+            ) : (
+              <button
+                onClick={() => onShowTTSChange(true)}
+                className="flex items-center gap-1.5 h-7 px-2.5 text-[11px] rounded-md border border-[var(--nv-border-2)] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] transition-colors"
+                title="用浏览器语音朗读本章正文"
+              >
+                <Icon name="radio" size={12} /> 朗读本章
+              </button>
+            )}
+            {chapterEntities.map((e) => (
+              <button
+                key={e.id + "|" + e.name}
+                onClick={() => onEntityClick(e.id, e.type)}
+                className="text-[11px] px-2 py-0.5 rounded-full border transition-colors hover:brightness-125"
+                style={{ color: e.color, borderColor: e.color + "59", backgroundColor: e.color + "1a" }}
+                title={e.type === "character" ? "角色 · 点击查看 / 编辑" : "世界书 · 点击查看 / 编辑"}
+              >
+                {e.name}
+              </button>
+            ))}
+          </div>
+          {/* 色标图例折叠收纳：默认收起，需要时展开；不再占据正文首屏 */}
+          <details className="shrink-0">
+            <summary className="cursor-pointer select-none text-[11px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)]">色标说明</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[300px]">
+              {ENTITY_LEGEND.map((it) => (
+                <span key={it.key} className="inline-flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded" style={{ backgroundColor: it.color }} aria-hidden="true" />
+                  {it.label}
+                </span>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
     </>
   );
 });
@@ -1039,7 +1042,7 @@ export function CenterPanel({
                     contentEditable
                     suppressContentEditableWarning
                     spellCheck={false}
-                    className="max-w-[700px] mx-auto text-[15px] leading-relaxed text-[var(--nv-text-secondary)] whitespace-pre-wrap break-words outline-none rounded-lg px-2 -mx-2 min-h-[70vh] focus:bg-[var(--nv-surface-1)]/40"
+                    className="max-w-[700px] mx-auto text-[18.5px] leading-[1.95] text-[var(--nv-prose)] whitespace-pre-wrap break-words outline-none rounded-lg px-2 -mx-2 min-h-[70vh] focus:bg-[var(--nv-surface-1)]/40"
                   />
                 ) : (
                 <StreamingBody

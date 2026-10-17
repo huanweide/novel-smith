@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * 主题切换器 —— 十档 UI 风格（7 深 / 3 浅），各自独立配色，参考成熟产品：
- *   深：夜航（墨蓝紫·经典）/ 苍青（青绿）/ GitHub Dark / Dracula / Nord / Tokyo Night / Gruvbox
- *   浅：白昼（米白）/ Solarized Light（纸感米黄）/ Catppuccin Latte（冷白）
+ * 主题切换器 —— 十三档 UI 风格（8 深 / 5 浅），各自独立配色，参考成熟产品：
+ *   深：夜航（墨蓝紫·经典）/ 苍青（青绿）/ GitHub Dark / Dracula / Nord / Tokyo Night / Gruvbox / 柔和深夜（C·默认）
+ *   浅：白昼（米白）/ Solarized Light（纸感米黄）/ Catppuccin Latte（冷白）/ 暖白纸稿（A）/ 简洁文档（B）
  *
  * 状态持久化在 localStorage('nf-theme')，根布局防闪烁脚本首屏渲染前读取并加好 class。
  *
@@ -28,7 +28,10 @@ type ThemeId =
   | "theme-tokyo"
   | "theme-gruvbox"
   | "theme-solarized"
-  | "theme-catppuccin";
+  | "theme-catppuccin"
+  | "theme-dusk"   // 柔和深夜（风格 C，默认）
+  | "theme-paper"  // 暖白纸稿（风格 A，浅）
+  | "theme-doc";   // 简洁文档（风格 B，浅）
 
 type Group = "dark" | "light";
 
@@ -52,13 +55,16 @@ const THEMES: ThemeDef[] = [
   { id: "theme-nord", name: "北境", desc: "冷灰蓝", icon: "moon", group: "dark", swatch: "#2E3440", meta: "#2E3440" },
   { id: "theme-tokyo", name: "东京夜", desc: "深蓝紫霓虹", icon: "moon", group: "dark", swatch: "#1A1B26", meta: "#1A1B26" },
   { id: "theme-gruvbox", name: "古旧", desc: "暖褐黄", icon: "moon", group: "dark", swatch: "#282828", meta: "#282828" },
+  { id: "theme-dusk", name: "柔和深夜", desc: "深炭灰 · 零发光", icon: "moon", group: "dark", swatch: "#15171D", meta: "#15171D" },
   { id: "light", name: "白昼", desc: "米白 · 经典浅", icon: "sun", group: "light", swatch: "#F3EFE8", meta: "#F3EFE8" },
   { id: "theme-solarized", name: "曜石", desc: "Solarized 纸感", icon: "sun", group: "light", swatch: "#FDF6E3", meta: "#FDF6E3" },
   { id: "theme-catppuccin", name: "拿铁", desc: "冷白柔光", icon: "sun", group: "light", swatch: "#EFF1F5", meta: "#EFF1F5" },
+  { id: "theme-paper", name: "暖白纸稿", desc: "暖米底 · 书稿感", icon: "sun", group: "light", swatch: "#F3EEE3", meta: "#F3EEE3" },
+  { id: "theme-doc", name: "简洁文档", desc: "近白 · Notion 风", icon: "sun", group: "light", swatch: "#FFFFFF", meta: "#FFFFFF" },
 ];
 
 const ALL_IDS: ThemeId[] = THEMES.map((t) => t.id);
-const LIGHT_IDS = new Set<ThemeId>(["light", "theme-solarized", "theme-catppuccin"]);
+const LIGHT_IDS = new Set<ThemeId>(["light", "theme-solarized", "theme-catppuccin", "theme-paper", "theme-doc"]);
 
 function applyTheme(id: ThemeId) {
   const d = document.documentElement;
@@ -81,11 +87,13 @@ function currentTheme(): ThemeId {
   const found = ALL_IDS.find((id) => id !== "dark" && id !== "light" && d.classList.contains(id));
   if (found) return found;
   if (d.classList.contains("light")) return "light";
+  // 兜底：仅带 dark 基类（夜航）而无具体主题 class 时，归到 dark；
+  // 新访客由 layout 防闪烁脚本直接加具体 class（theme-dusk 等），走上面 found 分支命中
   return "dark";
 }
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
-  const [theme, setTheme] = useState<ThemeId>("dark");
+  const [theme, setTheme] = useState<ThemeId>("theme-dusk");
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });

@@ -27,6 +27,40 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.143",
+    date: "2026-10-17",
+    title: "界面风格扩充：内置暖白纸稿/简洁文档/柔和深夜三套去 AI 味主题，默认柔和深夜",
+    sections: [
+      {
+        label: "🎨 主题",
+        items: [
+          "主题切换器从 10 档扩到 13 档：新增三套去 AI 味方案——柔和深夜（C·深炭灰零发光·默认）、暖白纸稿（A·暖米底书稿感·浅）、简洁文档（B·近白 Notion 风·浅）；三套均为整块 --nv-* token 覆盖，随切换器全局生效，非换皮",
+          "默认界面风格由夜航(dark)改为柔和深夜(theme-dusk)：首屏防闪烁脚本与 localStorage('nf-theme') 同步默认；已手动选过夜航/苍青等的老用户仍按各自选择保留，不受默认变更影响",
+          "写作区（创作小说）与建立小说（项目设定）两个页面去 AI 味重构：正文改用 --nv-prose 暖色阅读色 + 首行缩进 2em + 1.9 行高；建立小说去掉大圆角/发光描边/入场动画，选项改描边+淡底，首屏只留标题与正文、辅助信息沉到页脚",
+        ],
+      },
+      {
+        label: "♿ 可访问性",
+        items: [
+          "三套新主题灰阶按 WCAG AA 4.5:1 重算：浅色底用更深灰、深色底用更浅灰，层级 primary>secondary>tertiary>muted 不倒挂；均通过对比度永久回归守卫",
+        ],
+      },
+      {
+        label: "🧪 测试",
+        items: [
+          "WCAG 守卫预期从 13 主题块更新为 16（新增 dusk/paper/doc），对比度分层断言同步加固",
+          "主题切换器测试断言从 10 档更新为 13 档",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 全绿 · next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.142",
     date: "2026-10-17",
     title: "免费公开演示站上线：去 AI 味检测零门槛试用（DEMO-PAGES-1）",

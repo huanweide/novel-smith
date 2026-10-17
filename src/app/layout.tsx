@@ -37,14 +37,14 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-/* 首屏前应用主题，避免闪烁（十档主题：夜航/苍青 + GitHub/德古拉/北境/东京夜/古旧 + 白昼/曜石/拿铁） */
+/* 首屏前应用主题，避免闪烁（十三档主题：夜航/苍青 + GitHub/德古拉/北境/东京夜/古旧/柔和深夜 + 白昼/曜石/拿铁/暖白纸稿/简洁文档） */
 (function(){
   try {
-    var ALL = ['dark','light','azure','theme-github','theme-dracula','theme-nord','theme-tokyo','theme-gruvbox','theme-solarized','theme-catppuccin'];
-    var LIGHT = { light: 1, 'theme-solarized': 1, 'theme-catppuccin': 1 };
+    var ALL = ['dark','light','azure','theme-github','theme-dracula','theme-nord','theme-tokyo','theme-gruvbox','theme-solarized','theme-catppuccin','theme-dusk','theme-paper','theme-doc'];
+    var LIGHT = { light: 1, 'theme-solarized': 1, 'theme-catppuccin': 1, 'theme-paper': 1, 'theme-doc': 1 };
     var d = document.documentElement;
-    var t = localStorage.getItem('nf-theme') || 'dark';
-    if (ALL.indexOf(t) < 0) t = 'dark';
+    var t = localStorage.getItem('nf-theme') || 'theme-dusk';
+    if (ALL.indexOf(t) < 0) t = 'theme-dusk';
     for (var i = 0; i < ALL.length; i++) d.classList.remove(ALL[i]);
     d.classList.add(t);
     d.classList.add(LIGHT[t] ? 'light' : 'dark');
