@@ -32,7 +32,7 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.147";
+export const LATEST_VERSION = "v3.1.148";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
@@ -41,4 +41,5 @@ export const CHANGELOG_BRIEF = [
   "AI 一键预填：把识别出来的角色/设定补成完整卡（性格五要素、外貌、动机、故事线），原文没写的一律留空不编",
   "预填默认仍为待审 —— LLM 也会编造设定，闸门不交给概率",
   "格式记忆：手动指定过编码或章节正则，下一批直接复用",
+  "修：识别出的角色卡不再混进「林川握」这类切分碎片，每条都必须有对话标签或称谓这类硬证据",
 ];

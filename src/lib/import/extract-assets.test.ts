@@ -201,3 +201,28 @@ describe("M3 · 统一入口", () => {
     expect(prev.digests.timelineChars).toBe(assets.timelineDigest.length);
   });
 });
+
+describe("M3 · 只有姓氏频次证据的候选被拒", () => {
+  it("贪婪切分碎片（林川握/云宗）不进角色表", () => {
+    // 无对话标签、无称谓，只靠姓氏频次——这类必须全拒
+    const text = Array(12)
+      .fill(0)
+      .map(() => "林川握着青锋剑，站在青云宗的山门前。云宗弟子纷纷行礼，他恍若未闻。")
+      .join("\n");
+    const chars = extractCharacters(sampleChapters(repeat(text, 1)), { minMentions: 3 });
+    for (const bad of ["林川握", "云宗"]) {
+      expect(chars.map((c) => c.name)).not.toContain(bad);
+    }
+    // 每一条留下的都必须有硬证据
+    for (const c of chars) {
+      expect(
+        c.evidence.includes("speech") || c.evidence.includes("honorific"),
+      ).toBe(true);
+    }
+  });
+
+  it("有对话标签的正常角色仍能进", () => {
+    const chars = extractCharacters(sampleChapters(repeat(SAMPLE, 8)), { minMentions: 3 });
+    expect(chars.map((c) => c.name)).toContain("林川");
+  });
+});

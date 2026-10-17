@@ -151,13 +151,27 @@ function collectSpeechTagged(samples: SampledChapter[]): Map<string, number> {
       rx.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = rx.exec(s.text)) !== null) {
-        const cand = m[1]!;
+        // 贪婪的{2,4} 会把动词的尾巴也吃进来（「林川说道」→候选「林川说道」），
+        // 必须先剥掉与说话动词重叠的尾部，只留下人名本体。
+        const cand = stripSpeechTail(m[1]!);
         if (!isPlausibleName(cand)) continue;
         tally.set(cand, (tally.get(cand) ?? 0) + 1);
       }
     }
   }
   return tally;
+}
+
+/** 剥掉候选名尾部与说话动词重叠的部分：「林川说道」→「林川」 */
+function stripSpeechTail(cand: string): string {
+  let s = cand;
+  for (let i = 0; i < 3; i++) {
+    if (s.length < 2) break;
+    const last = s[s.length - 1]!;
+    if (!NAME_STOP_CHARS.has(last)) break;
+    s = s.slice(0, -1);
+  }
+  return s;
 }
 
 /** 收集称谓型人名：`青云宗主`、`玄天老祖` 等（尾字是称谓，前面 1~2 字是人名） */
@@ -254,6 +268,12 @@ export function extractCharacters(
   for (const [name, { ev, raw }] of score) {
     const mentions = countMentions(name, samples);
     if (mentions < minMentions) continue;
+    // 只有姓氏频次一路证据的候选一律丢弃。
+    // 实测：这类候选几乎全是贪婪切分碎片（「林川握」「云宗」）——
+    // 中文里以姓氏开头的词（方才/忽然/后来）天然命中姓氏模式，
+    // 频次再高也只是证明这串字常出现，不证明它是一个人名。
+    // 要留必须有对话标签或称谓这类硬证据。
+    if (!ev.has("speech") && !ev.has("honorific")) continue;
     // 归一化：对话票和称谓票给上限，纯频次只作微调
     const signal = Math.min(1, (ev.has("speech") ? 0.5 : 0) + (ev.has("honorific") ? 0.35 : 0))
       + Math.min(0.3, mentions / 200);
