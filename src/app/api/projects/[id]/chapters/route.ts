@@ -8,12 +8,25 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonError } from "@/lib/api-error";
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+/** 安全读取 includeFrontMatter：url 缺失或非法时默认「带前置页」。 */
+function readIncludeFrontMatter(url: string | undefined): boolean {
+  if (!url) return true;
   try {
+    return new URL(url).searchParams.get("includeFrontMatter") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {  try {
     const { id } = await params;
+    // 阅读器要能看到导入的前置页（扉页/人物表/简介），默认带上；
+    // 审稿面板只想要正文章节，传 includeFrontMatter=0 排除。
+    // 防御：单元测试可能传入空 request，此时按默认「带前置页」处理。
+    const includeFrontMatter = readIncludeFrontMatter(request?.url);
 
     const project = await prisma.project.findUnique({
       where: { id },
@@ -25,17 +38,28 @@ export async function GET(
 
     const nodes = await prisma.storyNode.findMany({
       where: { projectId: id, deletedAt: null },
-      select: { id: true, order: true, title: true, content: true },
+      select: {
+        id: true,
+        order: true,
+        title: true,
+        content: true,
+        type: true,
+        importKind: true,
+      },
       orderBy: { order: "asc" },
     });
 
     const chapters = (nodes || [])
+      // 有正文才算可读条目（导入的卷名页是 0 字，自然被这里滤掉）
       .filter((n) => (n.content || "").trim())
+      .filter((n) => includeFrontMatter || n.importKind !== "frontmatter")
       .map((n) => ({
         id: n.id,
         order: n.order,
         title: n.title || `第${n.order + 1}章`,
         words: (n.content || "").replace(/\s+/g, "").length,
+        // 导入节点带上角色，前端可折叠附录/显示"导入"标记
+        ...(n.importKind ? { importKind: n.importKind, source: "imported" } : {}),
       }));
 
     return NextResponse.json({

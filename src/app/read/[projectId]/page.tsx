@@ -7,11 +7,12 @@ import { Icon } from "@/components/ui/icons";
 import { toastError } from "@/components/ui/toast";
 import { Loading, EmptyState } from "@/components/ui/States";
 import { MarkdownViewer } from "@/components/workspace/MarkdownViewer";
+import { ContinueWritingButton } from "@/components/import/ContinueWritingButton";
 import {
   clampFontSize,
   computeReadingProgress,
   neighborIndices,
-  pickInitialChapterId,
+  resolveInitialChapterId,
   cycleTheme,
   READER_THEME_LABEL,
   type ReaderTheme,
@@ -110,11 +111,18 @@ export default function ReadPage() {
           const mine = projs.find((p) => p.id === projectId);
           if (mine) setProjectName(mine.name);
         }
-        // 记住上次读到哪一章：还在书里就继续读，否则从头开始
+        // 打开定位：URL 显式指定（?node=）优先，其次上次读到哪章，最后从头
+        const requested = new URLSearchParams(window.location.search).get("node");
         const remembered = (() => {
           try { return localStorage.getItem(lastKey(projectId)); } catch { return null; }
         })();
-        setCurrentId(pickInitialChapterId(list.map((c) => c.id), remembered));
+        setCurrentId(
+          resolveInitialChapterId(
+            list.map((c) => c.id),
+            requested,
+            remembered,
+          ),
+        );
         setLoadError(null);
       } catch {
         if (alive) setLoadError("网络异常，目录加载失败");
@@ -236,6 +244,13 @@ export default function ReadPage() {
           <div className="text-sm font-medium truncate">{currentTitle || "未选择章节"}</div>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
+          {projectId && toc.length > 0 && (
+            <ContinueWritingButton
+              projectId={projectId}
+              afterNodeId={currentId}
+              afterTitle={currentTitle}
+            />
+          )}
           <button
             onClick={() => changeFont(-1)}
             className="btn-ghost w-8 h-8 rounded-lg text-base font-semibold"
