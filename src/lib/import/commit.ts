@@ -35,6 +35,8 @@ export interface CommitResult {
   created: { frontmatter: number; volume: number; chapter: number };
   /** 最后一条正文章节节点 id —— 「从此继续写」的锚点 */
   lastChapterNodeId: string | null;
+  /** 本次导入的来源指纹（M3 提炼出的资产要靠它溯源） */
+  sourceKey: string | null;
   health: NovelHealth;
   message: string;
 }
@@ -78,6 +80,7 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
     duplicate,
     created: { frontmatter: 0, volume: 0, chapter: 0 },
     lastChapterNodeId: null,
+    sourceKey,
     health,
     message,
   });
@@ -105,6 +108,7 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
       return {
         ...empty(true, `《${project.name}》已导入过这个文件，未重复创建`),
         lastChapterNodeId: existing.type === "chapter" ? existing.id : null,
+        sourceKey,
       };
     }
   }
@@ -168,6 +172,7 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
     duplicate: false,
     created: created_,
     lastChapterNodeId: lastNode?.id ?? null,
+    sourceKey,
     health,
     message:
       `已导入《${project.name}》共 ${rows.length} 个节点` +
