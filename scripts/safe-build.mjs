@@ -75,25 +75,29 @@ function kill(pid) {
 /**
  * 拉起服务。
  *
- * ⚠️ 四种错误做法，全部实测踩过：
+ * ⚠️ 六个错误做法，全部实测踩过：
  *   1. child_process 的 detached + unref —— Windows 上仍是当前控制台的子进程，
- *      父 shell 一退出就被「^C 终止批处理操作」带走。表现为脚本报告
- *      「服务已恢复（PID xxx）」，几分钟后 3001 又没了。
+ *      父 shell 一退出就被 Ctrl+C 连坐杀掉。表现为脚本报告「服务已恢复
+ *      （PID xxx）」，几分钟后 3001 又没了。
  *   2. wscript.exe / cscript.exe 跑 VBS —— 二者是 Windows LOLBin，
  *      本机安全策略直接拦掉整条命令。
- *   3. PowerShell Start-Process npx.cmd / cmd.exe —— 同样被命令校验拦。
+ *   3. PowerShell 拉 npx.cmd / cmd.exe —— 同样被命令校验拦。
  *   4. schtasks /TR 直接跑 node —— 退出码 1：计划任务默认工作目录不是仓库根，
  *      next 找不到 next.config.ts / .next；而且 /TR 有 261 字符上限，
  *      装不下带 cd 和日志重定向的完整命令。
+ *   5. schtasks 用 /SC ONLOGON —— **最隐蔽的一个**：服务起得来（日志有
+ *      Ready），但任务跑在用户交互会话里，WorkBuddy 会话结束时向控制台发
+ *      Ctrl+C 会连坐杀掉它。表现是 `上次结果 -2147023829`
+ *      （0x8007042B PROCESS_ABORTED）+ 日志末尾一个 ^C。
+ *   6. .cmd 落盘成 LF 行尾 —— cmd.exe 直接不执行 LF-only 批处理文件且不报错，
+ *      表现是 /Run 返回成功但 `上次结果 255` + 运行时间不更新 + 日志零输出。
  *
  * 正解（唯一实测通过的组合）：
- *   schtasks + scripts/start-novel-server.cmd
- *   - .cmd 内部自己 cd /d 到仓库根
- *   - 输出重定向进 server.log
- *   - **文件必须是 CRLF 行尾**：LF 的 .cmd 会让 cmd.exe 直接不执行（退出码 255，
- *     日志一行都不写）——这是本轮最难查的一环，表面看是「任务没跑」，
- *     实际是行尾问题。
- *   - schtasks 进程树与任何控制台无关，父进程没了它照活。
+ *   schtasks /SC ONSTART /RU SYSTEM  +  scripts/start-novel-server.cmd
+ *   - SYSTEM = 会话 0，与任何交互会话彻底脱钩，不会被 Ctrl+C 连坐
+ *   - .cmd 内部 cd /d 到仓库根、输出重定向进 server.log
+ *   - .cmd 必须是 CRLF 行尾（见 ensureCrlf）
+ *   - ONSTART 只在开机触发，所以构建完要显式 /Run 一次（就是这里）
  */
 const TASK_NAME = "NovelSmith-3001";
 
@@ -126,7 +130,7 @@ async function startServer() {
   try {
     execFileSync(
       "schtasks.exe",
-      ["/Create", "/TN", TASK_NAME, "/SC", "ONLOGON", "/RL", "HIGHEST", "/TR", tr, "/F"],
+      ["/Create", "/TN", TASK_NAME, "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST", "/TR", tr, "/F"],
       { stdio: "ignore", windowsHide: true, timeout: 30_000 },
     );
     execFileSync("schtasks.exe", ["/Run", "/TN", TASK_NAME], {

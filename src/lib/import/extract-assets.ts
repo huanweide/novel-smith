@@ -135,29 +135,21 @@ function countMentions(name: string, samples: SampledChapter[]): number {
   return n;
 }
 
-/** 收集「引号说话 + 说话动词在引号后」的标签式人名：`「……。」他说道` */
+/**
+ * 收集「引号说话 + 说话动词」标签式人名：`「……。」他说道`。
+ *
+ * 名字一律由 takeNameBefore 以说话动词为**右锚点**往左回溯取，不用固定窗口正则。
+ */
 function collectSpeechTagged(samples: SampledChapter[]): Map<string, number> {
   const tally = new Map<string, number>();
-  // 「……」+ 1~3 字 + 说话动词
-  const re = new RegExp(`」\\s*([\\u4e00-\\u9fff]{1,3})${SPEECH_TAG}`, "g");
-  // 说话动词在前的标签式：`他说道` 里的人称代词不是名字，直接靠
-  // 「XX说道 / XX道：」这类带姓或名的形式抓
-  const re2 = new RegExp(
-    `([\\u4e00-\\u9fff]{2,4})${SPEECH_TAG}[：:“"「]?`,
-    "g",
-  );
+  const re = new RegExp(SPEECH_TAG, "g");
   for (const s of samples) {
-    for (const rx of [re, re2]) {
-      rx.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = rx.exec(s.text)) !== null) {
-        // 贪婪的{2,4} 会把动词的尾巴一起吃进来（「林川说道」→候选「林川说道」），
-        // 也可能从上一小句尾巴咬（「旁边的苏长老沉声道」→候选「边的苏长老」），
-        // 所以先剥尾部修饰与说话动词，再交给人名校验。
-        const cand = stripSpeechTail(m[1]!);
-        if (!isPlausibleName(cand)) continue;
-        tally.set(cand, (tally.get(cand) ?? 0) + 1);
-      }
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s.text)) !== null) {
+      const cand = takeNameBefore(s.text, m.index);
+      if (!cand) continue;
+      tally.set(cand, (tally.get(cand) ?? 0) + 1);
     }
   }
   return tally;
@@ -199,8 +191,29 @@ function stripSpeechTail(cand: string): string {
     if (!NEGATIVE_TAIL_2.has(tail2)) break;
     s = s.slice(0, -2);
   }
+  // 最后剥**单字**说话修饰残留。
+  // 为什么必须做这一段：SPEECH_MODIFIER_2 只能覆盖已枚举的两字组合，
+  // 而中文里说话修饰可以自由叠加（「宗主冷冷道」「他缓缓开口」），
+  // 枚举永远不全。按「尾字属于说话动词字集合」逐字剥，才是无需穷举的做法。
+  // 保留至少 2 字，避免把「叶问」这类真名剥成单字。
+  for (let i = 0; i < 3; i++) {
+    if (s.length <= 2) break;
+    if (!SPEECH_TAIL_CHARS.has(s[s.length - 1]!)) break;
+    s = s.slice(0, -1);
+  }
   return s;
 }
+
+/**
+ * 说话动词 / 说话修饰里出现的单字（用于逐字剥尾）。
+ * 只收「几乎不做人名末字」的字；「问」虽然在内，但下方剥尾有
+ * 「剥完必须 ≥2 字」的保护，所以「叶问」不会被剥成「叶」。
+ */
+const SPEECH_TAIL_CHARS = new Set([
+  "说", "道", "问", "答", "喝", "喊", "叫", "笑", "骂", "叹", "哼",
+  "冷", "低", "沉", "轻", "淡", "怒", "急", "缓", "默", "微", "暗",
+  "偷", "哑", "摇", "点", "应", "回", "接",
+]);
 
 /** 说话动词前的常见两字否定/副词修饰，作为候选名尾部时整体剥掉 */
 const NEGATIVE_TAIL_2 = new Set([
@@ -214,21 +227,51 @@ const SPEECH_MODIFIER_2 = new Set([
   "喃喃", "低语", "怒喝", "冷笑", "失笑", "苦笑", "大笑", "笑问", "笑答", "开口",
 ]);
 
-/** 收集称谓型人名：`青云宗主`、`玄天老祖` 等（尾字是称谓，前面 1~2 字是人名） */
+/**
+ * 从 `text` 的 `endIdx`（动词/称谓的起始位置）**往左**取人名。
+ *
+ * ## 为什么不能用固定窗口的正则
+ *
+ * 固定 `{2,4}` 贪婪匹配会**从上一小句的尾巴开始切**：
+ *   「旁边的苏长老沉声道」→ 候选「边的苏长老」→ 首字「边」被拒 → 苏长老整个漏掉
+ * 收紧成 `{2}` 又会漏掉「青云宗主」这类 3 字名。
+ * 改成非贪婪更糟：`{2,3}?` 会切到「的苏」。
+ *
+ * ## 正解
+ *
+ * 以动词/称谓为**右锚点**，往左逐个长度（4→3→2）尝试，
+ * 每个长度都剥掉尾部修饰后交给 `isPlausibleName` 判定，
+ * **取最长的那个合法结果**。
+ *
+ * 这样：
+ *   「旁边的苏长老沉声道」→ 4字「边的苏长老」✗ → 3字「的苏长老」✗ → 2字「苏长老」✓
+ *   「林川说道」          → 4字✗ → 3字「林川说」剥成「林川」✓
+ *   「他低声说道」        → 4/3字首字是代词✗ → 2字「他低」✗ → 全拒（正确，本就不是名字）
+ */
+function takeNameBefore(text: string, endIdx: number): string | null {
+  for (let len = 4; len >= 2; len--) {
+    const start = endIdx - len;
+    if (start < 0) continue;
+    const raw = text.slice(start, endIdx);
+    const cand = stripSpeechTail(raw);
+    if (cand.length < 2 || cand.length > 4) continue;
+    if (isPlausibleName(cand)) return cand;
+  }
+  return null;
+}
+
+/** 收集称谓型人名：`青云宗主`、`玄天老祖` 等（尾字是称谓，前面是名字） */
 function collectHonorific(samples: SampledChapter[]): Map<string, number> {
   const tally = new Map<string, number>();
   for (const tail of HONORIFIC_TAIL) {
-    // ⚠️ 窗口必须**收紧到 2 字**：{2,3} 的贪婪会从上一小句尾巴开始切
-    //（「旁边的苏长老」→ 候选「边的苏长老」→ 因首字「边」被拒 → 苏长老整个漏掉）。
-    // 称谓型人名的名字部分绝大多数是 2 字（苏长老=苏+长老、云老祖=云+老祖），
-    // 取 3 字反而引入了跨句噪声。
-    const rx = new RegExp(`([\\u4e00-\\u9fff]{2})${tail}`, "g");
     for (const s of samples) {
+      // 只定位称谓**起点**，名字由 takeNameBefore 往左回溯取
+      const rx = new RegExp(tail, "g");
       rx.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = rx.exec(s.text)) !== null) {
-        const cand = m[1]!;
-        if (!isPlausibleName(cand)) continue;
+        const cand = takeNameBefore(s.text, m.index);
+        if (!cand) continue;
         tally.set(cand, (tally.get(cand) ?? 0) + 1);
       }
     }
@@ -242,12 +285,14 @@ function isPlausibleName(cand: string): boolean {
   // 首字是代词/虚词 → 一定不是人名。
   // 这条挡掉了大量切分碎片（「他低声」「有人低」的「他/有」开头）。
   if (IMPOSSIBLE_HEAD.has(cand[0]!)) return false;
-  if (cand.length === 4) return hasSurname(cand);
-  // 含明显功能/代词字的丢弃
+  // ⚠️ 必须**先**逐字检查再按长度分支。
+  // 旧实现里 4 字分支 `return hasSurname(cand)` 提前返回，
+  // 导致含标点的碎片「宗。」他」只要首字是姓就直接放行 —— 这就是跨标点碎片的来源。
   for (const ch of cand) {
     if (NAME_STOP_CHARS.has(ch)) return false;
     if (!/[一-龥]/.test(ch)) return false;
   }
+  if (cand.length === 4) return hasSurname(cand);
   // 「他们」「我们」「自己」这类代词
   if (/^(他们|我们|你们|自己|对方|此人|众人|大家|别人|他人|别人)$/.test(cand)) return false;
   // ⚠️ 3 字候选必须**有姓氏**才算数。
