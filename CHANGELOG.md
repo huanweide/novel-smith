@@ -1,5 +1,21 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.142 — 2026-10-17
+
+### 免费公开演示站上线：去 AI 味检测零门槛试用（DEMO-PAGES-1）
+
+诊断：这个项目最硬的矛盾是「演示门槛」——所有人都能看到去 AI 味检测的分数截图，但**想亲手试一下必须 clone 仓库、装依赖、跑起来**。中间的转化断档让 README 里那个预览链接形同虚设：它指向的 Vercel 域名早已失效（项目删除、域名还挂着、HTTP 000），点进去是空白，路人看到的是「这项目好像已经死了」。
+
+- **免费公开演示站**：`https://huanweide.github.io/novel-smith/` —— 任何人点开就能直接试「去 AI 味检测」，粘贴自己的文字立刻拿到完整报告。走 GitHub Pages（免费静态托管），**不需要 Vercel、不需要 token、不花一分钱**。
+- **演示与产品同一套逻辑**：`demo/src/main.ts` 直接 `import` 项目真实引擎 `src/core/humanize`（`analyzeText` / `applyFixes` / `countFixable`），不重写不 mock、不做简化版。演示里给出的分数、痕迹命中、可套用修复，与本地跑应用完全是同一结果——不然演示就变成了谎话。
+- **能力对齐产品**：含 AI 味样例与人写样例对照、score + level + 段落统计 + 逐条命中卡片（原文片段 / 判定理由 / 严重度）、单条「套用修复」与「一键套用全部修复」，实时看分数变化。
+- **自动同步**：push main 且 `src/core/humanize/**`、`demo/**`、`.github/workflows/pages.yml` 变动时，Actions 自动 esbuild 重建并部署。**改一次引擎，演示站自动跟着变，不存在「演示版和产品版不同步」这回事。**
+- **定位写明**：演示页与 README 都写清这是演示，完整写作应用需 clone 仓库本地跑（数据写本地 SQLite，隐私优先）——不误导人以为线上存稿。
+- **死链清理**：README / README_EN 的徽章与试用链接（共 6 处）、`docs/internal/agent.md` 的预览站现状与待办（第 96 / 484 行）全部换成 Pages 地址；删除已废弃的 `.github/workflows/deploy.yml`。
+- **收尾**：`.gitignore` 追加本地产物（server.log / tunnel.log / .playwright/ / .playwright-cli/ / demo 打包产物 app.js）。
+
+- **门禁**：tsc 0 错 · vitest 全绿 · next build 通过 · Pages workflow 全绿 · 线上 headless 浏览器实测（标题、54/100「痕迹明显」、6 条命中、app.js 200）
+
 ## v3.1.141 — 2026-10-17
 
 ### 文档体检：真身路径纠偏 + ROADMAP 回填 56 版本 + 新增文档链接检查脚本（DOC-HEALTH-1）

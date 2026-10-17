@@ -1,7 +1,7 @@
 [![License](https://img.shields.io/github/license/huanweide/novel-smith)](LICENSE)
 [![CI](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml/badge.svg)](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/huanweide/novel-smith)](https://github.com/huanweide/novel-smith/stargazers)
-[![UI Preview](https://img.shields.io/badge/UI%20Preview-novel--forge--nu.vercel.app-6366f1)](https://novel-forge-nu.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-AI--trace%20detector-22c55e)](https://huanweide.github.io/novel-smith/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 
 ![Novel Smith](docs/banner.svg)
@@ -12,15 +12,15 @@
 
 `TypeScript` · `Local-First` · `Tiered Memory Engine` · `Long-Form Web Novels` · `Data Stays on Your Machine`
 
-[⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
+[⚡ Try in 30 seconds (no API key)](https://huanweide.github.io/novel-smith/) · [🖼 UI Preview](https://huanweide.github.io/novel-smith/) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.141** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.142** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
 
 
-Open the **[AI-trace detector in the live demo](https://novel-forge-nu.vercel.app/detector)** and paste any text of your own. You get a real report instantly: which AI-writing patterns were hit, the exact snippets, why each one counts, and how to fix it.
+Open the **[AI-trace detector in the live demo](https://huanweide.github.io/novel-smith/)** and paste any text of your own. You get a real report instantly: which AI-writing patterns were hit, the exact snippets, why each one counts, and how to fix it.
 
 This part **runs entirely in your browser** — no network calls, no upload, no API key. It is the project's core differentiator (a local rule engine) in action.
 

@@ -93,7 +93,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 | Issue | 0 |
 | 待处理 PR | 0 个。本次（2026-09-02）本地统一合并 6 个 dependabot 升级中的 5 个：prisma 7.8→7.10、vitest 4.1.10→4.1.11、tailwindcss 4→4.3.3、@types/node 20→26.4、CI 的 setup-node 4→7；**eslint 9→10 暂留 v9**（eslint-config-next@16.2.7 内置的 eslint-plugin-react@7.37.5 调用了 ESLint 10 已删除的 `context.getFilename()` API，强升会打挂 lint，等生态就绪再升）。 |
 | Topics | 20 个（已达 GitHub 上限，加新的要先删旧的） |
-| 预览站 | `https://novel-forge-nu.vercel.app`（Vercel 项目名还是旧名，改名需瑞宝宝授权） |
+| 预览站 | `https://huanweide.github.io/novel-smith/`（GitHub Pages 免费演示，push main 且 `src/core/humanize/**`、`demo/**`、`.github/workflows/pages.yml` 变动时自动重建部署；Vercel 站已废弃——域名失效且无 token） |
 
 **改名背景（为什么要从 novel-forge 改成 novel-smith）**：赛道里已有一个同名且高度重合的开源项目 `RhythmicWave/NovelForge`（Python，1150 star，仍在活跃更新），搜 NovelForge 时别人先看到它，我们被完全淹没。改名后 GitHub 旧链接自动 301 跳转，不失效。**内部标识刻意没改**（localStorage 的 `novel-forge-*` 键名、预设 schema）——改了老用户数据会找不着。
 
@@ -481,7 +481,7 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 
 1. ~~处理 dependabot PR~~ **【已完成 2026-09-02】** 实际有 6 个 OPEN PR：#7 setup-node 4→7、#12 tailwind 4.3.0→4.3.3、#14 eslint 9.39.4→10.9.1、#15 vitest 4.1.10→4.1.11、#16 @types/node 20→26.4.0、#17 @prisma/client 7.8.0→7.10.0。本地统一升级 + 全门禁（tsc 0错 / vitest 1289 全绿 / 生产构建通过）。其中 #14 eslint 10 因 `eslint-config-next` 不兼容暂留 v9（关闭 PR 并注明原因），其余 5 个合入后关 PR。
 2. ~~把 `src/core/humanize/` 去 AI 味模块接线到生成流程~~ **【已完成 v3.1.59】** 已作为「本地过审自检」入线（CenterPanel 一键过审，纯本地、不联网、不花一分钱）。
-3. Vercel 预览站改名 `novel-forge-nu.vercel.app` → 新名（需瑞宝宝授权 Vercel 项目操作）。
+3. ~~Vercel 预览站改名~~ **【已作废 2026-10-17】** Vercel 站 `novel-forge-nu.vercel.app` 已失效（HTTP 000，项目删除域名仍挂着），且本机无 Vercel 凭证、瑞宝宝不付费。改为 GitHub Pages 免费演示站 `https://huanweide.github.io/novel-smith/`（`demo/` + esbuild 复用真实 humanize 引擎，`pages.yml` 自动同步部署），零成本零 token。
 4. ~~陈旧的 `master` 分支~~ **【已删除 2026-09-02】** 删除前先诊断：master 领先 main 2 个独有提交（`14c00be`/`ae4ceb9`，均为 Postgres 直连旧方向，与现 SQLite 架构冲突、属被放弃方向），已先打 `backup/master-legacy-20260902` 标签异地保护，再删 origin/ghssh 两远程 + 本地 master 分支，并 `fetch -p` 清理过期追踪引用；远程默认分支确认是 `main`，无引用、零丢失。
 5. **首屏并行化实测结论（2026-09-02，不 bump）**：生产构建首屏 JS 体积仅为开发的 1/6（工作区 1.67MB vs 9.9MB），配合预渲染 HTML 首屏立即可见，生产首屏基本秒开；开发模式 10-12s 黑屏是 dev 模式固有成本（Turbopack 实时编译未压缩 chunk），**属假象，无需做首屏并行化优化**。
 6. **ROADMAP.md 重标定（2026-09-03，仅文档、不 bump）**：废弃 2026-06-17 旧版（其 Postgres/Redis/云端假设已与 SQLite 本地优先架构冲突，且 v3.1.59→v3.1.84 实际演进是健壮性/说人话/防丢稿/接锁主线，旧版功能堆已失真）。重写为单一真相源：三大支柱（本地优先与隐私 / 白盒可改 humanize+实体标注 / 可信赖 不甩脸不丢稿真锁）+ 重新排序 P0–P3 + **获取 Star 专项**（当前最大缺口）+ 游戏模式降级卫星 + 砍 Postgres/Redis 假设。综合输入：精进分析(09-02)、董事会 2.0-plan(chair-integration)、agent.md 台账。

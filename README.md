@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/github/license/huanweide/novel-smith)](LICENSE)
 [![CI](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml/badge.svg)](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/huanweide/novel-smith)](https://github.com/huanweide/novel-smith/stargazers)
-[![界面预览](https://img.shields.io/badge/界面预览-novel--forge--nu.vercel.app-6366f1)](https://novel-forge-nu.vercel.app)
+[![在线演示 · 去 AI 味检测](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-%E5%8E%BB%20AI%20%E5%91%B3%E6%A3%80%E6%B5%8B-22c55e)](https://huanweide.github.io/novel-smith/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 <!-- /badges -->
 
@@ -15,15 +15,15 @@
 
 `TypeScript` · `Local-First` · `分层记忆引擎` · `中文长篇` · `去 AI 味（本地过审）` · `数据不出本机 · 隐私零上传`
 
-[⚡ 30 秒试用 · 不用配 Key](https://novel-forge-nu.vercel.app/detector) · [🖼 界面预览](https://novel-forge-nu.vercel.app) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
+[⚡ 30 秒试用 · 不用配 Key](https://huanweide.github.io/novel-smith/) · [🖼 界面预览](https://huanweide.github.io/novel-smith/) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
 
-**当前版本：v3.1.141** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
+**当前版本：v3.1.142** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
 
 **先花 30 秒试一下（不用配 Key、不用安装）**
 ![去 AI 味检测演示](docs/screenshots/demo.gif)
 
 
-打开 **[在线 demo 里的「去 AI 味检测」](https://novel-forge-nu.vercel.app/detector)**，粘贴一段你自己的文字 —— 立刻拿到检测报告：命中了哪些 AI 痕迹、每处的原文片段、为什么算 AI 味、可以怎么改。
+打开 **[在线 demo 里的「去 AI 味检测」](https://huanweide.github.io/novel-smith/)**，粘贴一段你自己的文字 —— 立刻拿到检测报告：命中了哪些 AI 痕迹、每处的原文片段、为什么算 AI 味、可以怎么改。
 
 这一步**全程在你浏览器里跑**：不联网、不上传、不需要 API Key。它用的正是本项目最核心的差异化能力（本地规则引擎）。
 

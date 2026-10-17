@@ -32,11 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.141";
+export const LATEST_VERSION = "v3.1.142";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "文档体检抓到真问题：agent.md 的「真身路径」还指向落后 5 个版本的旧克隆（package.json 甚至停留在 3.1.53），按图索骥的会话会在错目录里改代码——现已改指当前克隆，全部旧副本标注真实版本",
-  "ROADMAP 回填 v3.1.85–140 共 56 个版本：P1 三项（F11 沉浸写作 / 多项目切换 / 视野优化）与 P2 世界书冲突可视化其实早已交付，「完成一项回填一项」的规则这次补执行",
-  "新增 scripts/check-doc-links.py：52 个文档的路径引用一键体检，断链退出码 1 可挂 CI；顺带修好烂掉的 bump-version.js（LATEST_VERSION 早迁去 changelog-meta.ts，脚本却还在读旧文件，一跑就报错）",
+  "新增 GitHub Pages 免费公开演示站 huanweide.github.io/novel-smith：任何人点开链接就能直接试「去 AI 味检测」，真实引擎跑在浏览器里，不联网、不上传、不用 API Key",
+  "演示页直接 import 项目真实 humanize 引擎（analyzeText / applyFixes / countFixable），不重写不 mock——演示与产品同一套逻辑，评分与修复结果完全一致",
+  "支持单条套用修复与一键套用全部修复，实时看分数变化；push main 且引擎/demo 变动时自动重建部署，永远与最新版本同步，零成本零 token",
+  "Vercel 预览站正式废弃（域名已失效且本机无凭证）：README / README_EN / agent.md 共 8 处死链全部换成 Pages 地址",
 ];
