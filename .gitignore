@@ -127,3 +127,16 @@ pip.conf
 
 # git 快照备份（bundle 每个几十 MB，入库会把仓库撑爆）
 /.snapshots/
+
+# ── 2026-10-16 新增：开发过程残留防复发 ─────────────────────────
+# 说明：这些文件都不该入库，但历史上漏了，导致仓库根目录堆了一堆一次性脚本。
+# 判定标准：要么零代码引用，要么是一次性调试产物。
+*.log                       # dev3002.log 这类本地启动日志（含绝对路径与本机信息）
+_ssr_root.html              # SSR 调试用的临时 HTML 快照
+/diag.html                  # 一次性诊断输出
+contrast_calc.mjs           # 对比度计算的一次性试验脚本
+contrast_table.mjs          # 同上
+e2e-check.mjs               # 手工端到端验证脚本（依赖本机已存在的测试项目 UUID）
+e2e-dice.mjs                # 同上
+e2e-auto-table.mjs          # 同上
+node_modules/

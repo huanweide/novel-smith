@@ -1,6 +1,6 @@
 # Novel Smith 项目升级计划（2026-09-08）
 
-> 基于完整通读 `README.md` / `README_EN.md` / `agent.md` / `ROADMAP.md` / `package.json` / `.env.example` /
+> 基于完整通读 `README.md` / `README_EN.md` / `docs/internal/agent.md` / `ROADMAP.md` / `package.json` / `.env.example` /
 > `prisma/schema.prisma`（27 个 model）/ 12 个页面 / 130+ API 路由 / `src/core` 30+ 模块后的产出。
 > 目标只有一个：**提升 Star 数与真实用户好感度**。一切不服务于这个目标的改动（依赖升级、纯重构、版本号堆叠）全部剔除。
 
@@ -269,7 +269,7 @@
 - **具体改动点**：
   1. 新建 `CONTRIBUTING.md`：本地起站三步、目录结构速览、跑测试命令、"提一个好 Issue"模板说明、
      预设/模板贡献方式（对应现有 `templates/` 目录）。
-  2. 仓库设置开启 **Discussions**（agent.md 记 2026-09-04 因 HTTP 410 未启用，重试或改用 Issue 模板承载）。
+  2. 仓库设置开启 **Discussions**（`docs/internal/agent.md` 记 2026-09-04 因 HTTP 410 未启用，重试或改用 Issue 模板承载）。
   3. `README.md`「贡献与反馈」节补具体的三步路径（现在只有 4 条泛泛而谈的要点）。
 
 #### B4 · 英文 README 补齐到当前版本（打开海外 Star 渠道）

@@ -32,12 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.135";
+export const LATEST_VERSION = "v3.1.137";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "首页 Hero 新增零门槛试用引导条：检测到 AI 尚未配置时，引导访客先去「去 AI 味检测」（纯本地规则引擎 —— 不需要 Key、不联网、不上传），让价值验证从 30 分钟压缩到 30 秒，而不是在「要配 Key」这一步就流失",
-  "依据：去 AI 味检测是纯前端实现（use client + core/humanize，零 API 调用、零数据库写入），在线 demo 上完全可用；但此前首页没有任何引导把它暴露给访客，访客点进 demo 只能看界面、试不了，构成最大的转化断点",
-  "README 首屏重构（中英同步）：删掉劝退式的「在线预览只能看界面、做不了实际操作」，改为「先花 30 秒试一下（不用配 Key、不用安装）」价值前置；新增「哪些功能不需要 Key」对照表；导航行加 30 秒试用直达入口",
-  "门禁：tsc 0 错 · vitest 177 文件 1921 测试全绿 · next build 通过",
+  "README 说人话：新增「和直接跟 AI 聊天写有什么不一样」六行对比表 +「它不是什么」五条边界声明——把「聊天窗口是健谈的陌生人，本项目是住在你电脑里、记得你所有设定的写作工程台」这句话讲给零基础的人听",
+  "修四个文档与代码不符的安全说明（严重）：文档此前声称「只设 ALLOW_PUBLIC 不会开放访问」，而代码行为是未配令牌即放行——错误方向是让用户低估暴露面；同时纠正「npm run dev 只监听 127.0.0.1」的错觉（实际绑定所有接口，局域网可达是刻意放行场景）",
+  "修一个死脚本：deploy-local.ps1 还在跑 Docker + PostgreSQL 流程，而仓库早已全量迁往本地 SQLite（连 docker-compose.yml 都不存在），Windows 用户照它走第一步就卡死。已重写为 SQLite 一键版并新增 -Loopback 参数",
+  "修两个 Postgres 时代遗留的测试占位串：它们把 DATABASE_URL 默认成 postgresql://…，让 prisma.ts 去 mkdir 一个不存在的目录，三个测试文件在干净环境必红",
+  "门禁：tsc 0 错 · vitest 182 文件 2048 测试全绿 · next build 通过 · GitHub CI 全绿",
 ];
