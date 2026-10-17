@@ -148,6 +148,14 @@ export function DetectorPanel() {
    * 敢让机器动稿子的前提就是随时能退回去——不能退的功能没人敢用。
    */
   const [undoStack, setUndoStack] = useState<string[]>([]);
+  /**
+   * 第一次套用前的分数快照（v3.1.138）。
+   *
+   * 为什么需要它：只显示「现在的分数」，用户感知不到自己刚刚完成了什么。
+   * 「23 分 → 8 分」是一眼就能看懂的成就——和番茄钟的连击记录是同一个东西：
+   * 即时反馈让「把稿子弄干净」这件事有爽感。没有它，一键套用只是个静静变化的数字。
+   */
+  const [baseline, setBaseline] = useState<{ score: number; levelLabel: string } | null>(null);
   const [notice, setNotice] = useState("");
 
   const report = useMemo(() => analyzeText(text), [text]);
@@ -169,6 +177,8 @@ export function DetectorPanel() {
     const r = applyFixes(text, [hit]);
     if (r.applied === 0) return;
     setUndoStack((s) => [...s, text]);
+    // 第一次套用时记下改前的分数，之后不再覆盖（对比的是「来的时候」vs「现在」）
+    setBaseline((b) => b ?? { score: report.score, levelLabel: report.levelLabel });
     setNotice(`已套用 1 处：${hit.fix?.label ?? "修改"}`);
     setText(r.text);
   };
@@ -178,6 +188,7 @@ export function DetectorPanel() {
     const r = applyFixes(text, report.hits);
     if (r.applied === 0) return;
     setUndoStack((s) => [...s, text]);
+    setBaseline((b) => b ?? { score: report.score, levelLabel: report.levelLabel });
     setNotice(
       r.skipped > 0
         ? `已套用 ${r.applied} 处${r.skipped} 处因范围重叠跳过，可手动处理`
@@ -192,6 +203,8 @@ export function DetectorPanel() {
       if (last === undefined) return s;
       setText(last);
       setNotice("已撤销上一次套用");
+      // 撤回最原点时，基线快照失去意义（回到了「来的时候」），一并清掉
+      if (s.length === 1) setBaseline(null);
       return s.slice(0, -1);
     });
   };
@@ -310,6 +323,28 @@ export function DetectorPanel() {
             </div>
           )}
 
+          {/* ── 套用前后对比（v3.1.138）──
+              把「你刚刚完成了什么」变成一眼能看懂的成就：
+              23 分 → 8 分。和番茄钟的连击记录是同一个设计——
+              即时反馈让「把稿子弄干净」有爽感，否则一键套用只是个静静变化的数字。
+              只在真的降分了才显示；撤销回原点时随 baseline 一起消失。 */}
+          {baseline && report.score < baseline.score && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-[var(--nv-success)]/30 bg-[var(--nv-success)]/10 px-4 py-3">
+              <span className="text-xs text-[var(--nv-text-tertiary)] line-through decoration-1">
+                套用前 {baseline.score} 分 · {baseline.levelLabel}
+              </span>
+              <span className="text-[var(--nv-success)] text-sm shrink-0" aria-hidden>
+                →
+              </span>
+              <span className="text-sm font-semibold text-[var(--nv-success)]">
+                现在 {report.score} 分 · {report.levelLabel}
+              </span>
+              <span className="text-[11px] text-[var(--nv-text-tertiary)]">
+                ↓ {baseline.score - report.score} 分 · 只套用了机器有把握的改动，拿不准的仍归你改
+              </span>
+            </div>
+          )}
+
           {/* 总分 */}
           <div className={`rounded-2xl border ${style.border} ${style.bg} p-5 flex items-center gap-5`}>
             <div className="shrink-0">
@@ -417,16 +452,25 @@ export function DetectorPanel() {
       {/* ── 免责声明：永远可见，不许折叠 ── */}
       <p className="mt-6 text-[11px] leading-relaxed text-[var(--nv-text-muted)]">{DISCLAIMER}</p>
 
-      {/* ── 下一步引导 ── */}
-      <footer className="mt-6 pt-4 border-t border-[var(--nv-border-1)] text-xs text-[var(--nv-text-tertiary)]">
-        想边写边检测？{" "}
-        <Link href="/settings" className="underline underline-offset-2 hover:text-[var(--nv-text-primary)]">
-          去设置页配好 Key
-        </Link>{" "}
-        后，工作台每一章都能一键过审自检。 ·{" "}
-        <Link href="/" className="underline underline-offset-2 hover:text-[var(--nv-text-primary)]">
-          回首页
-        </Link>
+      {/* ── 下一步引导 ──
+          顺序想清楚（v3.1.138）：新用户在这里刚拿到一次价值，下一步**不是**推他去配 Key——
+          那是全站流失最大的一步。先告诉他「不配 Key 还能干什么」，把完整版的价值前置，
+          Key 只留给「AI 续写」这一个真正需要它的能力。 */}
+      <footer className="mt-6 pt-4 border-t border-[var(--nv-border-1)] text-xs text-[var(--nv-text-tertiary)] space-y-2">
+        <p>
+          检测只是开胃菜。完整版在你自己电脑上跑，还有一堆<span className="text-[var(--nv-text-secondary)]">不需要 Key</span>的能力：
+          边写边检测（每章一键过审）、设定自动建档、伏笔追踪、角色关系图、导出 Word / EPUB。
+        </p>
+        <p>
+          <Link href="/" className="underline underline-offset-2 hover:text-[var(--nv-text-primary)]">
+            回首页
+          </Link>
+          {" · "}
+          <Link href="/settings" className="underline underline-offset-2 hover:text-[var(--nv-text-primary)]">
+            配 Key 解锁 AI 续写
+          </Link>
+          {"（只有 AI 生成正文需要；上面的检测永远免费离线）"}
+        </p>
       </footer>
     </div>
   );
