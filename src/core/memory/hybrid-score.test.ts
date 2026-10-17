@@ -108,6 +108,11 @@ describe("acceptSemanticCandidate —— 阈值把噪声挡在外面", () => {
     expect(r!.title).toBe("北境守将");
   });
 
+  it("v3.1.138：返回值带出原始 similarity（供 UI 显示「多像」）", () => {
+    const r = acceptSemanticCandidate({ ...base, similarity: 0.8 });
+    expect(r!.similarity).toBe(0.8);
+  });
+
   it("不达标 → null（宁漏不污染上下文）", () => {
     expect(acceptSemanticCandidate({ ...base, similarity: 0.3 })).toBeNull();
   });

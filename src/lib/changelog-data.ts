@@ -27,6 +27,27 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.138",
+    date: "2026-10-17",
+    title: "语义召回看得见了：预览召回标注命中路径（关键词 / 语义 N%）",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "设定表格页「预览召回」给每条结果标注命中路径：关键词命中 或 语义召回 N%（余弦相似度）",
+          "有语义命中时结果区顶部加说明：这些条目关键词一个都没出现，靠意思对得上捞回来；没有这层能力会被整条跳过，AI 只能按通用印象去写",
+          "实现：RecallItem 加 matchedBy / similarity 可选字段（老调用方零影响）；acceptSemanticCandidate 带出原始相似度；前端 tables 页接口同步扩展",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 182 文件 2051 测试全绿 · next build 通过 · GitHub CI 全绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.137",
     date: "2026-10-17",
     title: "README 说人话 + 修四个文档与代码不符的安全说明 + 修一个死脚本与两个过时测试",

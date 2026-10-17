@@ -19,6 +19,15 @@ export interface RecallItem {
   content: string;
   /** 命中关键词的特异性打分（关键词长度），用于按价值排序截断 */
   score: number;
+  /**
+   * 这条是被哪条路径捞回来的（v3.1.138 起标注，供 UI 展示）。
+   *   keyword  = 关键词真实命中（绿灯机制，原行为）
+   *   semantic = 关键词一个没中、靠语义相似度补漏捞回来的
+   * 老调用方不读这个字段，不影响任何既有行为。
+   */
+  matchedBy?: "keyword" | "semantic";
+  /** 仅语义命中带：原始余弦相似度 0~1，供 UI 显示「多像」 */
+  similarity?: number;
 }
 
 // 表格行的"关键列"——这些列的值出现在上下文里即视为命中召回
@@ -80,7 +89,7 @@ export function recallContext(
     // 最长匹配优先：被更长命中关键词包含的短词剔除（如「青龙」被「青龙镇」包含）
     const kept = dedupSubstring(hitKeys);
     const score = kept.reduce((m, k) => Math.max(m, scoreKeyword(k)), 0);
-    items.push({ source: "lorebook", title: e.title, content: e.content, score });
+    items.push({ source: "lorebook", title: e.title, content: e.content, score, matchedBy: "keyword" });
   }
 
   // 2) 结构化表格：行的关键列值「真实命中」上下文即召回
@@ -106,6 +115,7 @@ export function recallContext(
         title: t.name,
         content: vals || JSON.stringify(r),
         score,
+        matchedBy: "keyword",
       });
     }
   }
@@ -134,7 +144,9 @@ export function recallContext(
         content: cand.content,
         similarity: sim,
       });
-      if (accepted) items.push(accepted);
+      if (accepted) {
+        items.push({ ...accepted, matchedBy: "semantic", similarity: sim });
+      }
     }
   }
 

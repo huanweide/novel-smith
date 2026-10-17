@@ -32,13 +32,11 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.137";
+export const LATEST_VERSION = "v3.1.138";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "README 说人话：新增「和直接跟 AI 聊天写有什么不一样」六行对比表 +「它不是什么」五条边界声明——把「聊天窗口是健谈的陌生人，本项目是住在你电脑里、记得你所有设定的写作工程台」这句话讲给零基础的人听",
-  "修四个文档与代码不符的安全说明（严重）：文档此前声称「只设 ALLOW_PUBLIC 不会开放访问」，而代码行为是未配令牌即放行——错误方向是让用户低估暴露面；同时纠正「npm run dev 只监听 127.0.0.1」的错觉（实际绑定所有接口，局域网可达是刻意放行场景）",
-  "修一个死脚本：deploy-local.ps1 还在跑 Docker + PostgreSQL 流程，而仓库早已全量迁往本地 SQLite（连 docker-compose.yml 都不存在），Windows 用户照它走第一步就卡死。已重写为 SQLite 一键版并新增 -Loopback 参数",
-  "修两个 Postgres 时代遗留的测试占位串：它们把 DATABASE_URL 默认成 postgresql://…，让 prisma.ts 去 mkdir 一个不存在的目录，三个测试文件在干净环境必红",
-  "门禁：tsc 0 错 · vitest 182 文件 2048 测试全绿 · next build 通过 · GitHub CI 全绿",
+  "语义召回现在看得见了：设定表格的「预览召回」会明确标出哪几条是关键词命中的、哪几条是「关键词一个都没中、靠意思对得上捞回来的」，并给出相似度百分比。字面不重合却被召回，正是这个功能最该被看见的时刻",
+  "你不需要做任何操作：打开任意项目的设定表格页，粘贴一段正文点「预览召回」即可看到；没配 embedding key 时不会出现语义标，行为与之前一致",
+  "门禁：tsc 0 错 · vitest 182 文件 2051 测试全绿 · next build 通过 · GitHub CI 全绿",
 ];
