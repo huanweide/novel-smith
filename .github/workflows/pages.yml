@@ -1,0 +1,67 @@
+# GitHub Pages 自动部署 —— 去 AI 味检测演示页
+#
+# 目的：把「本地过审自检」做成一个能公开访问的免费演示页（GitHub Pages，零成本零 token），
+#       挂在 huanweide.github.io 上，别人从仓库/README 点进来就能试。
+#
+# 定位：这是**演示**。只演示这一个纯本地功能（规则引擎，不联网/不要 Key/不上传）。
+#       完整写作应用请 clone 到本地跑（数据存本地 SQLite，零外泄）。
+#
+# 触发策略：只在「演示相关内容」变动时重建发布（src/core/humanize 引擎 或 demo/ 目录 或本文件），
+#           避免每次无关提交都跑一次 esbuild 构建。另有 workflow_dispatch 手动触发。
+#
+# 复用真实引擎：demo/src/main.ts 直接 import src/core/humanize，
+#           保证演示页与产品本体是同一套逻辑，不重写、不 mock。
+
+name: Deploy Demo (GitHub Pages)
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - "src/core/humanize/**"
+      - "demo/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Pages 官方要求：id-token 用于签发部署令牌，pages 用于写 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一次部署
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 用 esbuild 把真实引擎 + 演示 UI 打包成浏览器单文件 app.js
+      - name: Bundle demo (esbuild)
+        run: |
+          npx --yes esbuild@latest demo/src/main.ts \
+            --bundle --format=iife --minify \
+            --outfile=demo/public/app.js
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo/public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
