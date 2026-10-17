@@ -32,12 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.142";
+export const LATEST_VERSION = "v3.1.143";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "新增 GitHub Pages 免费公开演示站 huanweide.github.io/novel-smith：任何人点开链接就能直接试「去 AI 味检测」，真实引擎跑在浏览器里，不联网、不上传、不用 API Key",
-  "演示页直接 import 项目真实 humanize 引擎（analyzeText / applyFixes / countFixable），不重写不 mock——演示与产品同一套逻辑，评分与修复结果完全一致",
-  "支持单条套用修复与一键套用全部修复，实时看分数变化；push main 且引擎/demo 变动时自动重建部署，永远与最新版本同步，零成本零 token",
-  "Vercel 预览站正式废弃（域名已失效且本机无凭证）：README / README_EN / agent.md 共 8 处死链全部换成 Pages 地址",
+  "界面风格切换器从 10 档扩到 13 档：新增柔和深夜（深炭灰零发光·默认）、暖白纸稿（暖米底书稿感）、简洁文档（近白 Notion 风）三套去 AI 味主题，整块 token 覆盖、全局随切换生效",
+  "默认界面风格由夜航改为柔和深夜：首屏防闪烁与 localStorage 同步，老用户已选的风格不受影响",
+  "写作区与建立小说两个页面去 AI 味：正文暖色阅读色 + 首行缩进 1.9 行高，辅助信息沉到页脚；建立小说去掉大圆角/发光/入场动画",
+  "三套新主题灰阶按 WCAG AA 4.5:1 重算，文字层级不倒挂，全部通过对比度永久回归守卫",
 ];

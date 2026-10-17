@@ -120,6 +120,7 @@
 
   /* ── 文字层级（4级明度 + 功能色）—— 更亮、对比更强 ── */
   --nv-text-primary:   #F8F7F2;   /* L1 主文字——近白，对比度 17:1 */
+  --nv-prose:          #E9E7E0;   /* 正文阅读色——暖近白，长文不刺眼；与辅文字灰(#B9B7AD)拉开层级，避免正文被当成注释 */
   --nv-text-secondary: #B9B7AD;   /* L2 辅文字——亮灰，对比度 7:1 */
   --nv-text-tertiary:  #98968C;   /* L3 弱文字——中灰，对比度 5.2:1（达 WCAG AA） */
   --nv-text-muted:     #8E8B82;   /* L4 禁用/占位文字——灰；R2-010：提亮至落深色卡片/弹窗(popover #161E34)≥4.5:1(WCAG AA)，实测约 4.86:1，且仍低于 tertiary #98968C 保层级 */
@@ -303,6 +304,7 @@
   --nv-accent-text-on-light: oklch(0.50 0.12 95);  /* F01：浅色背景[243,239,232]上金色小文字对比度变体（CR≥4.5:1 AA）；深色/苍青沿用 --nv-accent */
 
   --nv-text-primary:   #1A1C22;
+  --nv-prose:          #2A2C33;   /* 正文阅读色——暖近黑（浅色主题），比纯黑柔和，降低长文眩光 */
   --nv-text-secondary: #4A4D57;
   --nv-text-tertiary:  #5E616B;  /* NEW-UI-WC-2 修复：浅色 tertiary 原 #6B6E78 在 surface-3(#E1DDD8) 上仅 3.767:1(<4.5 AA)，改为 #5E616B ≈4.577:1(≥AA)，且弱于专用 --nv-text-muted-on-surface-3(#5A5D67,4.860)，消解层级倒挂 */
   --nv-text-muted:     #696C75;   /* 浅色主题：对比度 4.6:1，达 WCAG AA */
@@ -2338,4 +2340,209 @@ html.theme-catppuccin {
   --nv-text-muted: #706150;   /* 对比度收口（v3.1.113）：原 #7d6c59 在 void #f6efdd 仅 4.40、abyss #f1e9d4 仅 4.17、surface-3 #e8dfc8 仅 3.80——三面全部 <4.5 AA（本主题无 muted-on-surface-3 兜底变体，前几轮对比度体检漏网）；加深至 #706150 后 void 5.21 / abyss 4.94 / surface-3 4.50 均 ≥4.5 达 AA，且仍浅于 tertiary #645646 保层级 */
   --nv-border-2: #ded2b8;
   --nv-border-3: #cfc2a6;
+}
+
+/* ═══════════════════════════════════════════
+   「柔和深夜」主题（去 AI 味方案 · 风格 C，默认）
+   切 html.theme-dusk 生效：深炭灰（非纯黑 void）+ 暖白文字 + 零发光，解决"黑黑的不好"
+   */
+html.theme-dusk {
+  color-scheme: dark;
+
+  --nv-void:        #15171D;
+  --nv-abyss:       #1B1E26;
+  --nv-surface-1:   rgba(255,255,255,0.025);
+  --nv-surface-2:   rgba(255,255,255,0.045);
+  --nv-surface-3:   #20242E;
+  --nv-border-1:    rgba(255,255,255,0.06);
+  --nv-border-2:    #2A2E38;
+  --nv-border-3:    #343A46;
+
+  --nv-primary:      #C9A24B;
+  --nv-primary-soft: rgba(201,162,75,0.14);
+  --nv-success:      #6FCFA0;
+  --nv-success-soft: rgba(111,207,160,0.14);
+  --nv-warning:      #E0C070;
+  --nv-warning-soft: rgba(224,192,112,0.14);
+  --nv-danger:       #E08A80;
+  --nv-danger-soft:  rgba(224,138,128,0.14);
+  --nv-creative:     #D8B25A;
+  --nv-creative-soft:rgba(216,178,90,0.15);
+  --nv-creative-fill:#8A6A2E;
+  --nv-creative-text:#F0EEE8;
+  --nv-info:         #7FB8D8;
+  --nv-info-soft:    rgba(127,184,216,0.14);
+  --nv-accent:       #C9A24B;
+  --nv-accent-soft:  rgba(201,162,75,0.14);
+
+  --nv-text-primary:   #EAE7DF;
+  --nv-text-secondary: #A9A69D;
+  --nv-text-tertiary:  #938E85;
+  --nv-text-muted:     #908A80;
+  --nv-text-muted-on-surface-3: #9C958B;
+  --nv-prose:          #DCD9D0;
+
+  --background: #15171D;
+  --foreground: #EAE7DF;
+  --card: #1B1E26;
+  --card-foreground: #EAE7DF;
+  --popover: #1B1E26;
+  --popover-foreground: #EAE7DF;
+  --primary: #C9A24B;
+  --primary-foreground: #15171D;
+  --secondary: rgba(255,255,255,0.05);
+  --secondary-foreground: #EAE7DF;
+  --muted: rgba(255,255,255,0.05);
+  --muted-foreground: #A9A69D;
+  --accent: rgba(255,255,255,0.06);
+  --accent-foreground: #EAE7DF;
+  --destructive: #E08A80;
+  --border: #2A2E38;
+  --input: #343A46;
+  --ring: rgba(201,162,75,0.5);
+  --sidebar: #15171D;
+  --sidebar-foreground: #EAE7DF;
+  --sidebar-primary: #C9A24B;
+  --sidebar-primary-foreground: #15171D;
+  --sidebar-accent: rgba(255,255,255,0.05);
+  --sidebar-accent-foreground: #EAE7DF;
+  --sidebar-border: #2A2E38;
+  --sidebar-ring: rgba(201,162,75,0.5);
+}
+html.theme-dusk .btn-creative { color: var(--nv-creative-text); border-color: rgba(216,178,90,0.5); }
+
+/* ═══════════════════════════════════════════
+   「暖白纸稿」主题（去 AI 味方案 · 风格 A，浅色）
+   切 html.theme-paper 生效：暖米底 + 墨字 + 衬线正文，最"书"
+   */
+html.theme-paper {
+  color-scheme: light;
+
+  --nv-void:        #F3EEE3;
+  --nv-abyss:       #FBF8F1;
+  --nv-surface-1:   rgba(15,18,30,0.025);
+  --nv-surface-2:   rgba(15,18,30,0.05);
+  --nv-surface-3:   #FFFFFF;
+  --nv-border-1:    rgba(15,18,30,0.08);
+  --nv-border-2:    #DBD2C0;
+  --nv-border-3:    #CDC2AC;
+
+  --nv-primary:      #9A6E22;
+  --nv-primary-soft: rgba(154,110,34,0.13);
+  --nv-success:      #3E9E6E;
+  --nv-success-soft: rgba(62,158,110,0.14);
+  --nv-warning:      #B5852A;
+  --nv-warning-soft: rgba(181,133,42,0.14);
+  --nv-danger:       #C4564C;
+  --nv-danger-soft:  rgba(196,86,76,0.14);
+  --nv-creative:     #9A6E22;
+  --nv-creative-soft:rgba(154,110,34,0.13);
+  --nv-creative-fill:#8A6A2E;
+  --nv-creative-text:#F7F2E8;
+  --nv-info:         #3F6FB0;
+  --nv-info-soft:    rgba(63,111,176,0.14);
+  --nv-accent:       #9A6E22;
+  --nv-accent-soft:  rgba(154,110,34,0.13);
+
+  --nv-text-primary:   #2B271F;
+  --nv-text-secondary: #5A5A5A;
+  --nv-text-tertiary:  #6A6A6A;
+  --nv-text-muted:     #6C6C6C;
+  --nv-text-muted-on-surface-3: #6C6C6C;
+  --nv-prose:          #3A352B;
+
+  --background: #F3EEE3;
+  --foreground: #2B271F;
+  --card: #FBF8F1;
+  --card-foreground: #2B271F;
+  --popover: #FBF8F1;
+  --popover-foreground: #2B271F;
+  --primary: #9A6E22;
+  --primary-foreground: #FBF8F1;
+  --secondary: rgba(15,18,30,0.04);
+  --secondary-foreground: #2B271F;
+  --muted: rgba(15,18,30,0.04);
+  --muted-foreground: #6B6356;
+  --accent: rgba(15,18,30,0.05);
+  --accent-foreground: #2B271F;
+  --destructive: #C4564C;
+  --border: #DBD2C0;
+  --input: #CDC2AC;
+  --ring: rgba(154,110,34,0.5);
+  --sidebar: #F3EEE3;
+  --sidebar-foreground: #2B271F;
+  --sidebar-primary: #9A6E22;
+  --sidebar-primary-foreground: #FBF8F1;
+  --sidebar-accent: rgba(15,18,30,0.04);
+  --sidebar-accent-foreground: #2B271F;
+  --sidebar-border: #DBD2C0;
+  --sidebar-ring: rgba(154,110,34,0.5);
+}
+
+/* ═══════════════════════════════════════════
+   「简洁文档」主题（去 AI 味方案 · 风格 B，浅色）
+   切 html.theme-doc 生效：近白 + Notion 式微妙边框 + 无发光，最去 AI 味
+   */
+html.theme-doc {
+  color-scheme: light;
+
+  --nv-void:        #FFFFFF;
+  --nv-abyss:       #FFFFFF;
+  --nv-surface-1:   rgba(15,18,30,0.02);
+  --nv-surface-2:   rgba(15,18,30,0.04);
+  --nv-surface-3:   #FFFFFF;
+  --nv-border-1:    rgba(15,18,30,0.06);
+  --nv-border-2:    #ECECEA;
+  --nv-border-3:    #E2E2DE;
+
+  --nv-primary:      #3F5BD0;
+  --nv-primary-soft: rgba(63,91,208,0.10);
+  --nv-success:      #2E9E6B;
+  --nv-success-soft: rgba(46,158,107,0.14);
+  --nv-warning:      #B5832A;
+  --nv-warning-soft: rgba(181,131,42,0.14);
+  --nv-danger:       #D2493F;
+  --nv-danger-soft:  rgba(210,73,63,0.14);
+  --nv-creative:     #3F5BD0;
+  --nv-creative-soft:rgba(63,91,208,0.10);
+  --nv-creative-fill:#3F5BD0;
+  --nv-creative-text:#FFFFFF;
+  --nv-info:         #2F6FB0;
+  --nv-info-soft:    rgba(47,111,176,0.14);
+  --nv-accent:       #3F5BD0;
+  --nv-accent-soft:  rgba(63,91,208,0.10);
+
+  --nv-text-primary:   #37352F;
+  --nv-text-secondary: #595959;
+  --nv-text-tertiary:  #6E6E6E;
+  --nv-text-muted:     #767676;
+  --nv-text-muted-on-surface-3: #767676;
+  --nv-prose:          #2F2D29;
+
+  --background: #FFFFFF;
+  --foreground: #37352F;
+  --card: #FFFFFF;
+  --card-foreground: #37352F;
+  --popover: #FFFFFF;
+  --popover-foreground: #37352F;
+  --primary: #3F5BD0;
+  --primary-foreground: #FFFFFF;
+  --secondary: rgba(15,18,30,0.03);
+  --secondary-foreground: #37352F;
+  --muted: rgba(15,18,30,0.03);
+  --muted-foreground: #6B6A65;
+  --accent: rgba(15,18,30,0.04);
+  --accent-foreground: #37352F;
+  --destructive: #D2493F;
+  --border: #ECECEA;
+  --input: #E2E2DE;
+  --ring: rgba(63,91,208,0.5);
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #37352F;
+  --sidebar-primary: #3F5BD0;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(15,18,30,0.03);
+  --sidebar-accent-foreground: #37352F;
+  --sidebar-border: #ECECEA;
+  --sidebar-ring: rgba(63,91,208,0.5);
 }

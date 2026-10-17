@@ -71,9 +71,9 @@ describe("v3.1.131 ThemeToggle 菜单脱离容器裁剪", () => {
     expect(localStorage.getItem("nf-theme")).toBe("azure");
   });
 
-  it("菜单含全部 10 档主题（深 7 / 浅 3）", () => {
+  it("菜单含全部 13 档主题（深 8 / 浅 5）", () => {
     render(<ThemeToggle />);
     fireEvent.click(themeButton());
-    expect(menuItems()).toHaveLength(10);
+    expect(menuItems()).toHaveLength(13);
   });
 });

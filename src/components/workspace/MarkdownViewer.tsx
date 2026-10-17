@@ -51,7 +51,7 @@ const MARKDOWN_COMPONENTS: Components = {
     </h3>
   ),
   p: ({ children, ...props }) => (
-    <p className="my-3 text-[17px] leading-[1.85] text-[var(--nv-text-secondary)] tracking-[0.02em]" {...props}>
+    <p className="my-[1.2em] text-[18.5px] leading-[1.95] tracking-normal indent-[2em] text-[var(--nv-prose)]" {...props}>
       {children}
     </p>
   ),
@@ -61,7 +61,7 @@ const MARKDOWN_COMPONENTS: Components = {
     </strong>
   ),
   em: ({ children, ...props }) => (
-    <em className="italic text-[var(--nv-text-secondary)]" {...props}>
+    <em className="italic text-[var(--nv-prose)]" {...props}>
       {children}
     </em>
   ),
