@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icons";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { describeStreamError } from "@/lib/stream-error";
 import { NovelImportDialog } from "./NovelImportDialog";
+import { BatchImportPanel } from "./BatchImportPanel";
 
 interface ProjectRow {
   id: string;
@@ -37,9 +38,10 @@ export function NovelImportLauncher({
   const [ready, setReady] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [step, setStep] = useState<"pick" | "import">("pick");
+  const [step, setStep] = useState<"pick" | "import" | "batch">("pick");
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (!open || step !== "pick") return;
@@ -74,6 +76,18 @@ export function NovelImportLauncher({
       setReady(null);
     }
   }, []);
+
+  /** 多于一本 → 批量模式；一本 → 走原来的两步流程（不折腾用户） */
+  const pickFiles = useCallback((list: FileList | null) => {
+    const arr = Array.from(list ?? []);
+    if (arr.length > 1) {
+      setFiles(arr);
+      setStep("batch");
+      return;
+    }
+    setFiles([]);
+    pickFile(arr[0] ?? null);
+  }, [pickFile]);
 
   const ensureProject = useCallback(async (): Promise<string | null> => {
     if (mode === "existing") {
@@ -128,6 +142,21 @@ export function NovelImportLauncher({
     [ready, router],
   );
 
+  if (step === "batch") {
+    return (
+      <BatchImportPanel
+        open
+        files={files}
+        projects={projects}
+        onClose={() => {
+          setStep("pick");
+          setFiles([]);
+          onClose();
+        }}
+      />
+    );
+  }
+
   if (step === "import" && ready) {
     return (
       <NovelImportDialog
@@ -179,12 +208,13 @@ export function NovelImportLauncher({
             type="file"
             accept=".txt,.md,.markdown,.epub,.docx"
             className="hidden"
-            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+            multiple
+            onChange={(e) => pickFiles(e.target.files)}
           />
           <div className="flex flex-col items-center gap-2">
             <Icon name="upload" className="h-6 w-6 text-[var(--nv-text-muted)]" />
             <span className="text-sm font-medium">
-              {pendingFile ? pendingFile.name : "点击选择小说文件"}
+              {pendingFile ? pendingFile.name : "点击选择小说文件（可多选批量导入）"}
             </span>
             {pendingFile && (
               <span className="text-xs text-[var(--nv-text-muted)]">

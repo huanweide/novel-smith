@@ -18,6 +18,7 @@ import { jsonError } from "@/lib/api-error";
 import { badRequest } from "@/lib/validators";
 import { extractAssets, summarizeAssets } from "@/lib/import/extract-assets";
 import { seedAssets } from "@/lib/import/seed-assets";
+import { prefillAssets } from "@/lib/import/prefill-assets";
 import type { ParsedChapter } from "@/lib/import/types";
 
 export const maxDuration = 300;
@@ -45,24 +46,48 @@ async function loadImportedChapters(projectId: string, sourceKey?: string | null
   );
 }
 
-/** POST：对已导入正文重新提炼并落成待审草稿 */
+/**
+ * POST /api/import/novel/assets
+ *
+ * 一个端点两个动作，用 `action` 字段区分（都归到"导入资产"这一件事，
+ * 拆成两个 URL 只会让调用方多点一次）：
+ *   action=extract  默认。对已导入正文重新提炼并落成待审草稿
+ *   action=prefill  用 LLM 把草稿补成真正能用的卡（M4）
+ *
+ * prefill 与「采纳/丢弃」为什么分开（后者在 DELETE 里）：
+ * prefill **改变卡的内容**，要烧 token 需要用户明确点头；
+ * 采纳/丢弃 **改变卡的可见性**，零成本。
+ * 混在一起作者会不知道自己在为什么付费。
+ */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      projectId?: string;
-      sourceKey?: string | null;
-      /** dryRun=1 只提炼不落库，给作者预览 */
-      dryRun?: boolean;
-    };
-    if (!body.projectId) return badRequest("缺少 projectId", "projectId");
+    const raw = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const action = String(raw.action ?? "extract");
+
+    if (action === "prefill") {
+      return await handlePrefill(raw);
+    }
+    return await handleExtract(raw);
+  } catch (err) {
+    return jsonError(err);
+  }
+}
+
+/** action=extract：对已导入正文重新提炼并落成待审草稿 */
+async function handleExtract(body: Record<string, unknown>) {
+  try {
+    const projectId = String(body.projectId ?? "");
+    const sourceKey = typeof body.sourceKey === "string" ? body.sourceKey : null;
+    const dryRun = body.dryRun === true || body.dryRun === "1";
+    if (!projectId) return badRequest("缺少 projectId", "projectId");
 
     const project = await prisma.project.findUnique({
-      where: { id: body.projectId },
+      where: { id: projectId },
       select: { id: true, name: true },
     });
     if (!project) return badRequest("项目不存在", "projectId");
 
-    const chapters = await loadImportedChapters(body.projectId, body.sourceKey ?? null);
+    const chapters = await loadImportedChapters(projectId, sourceKey);
     if (chapters.length === 0) {
       return badRequest("该项目还没有导入的正文，先导入一本再来提炼", "projectId");
     }
@@ -70,15 +95,11 @@ export async function POST(request: Request) {
     const assets = extractAssets(chapters);
     const preview = summarizeAssets(assets);
 
-    if (body.dryRun) {
+    if (dryRun) {
       return NextResponse.json({ ok: true, mode: "dryRun", preview });
     }
 
-    const seeded = await seedAssets({
-      projectId: body.projectId,
-      assets,
-      importSourceKey: body.sourceKey ?? null,
-    });
+    const seeded = await seedAssets({ projectId, assets, importSourceKey: sourceKey });
 
     return NextResponse.json({ ok: true, mode: "seed", preview, seeded });
   } catch (err) {
@@ -123,6 +144,27 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({ ok: true, status, characters, lore, commitments });
+  } catch (err) {
+    return jsonError(err);
+  }
+}
+
+/** action=prefill：用 LLM 把 M3 草稿补成真正能用的卡（M4） */
+async function handlePrefill(body: Record<string, unknown>) {
+  try {
+    const projectId = String(body.projectId ?? "");
+    if (!projectId) return badRequest("缺少 projectId", "projectId");
+
+    const result = await prefillAssets({
+      projectId,
+      characterIds: Array.isArray(body.characters) ? (body.characters as string[]) : undefined,
+      loreIds: Array.isArray(body.lore) ? (body.lore as string[]) : undefined,
+      concurrency: typeof body.concurrency === "number" ? body.concurrency : undefined,
+      // 默认**不**自动采纳：LLM 也会错，闸门不能交给概率
+      autoApprove: body.autoApprove === true,
+    });
+
+    return NextResponse.json({ ok: true, result });
   } catch (err) {
     return jsonError(err);
   }
