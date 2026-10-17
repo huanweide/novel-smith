@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>去 AI 味检测 · Novel Smith 演示</title>
+  <meta name="description" content="Novel Smith 的本地去 AI 味检测演示：纯规则引擎，不联网、不上传、不需要 API Key。" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>去 AI 味检测 <span class="badge-demo">在线演示</span></h1>
+      <p class="sub">
+        这是 <a href="https://github.com/huanweide/novel-smith" target="_blank" rel="noopener">Novel Smith</a>
+        的「本地过审自检」演示，跑的就是项目里那套<b>真实规则引擎</b>（正则 + 统计）：
+        <b>不调 LLM、不联网、不需要 API Key、不上传你的稿件</b>。
+      </p>
+      <p class="sub dim">
+        这是<b>演示页</b>，只演示这一个纯本地功能。想用完整写作应用（写稿 / 世界书 / 实体抽取 / 存本地库），
+        请到 <a href="https://github.com/huanweide/novel-smith" target="_blank" rel="noopener">GitHub 仓库</a> 下载后本地运行 —— 数据只存在你自己电脑上。
+      </p>
+    </header>
+
+    <section class="editor">
+      <textarea id="input" rows="10" spellcheck="false" placeholder="粘贴一段文字，点「检测」看看 AI 味有多重……"></textarea>
+      <div class="actions">
+        <button id="detect" class="primary">检测</button>
+        <button id="sample-ai">载入 AI 味示例</button>
+        <button id="sample-human">载入人写示例</button>
+      </div>
+    </section>
+
+    <div id="output"></div>
+
+    <footer>
+      <p>规则引擎只能帮你降低「机器味」，<b>不能保证通过任何平台的 AI 率审核</b>；平台算法不公开且持续变化，结果仅供参考。</p>
+      <p class="dim">© Novel Smith · MIT License · <a href="https://github.com/huanweide/novel-smith" target="_blank" rel="noopener">源码 / Star</a></p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

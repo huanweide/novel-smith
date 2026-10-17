@@ -39,6 +39,14 @@ dev.log
 # vercel
 .vercel
 
+# local preview / playwright / demo build artifacts
+server.log
+tunnel.log
+.playwright/
+.playwright-cli/
+demo/public/app.js
+
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
