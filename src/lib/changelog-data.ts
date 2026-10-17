@@ -27,6 +27,39 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.150",
+    date: "2026-10-17",
+    title: "修：next build 会把跑着的 3001 服务撞死",
+    sections: [
+      {
+        label: "🐛 真根因（不是玄学，是自己造的）",
+        items: [
+          "`next build` 会**清空并重建 `.next` 目录**；正在跑的 `next start` / `next dev` 持有旧 chunk 的文件句柄，目录被替换的瞬间句柄失效 → 进程直接崩溃退出",
+          "这个坑最阴的地方：build 成功 ✅ / commit 成功 ✅ / push 成功 ✅，只有服务器没了 —— 极易误判成「服务自己挂了」，其实是自己撞死的",
+          "本轮就是这样：跑完 v3.1.149 的 build，3001 就没有了",
+        ],
+      },
+      {
+        label: "🔧 修法：scripts/safe-build.mjs 接管 npm run build",
+        items: [
+          "构建前 `netstat -ano` 找 3001 的 PID",
+          "**停之前先校验该 PID 确实是 node.exe** —— PID 会被系统复用，认错了会误杀别的程序",
+          "正常 `next build`",
+          "构建后若**原本有服务**才自动 `next start` 拉回来（不凭空拉起），日志落 `server.log`",
+          "保留 `build:raw` = 裸 `next build` 仅供对照；**永远用 `npm run build`**",
+        ],
+      },
+      {
+        label: "🧪 验证",
+        items: [
+          "端口探测逻辑单测：netstat 找到 PID 58124 → tasklist 确认是 node.exe → 判定可安全 kill（ALL_OK）",
+          "node --check 通过、tsc --noEmit --incremental false 0 错",
+          "端到端跑一次 npm run build 全过，且服务自动恢复",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.149",
     date: "2026-10-17",
     title: "导入小说摆到台面上：首页五处入口 + 拆书与导入的职责边界",
