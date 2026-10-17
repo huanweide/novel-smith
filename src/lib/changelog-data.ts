@@ -27,6 +27,38 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.142",
+    date: "2026-10-17",
+    title: "免费公开演示站上线：去 AI 味检测零门槛试用（DEMO-PAGES-1）",
+    sections: [
+      {
+        label: "🌐 在线演示（GitHub Pages）",
+        items: [
+          "新增免费公开演示站 https://huanweide.github.io/novel-smith/ —— 任何人点开链接就能直接试「去 AI 味检测」，真实引擎跑在浏览器里，不联网、不上传、不用 API Key、不需要任何 token",
+          "演示页（demo/src/main.ts）直接 import 项目真实引擎 src/core/humanize（analyzeText / applyFixes / countFixable），不重写不 mock —— 演示与产品同一套逻辑，评分与修复结果完全一致",
+          "支持单条「套用修复」与「一键套用全部修复」，实时看分数变化；含 AI 味样例与人写样例对照",
+          "自动同步：push main 且 src/core/humanize/**、demo/**、.github/workflows/pages.yml 变动时，Actions 自动 esbuild 重建并部署 Pages，永远与最新版本一致，零成本零 token",
+          "定位写明：这是演示，完整写作应用需 clone 仓库本地跑（数据写本地 SQLite，隐私优先）",
+        ],
+      },
+      {
+        label: "🔗 死链清理",
+        items: [
+          "Vercel 预览站正式废弃：域名 novel-forge-nu.vercel.app 已失效（项目删除、域名仍挂着、HTTP 000），且本机无 Vercel 凭证，改用零成本 GitHub Pages 绕开",
+          "README.md / README_EN.md 的徽章与试用链接（共 6 处）、docs/internal/agent.md 的预览站现状与待办（第 96 / 484 行）全部换成 Pages 地址",
+        ],
+      },
+      {
+        label: "🧹 收尾",
+        items: [
+          ".gitignore 追加本地产物忽略：server.log、tunnel.log、.playwright/、.playwright-cli/、demo/public/app.js（esbuild 打包产物）",
+          "删除已废弃的 .github/workflows/deploy.yml（Vercel 自动部署），由 pages.yml 取代",
+          "门禁：tsc 0 错 · vitest 全绿 · next build 通过 · Pages workflow 全绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.141",
     date: "2026-10-17",
     title: "文档体检：真身路径纠偏 + ROADMAP 回填 56 版本 + 新增文档链接检查脚本（DOC-HEALTH-1）",
