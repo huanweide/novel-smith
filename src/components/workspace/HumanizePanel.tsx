@@ -190,11 +190,27 @@ export function HumanizePanel({
    */
   const [localText, setLocalText] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  /**
+   * 第一次套用前的分数快照（v3.1.140，与 /detector 的「成就时刻」同款设计）。
+   *
+   * 为什么高频入口更要有它：这是每章写完都会跑一次的面板，用户点「套用 N 处」
+   * 把正文改干净，过审分从 23 跌到 8——页面上必须有东西告诉他「你刚刚完成了什么」。
+   * 数字静静变化 = 爽感为零，和番茄钟的连击记录是同一个设计缺失。
+   *
+   * 会话边界：弹窗关掉再开就是新一轮检测，旧基线作废——否则用户关掉面板后
+   * 手动改过正文，下次打开会拿陈旧基线对比，数字失真。
+   */
+  const [baseline, setBaseline] = useState<{ score: number; levelLabel: string } | null>(null);
 
   // 父组件把保存结果同步回来后，本地预览作废，改用最新的正本
   useEffect(() => {
     setLocalText(null);
   }, [text]);
+
+  // 弹窗是一次会话：关闭即重置基线快照
+  useEffect(() => {
+    if (!open) setBaseline(null);
+  }, [open]);
 
   // 分析对象：优先用本地预览版，否则用传入正文
   const workingText = localText ?? text;
@@ -257,6 +273,8 @@ export function HumanizePanel({
         return;
       }
       setLocalText(r.text);
+      // 记下「来的时候」的分数，之后不再覆盖——对比的是套用前 vs 现在
+      setBaseline((b) => b ?? { score: report.score, levelLabel: report.levelLabel });
       toastSuccess(`已套用 ${r.applied} 处并写入本章正文`);
     } finally {
       setApplying(false);
@@ -327,6 +345,25 @@ export function HumanizePanel({
         </div>
       ) : (
         <div className="space-y-4 max-h-[64vh] overflow-y-auto pr-1">
+          {/* ── 套用前后对比（v3.1.140，「成就时刻」）──
+              只在真的降分了才显示；随弹窗关闭重置（见 baseline 的会话边界注释）。 */}
+          {baseline && report.score < baseline.score && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-[var(--nv-success)]/30 bg-[var(--nv-success)]/10 px-3.5 py-2.5">
+              <span className="text-[11px] text-[var(--nv-text-tertiary)] line-through decoration-1">
+                套用前 {baseline.score} 分 · {baseline.levelLabel}
+              </span>
+              <span className="text-[var(--nv-success)] text-xs shrink-0" aria-hidden>
+                →
+              </span>
+              <span className="text-xs font-semibold text-[var(--nv-success)]">
+                现在 {report.score} 分 · {report.levelLabel}
+              </span>
+              <span className="text-[11px] text-[var(--nv-text-tertiary)]">
+                ↓ {baseline.score - report.score} 分 · 只套用了机器有把握的改动，拿不准的仍归你改
+              </span>
+            </div>
+          )}
+
           {/* ── 总分 ── */}
           <div className={`flex items-center gap-4 rounded-xl border ${style.border} ${style.bg} p-3.5`}>
             <ScoreRing score={report.score} level={level} />
