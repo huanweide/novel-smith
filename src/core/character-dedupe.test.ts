@@ -3,11 +3,13 @@ import { describe, it, expect, beforeAll } from "vitest";
 // 动态 import：character-dedupe 顶层会构造 PrismaClient（需 DATABASE_URL），
 // 在 import 之前补一个占位连接串，避免 vitest 环境未加载 .env 时构造失败。
 // computeConfidence / toCharLite 为纯函数，不会真正连库。
+// v3.1.137：占位串从 Postgres 时代的 postgresql://… 改为本地 SQLite 路径 ——
+// 项目早已全量迁到 SQLite，prisma.ts 见到 postgres URL 会去 mkdir 一个不存在的目录直接炸。
 let computeConfidence: (members: any[], allNames: string[]) => "high" | "low";
 let toCharLite: (row: any) => any;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://postgres@127.0.0.1:5432/novelforge";
+  process.env.DATABASE_URL = process.env.DATABASE_URL ?? "file:./data/novelforge.db";
   const mod = await import("./character-dedupe");
   computeConfidence = mod.computeConfidence;
   toCharLite = mod.toCharLite;

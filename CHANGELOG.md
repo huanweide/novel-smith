@@ -1,5 +1,28 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.137 — 2026-10-17
+
+### README 说人话（STAR-READINESS-2）
+
+- **新增「和直接跟 AI 聊天写有什么不一样」六行对比表**（中英同步）：设定还记得吗 / 人物会漂移吗 / 伏笔埋了能收吗 / AI 味怎么处理 / 稿子在哪 / 文字经过谁。每一行都是一个真实用户会问的问题，不是功能罗列。
+- **新增「它不是什么」五条边界声明**（中英同步）：不是在线服务、不是全自动写书机、不需要 Key 的只是检测、不是笔记软件套壳、不保证过审。把边界说清楚比把功能吹上天有用——竞品分析显示这个项目的差距在运营不在代码，README 是第一运营位。
+- **核心亮节补量化导语**：12 条本地去 AI 味规则（9 段落 + 3 全文）/ 15 类世界书 / 2048 个测试 / 137 个路由，数字全部从代码逐一核实，不写拍脑袋数。
+- 收尾一句话：**聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、记得你所有设定的写作工程台。**
+
+### 修四个文档与代码不符的说明（安全，DOC-CODE-DRIFT）
+
+- **「只设 ALLOW_PUBLIC 不会开放访问」是错的**——`SECURITY.md` / `README.md` / `README_EN.md` 三处都这么写，而代码与测试固化的行为是「未配令牌时 `ALLOW_PUBLIC=true` 直接放行」（为兼容旧版部署刻意保留）。这个错误的方向是让用户**低估**暴露面，比高估危险得多。已改为准确描述，并把令牌定位为「强烈建议的加固项」。
+- **「`npm run dev` 监听 127.0.0.1」是错的**——Next.js 默认绑定**所有接口**（0.0.0.0），而访问控制对局域网 IP 是刻意放行的（手机连家里 Wi-Fi 访问 `192.168.x.x` 是 changelog v3.1.115 明确支持的合法场景）。「在我自己网上」不等于「只有我能看」。已改为准确描述并给出 `HOSTNAME=127.0.0.1` 收紧命令。
+- **修 v3.1.136 条目里的同一处错误陈述**，历史公告与实现对齐。
+
+### 修一个死脚本 + 两个过时测试（TEST-ENV）
+
+- **`deploy-local.ps1` 早已跑不通**：它还在执行 `docker compose up -d` + `pg_isready`，而仓库连 `docker-compose.yml` 都不存在、`DATABASE_URL` 早已是 `file:./data/novelforge.db`。Windows 用户照它走，第一步就死在 `MISSING: docker`。已重写为 SQLite 一键版（对齐 README 推荐的 `npm run dev:db`），并新增 `-Loopback` 参数把默认的 0.0.0.0 绑定收回 127.0.0.1。
+- **两个 Postgres 时代遗留的测试占位串**：`character-dedupe.test.ts` 与 `character-dedupe.flow.test.ts` 把 `DATABASE_URL` 默认成 `postgresql://…`，现在的 `prisma.ts` 只支持 SQLite 文件路径，见到 postgres URL 会去 `mkdir` 一个不存在的目录直接炸——干净环境（无 `.env`）下三个测试文件必红。已改为 `file:./data/novelforge.db`。
+- 顺手记一笔环境坑：本机全局 `~/.npmrc` 有 `ignore-scripts=true`（安全设置，不动它），会导致 `better-sqlite3` 预编译二进制不落地、`npm rebuild` 假成功。解法是 `npm install better-sqlite3 --foreground-scripts`。CI 没有这个全局配置所以一直是绿的。
+
+- **门禁**：tsc 0 错 · vitest 182 文件 2048 测试全绿 · next build 通过 · GitHub CI 全绿
+
 ## v3.1.136 — 2026-10-17
 
 ### 设定库认得出你在写谁（语义召回 · SEMANTIC-RECALL）
@@ -15,7 +38,7 @@
 
 - **真实漏洞**：入站访问控制完全采信请求头取客户端 IP，而请求头是客户端自己写的。绕过前置代理直连端口时，手动加一个 `X-Forwarded-For: 192.168.1.5` 即被判为内网放行 = 授予全部 137 个 API 路由的读写权（写库、改稿、白刷作者自己的 AI Key 额度）。
 - **修法**：引入信任分级 `TRUSTED_PROXY_MODE` 三模式（`trust-proxy-header` 默认向后兼容 / `trust-cf-only` 公网推荐 / `direct` 只认 socket）。未知来源一律拦下。
-- `ALLOW_PUBLIC=true` 现在**必须配套** `ALLOW_PUBLIC_TOKEN`。只设前者不放行——防「一个环境变量手滑就长期裸奔」。
+- `ALLOW_PUBLIC=true` 可搭配 `ALLOW_PUBLIC_TOKEN` 加固：配了令牌就必须带对才放行；未配令牌时单独设 `ALLOW_PUBLIC` 仍会开放（兼容旧版部署的既有行为，详见 SECURITY.md）。
 - 403 响应体带机器可读 `reason`，便于排障。
 - 攻击验证脚本 17/17：伪造 XFF / `X-Real-IP` / `Host` 三条绕过路径均已封死。
 - ⚠️ **残余风险已写进 SECURITY.md**：这层是网段白名单不是身份认证，挡得住误部署到公网，挡不住同一内网里的其他人。`trust-cf-only` 下若攻击者能绕过 Cloudflare 直连端口，伪造 `CF-Connecting-IP` 仍会被采信——代码层堵不住，真正的防线是只监听 `127.0.0.1` + 防火墙。
