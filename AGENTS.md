@@ -23,9 +23,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ### ⚠️ 真身路径（改错目录等于白干）
 
-真身只有这一个：`C:\Users\Administrator\WorkBuddy\2026-07-25-14-19-44\novel-forge`
+真身只有这一个：`C:\Users\Administrator\Projects\novel-smith`
 （判断标准：`git remote get-url origin` 返回 `novel-smith`，`package.json` 的 name 是 `novel-smith`）
-`C:\c\Users\...\novel-forge` 是 v3.1.53 的旧镜像，**别在上面改**。详见 `docs/internal/agent.md` 第一节。
+历史上还有几个同名/旧名副本（WorkBuddy 会话目录下的 `novel-forge` 停在 v3.1.135、`Projects\novel-forge` 停在 v0.26、Desktop 下若干旧克隆），**都别在上面改**。完整清单与状态见 `docs/internal/agent.md` 第一节。
 
 ## 🔴 公告更新流程（强制 — 每次代码变更后必做）
 
@@ -68,7 +68,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ```
 第1步：TypeScript 编译检查
-  cd C:/Users/Administrator/Projects/novel-forge
+  cd C:/Users/Administrator/Projects/novel-smith
   npx tsc --noEmit --pretty
   → 有错误必须修，零错误才能继续
 
@@ -78,8 +78,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 第3步：清除缓存 + 重启 dev server（Turbopak 热更新不可靠时）
   netstat -ano | grep ":3001" | grep LISTENING | awk '{print $5}' | xargs -I{} taskkill //PID {} //F
-  rm -rf C:/Users/Administrator/Projects/novel-forge/.next
-  cd C:/Users/Administrator/Projects/novel-forge && npx next dev --turbo -p 3001 &
+  rm -rf C:/Users/Administrator/Projects/novel-smith/.next
+  cd C:/Users/Administrator/Projects/novel-smith && npx next dev --turbo -p 3001 &
 
 第4步：验证服务
   curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:3001

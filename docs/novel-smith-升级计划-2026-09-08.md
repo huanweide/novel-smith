@@ -259,6 +259,8 @@
   2. `src/app/page.tsx` 挂载；步骤 ① 跳转 `/detector`，② 复用现有 `loadSample`，③ 跳转 `/settings`。
   3. `src/components/system-status-banner.tsx` — 首启动未完成引导前不弹"AI 未配置"（改为引导内提示）。
 
+> **【已落地 · 2026-10-17 回填】** B2 的意图已分三处落地，但**没有**按计划创建 `FirstRunGuide.tsx`：① 首页零门槛引导条（v3.1.135，`src/app/home-dashboard.tsx`——探测 `/api/health` 的 `llm.ok`，仅 AI 未配置时出现，先把访客送往「去 AI 味检测」拿 30 秒甜头）；② 工作区新手引导 `src/components/workspace/OnboardingModal.tsx`（localStorage 记住、可关闭，步骤为「选个开局 → 让 AI 写 → 导出成书」）；③ `system-status-banner.tsx` 已不在零门槛场景弹「AI 未配置」（v3.1.93 首启动修复）。上文文件名与挂载位置仅作当初的决策记录。
+
 #### B3 · 社区基建：让"想支持一下"变成低成本动作
 - **目标用户**：用过觉得好的用户、潜在贡献者。
 - **解决痛点**：无 `CONTRIBUTING.md`、无 Discussions、Issue 0、Star 1——**没有社会认同，也没有贡献入口**。

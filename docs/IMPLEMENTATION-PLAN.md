@@ -1,5 +1,7 @@
 # Novel Forge 实施计划（整合版）
 
+> ⚠️ **历史文档（2026-06-17 快照，勿当现状读）**：本计划写于项目早期，其中的文件路径多数已被后续重构改写——质量分析已迁入 `src/core/quality/`（v3.1.96 质量模块归位）、Agent 编排从单文件变成 `src/core/agents/orchestrator/` 目录、`apply-updates` 路由未按该名落地（实体确认/拒绝现由 `src/app/api/agent/apply-extraction` 等路由承担）。**当前架构与实现状态以 `docs/architecture-reference/`（整理版 A–J）和 `docs/internal/agent.md` 版本台账为准**；本文件仅保留为「当初打算怎么改」的决策记录。
+>
 > 基于 `docs/architecture-reference/A-J` 全部功能域 + 现有项目实现状态对照
 > 制定日期：2026-06-17  |  最后更新：2026-06-17
 > 原则：已有功能用目标架构思路优化内核/步骤/进程，没有的功能完整加入。可以大改，每步独立可上线。
@@ -85,9 +87,9 @@
   - 新地点 → `LorebookEntry.create({ category: "geography" })`
   - 新势力 → `LorebookEntry.create({ category: "faction" })`
 - [ ] `prisma/schema.prisma` — **[改]** 新增 `Item` 模型（目前物品混在世界书中，需独立）
-- [ ] `src/app/api/generate/apply-updates/route.ts` — **[改]** 增加实体确认/拒绝 API：POST 接受 / DELETE 拒绝
+- [ ] `src/app/api/agent/apply-extraction/route.ts` — **[改]** 增加实体确认/拒绝 API：POST 接受 / DELETE 拒绝（原计划写作 `src/app/api/generate/apply-updates/route.ts`，未按该名落地）
 
-**文件：** 修改 `distillation-runner.ts` + `apply-updates/route.ts` + `schema.prisma`
+**文件：** 修改 `distillation-runner.ts` + `apply-extraction/route.ts` + `schema.prisma`
 
 **阶段一完工效果：** Token 消耗降低 50%+，蒸馏耗时从 3-5 秒降到 <1 秒，伏笔自动追踪，实体自动入库待确认。
 
@@ -102,7 +104,7 @@
 现有 `forbidden-checker` 在 post-processor 中一次性跑——改到 `writeSection()` 中每 200 token 即时拦截。
 
 **改动：**
-- [ ] `src/core/agents/orchestrator.ts` — **[改]** `writeSection()` 增加：
+- [ ] `src/core/agents/orchestrator/`（**目录**，早期计划写作单文件 `orchestrator.ts`） — **[改]** `writeSection()` 增加：
   - token 计数器累加 chunk 长度
   - 触发阈值 = 200 token
   - 调用 `scanForbiddenWords(accumulatedText, forbiddenPatterns)`
@@ -120,7 +122,7 @@
 审校 9 维已有 4 维（逻辑/一致性/节奏/对话质量），补剩余维度的自动量化。
 
 **改动：**
-- [ ] `src/lib/quality-analyzer.ts` — **[新]** 六个量化维度纯本地算法：
+- [ ] `src/core/quality/quality-analyzer.ts` — **[新]** 六个量化维度纯本地算法（v3.1.96 质量模块归位后在此目录，早期计划写作 `src/lib/quality-analyzer.ts`）：
   1. 废词率 = 禁用词出现次数 / 总字数（阈值 > 3% = 警告）
   2. 展示vs讲述比 = 动作+环境描写字数 / 直接叙述字数（阈值 < 30% = 警告）
   3. 视角一致性 = PoV 跳变次数 / 总段落数（阈值 > 0 = 警告）

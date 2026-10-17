@@ -32,11 +32,11 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.140";
+export const LATEST_VERSION = "v3.1.141";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "工作台的「过审自检」也有了「成就时刻」：点「套用 N 处到本章」后，面板直接显示「套用前 23 分 → 现在 8 分 ↓15」。这是每章写完都会跑一次的高频入口，此前只有静静变化的数字",
-  "顺带修掉一个入口割裂：/detector 页有「一键套用 + 撤销」，而工作台面板此前只有检测展示——想改稿得去 detector 页复制粘贴。现在两个入口能力对齐（工作台保留二次确认与版本历史回滚，创作主权底线不动）",
-  "门禁：tsc 0 错 · vitest 183 文件 2058 测试全绿 · next build 通过 · GitHub CI 全绿",
+  "文档体检抓到真问题：agent.md 的「真身路径」还指向落后 5 个版本的旧克隆（package.json 甚至停留在 3.1.53），按图索骥的会话会在错目录里改代码——现已改指当前克隆，全部旧副本标注真实版本",
+  "ROADMAP 回填 v3.1.85–140 共 56 个版本：P1 三项（F11 沉浸写作 / 多项目切换 / 视野优化）与 P2 世界书冲突可视化其实早已交付，「完成一项回填一项」的规则这次补执行",
+  "新增 scripts/check-doc-links.py：52 个文档的路径引用一键体检，断链退出码 1 可挂 CI；顺带修好烂掉的 bump-version.js（LATEST_VERSION 早迁去 changelog-meta.ts，脚本却还在读旧文件，一跑就报错）",
 ];

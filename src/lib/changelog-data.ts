@@ -27,6 +27,35 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.141",
+    date: "2026-10-17",
+    title: "文档体检：真身路径纠偏 + ROADMAP 回填 56 版本 + 新增文档链接检查脚本（DOC-HEALTH-1）",
+    sections: [
+      {
+        label: "📖 文档体检",
+        items: [
+          "agent.md「真身路径」原指向 WorkBuddy 会话目录下的旧克隆——该克隆实际停在 v3.1.135、package.json 更是停留在 3.1.53，按图索骥的会话会在落后 5 个版本的目录里改代码；现改指 C:/Users/Administrator/Projects/novel-smith，全部旧副本降级进冒牌货清单并标注真实版本",
+          "ROADMAP 回填 v3.1.85→v3.1.140 共 56 个版本：P1 三项（F11 沉浸写作 v3.1.101 / 多项目切换 v3.1.102 / 视野优化 v3.1.105+106）与 P2 世界书冲突可视化（v3.1.103/104）其实早已交付，路线图自己的「完成一项回填一项」规则此前未执行，这次补上；测试基线从 129 文件/1363 更新为 183 文件/2056 通过",
+          "调研计划 P0-2 补「已落地」回填：net-guard + proxy.ts 的收口形态与当年预案不同，「137 路由零鉴权」的证据已过期，后来的读者不会再拿过期结论当现状",
+          "IMPLEMENTATION-PLAN 加历史快照横幅 + 4 处过期路径标注；升级计划 B2 注解：FirstRunGuide.tsx 从未按该名创建，意图由首页零门槛引导条 + OnboardingModal + 横幅调整三处落地",
+        ],
+      },
+      {
+        label: "🔧 工具",
+        items: [
+          "新增 scripts/check-doc-links.py：扫 52 个文档的路径引用，断链退出码 1 可直接挂 CI；内置 9 处「已知历史引用」白名单——有意保留的决策记录不误报，新增断链照样红",
+          "修好烂掉的 bump-version.js：LATEST_VERSION/CHANGELOG_BRIEF 早在 v3.1.115 前后就迁去 changelog-meta.ts，脚本却还在读 changelog-data.ts，一跑就报「找不到 LATEST_VERSION」；VERSIONS 插入正则还写死换行符、匹配不上 CRLF 行尾且失败时静默写回——现在行尾无关 + 插入后校验，插不进去直接 throw",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 183 文件 2056 通过（2 skipped，共 2058）· next build 通过",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.140",
     date: "2026-10-17",
     title: "工作台「过审自检」也有成就时刻：套用前后分数对比（高频入口补平）",
