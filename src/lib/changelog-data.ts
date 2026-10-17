@@ -27,6 +27,45 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.144",
+    date: "2026-10-17",
+    title: "导入小说系统 M1：任意格式解析内核落地，26 本真实语料验收通过",
+    sections: [
+      {
+        label: "📥 导入内核",
+        items: [
+          "新增导入小说系统的地基：src/lib/import/ 分三层独立可测——解码层（encoding）→ 抽文本层（buffer-text）→ 切章层（splitter），统一产出 ParsedNovel 中间格式",
+          "格式支持：txt / markdown（走分章器）、epub（走书籍自带 spine 结构，不猜）、docx（复用既有 manuscript-parse）；pdf 显式回报「尚未支持」而不是给半成品",
+          "统一入口 parseToNovel(buf, opts) + 两个 CLI 闸门：npm run import:dry -- <file>（人读分章报告，支持 --json/--gbk/--regex/--show N）、npx tsx scripts/import-corpus.ts（批量语料回归）",
+        ],
+      },
+      {
+        label: "🔤 编码嗅探",
+        items: [
+          "txt 编码自动判定：BOM 优先 → 严格 UTF-8 校验（TextDecoder fatal）→ GBK/GB18030/Big5 按「中文可打印率 + 常用字密度 − 替换字符惩罚」打分择优，全程零外部依赖",
+          "国内 txt 满屏「锟斤拷」是国内网文导入最大痛点，编码层因此定为一等公民而非工具函数——顺序反了后面所有识别器都在给乱码打工",
+          "低置信度时不静默产出乱码，而是回传 warning 提示用户手动指定编码（CLI --gbk / UI 下拉）",
+        ],
+      },
+      {
+        label: "📖 分章与体检",
+        items: [
+          "中文章节识别器：第X章/節/回/幕/折/话、中文数字列表项、序章/楔子/番外/外传/终章/尾声/后记、卷/部/篇/集、英文 Chapter/Part/Section；正则可手动覆盖，零标题时按段落强切并明确告警",
+          "标题判定三道防线：独占一行 + 长度上限 + 非句末标点结尾（最后这条挡住「番外内容。」这类正文句被误当标题吃掉正文）",
+          "导入健康度体检：章数/字数分布、异常短章、异常长章、0 字条目（卷名页）、前置附属页（扉页/简介/人物表）分别标注，供 M2 落库时打 kind 标记",
+          "epub 特殊处理：跳过封面与目录页（nav 标签 + 页码串双判据）、清洗 chapter N - 0 类垃圾标题、剥掉每章共有的书名前缀、剔除正文里重复的标题行",
+        ],
+      },
+      {
+        label: "✅ 质量闸门",
+        items: [
+          "26 本真实小说（txt + epub，覆盖 GBK/GB18030/UTF-8/UTF-8-BOM）累计约 1.9 万章、5700 万字验收：分章全部正确，仅 1 本留「卷末章偏短」提示属正常",
+          "过程中修掉 5 个真 bug，全部被测试固化：带 BOM 的 txt 直接抛异常（utf-8-bom 非 TextDecoder 标签）、正文句被误判标题导致整章丢失、epub 分出 0 字章与 chapter N - 0 噪声标题、短章节被误判目录页而丢失、健康度误报 99 章偏短",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.143",
     date: "2026-10-17",
     title: "界面风格扩充：内置暖白纸稿/简洁文档/柔和深夜三套去 AI 味主题，默认柔和深夜",
