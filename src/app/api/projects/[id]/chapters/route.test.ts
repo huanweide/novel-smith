@@ -53,6 +53,22 @@ describe("GET /api/projects/[id]/chapters", () => {
     expect(res.payload.meta.total).toBe(2);
   });
 
+  it("includeFrontMatter=0 过滤导入的前置页，默认带上", async () => {
+    prismaMock.storyNode.findMany.mockResolvedValue([
+      { id: "f1", order: 0, title: "人物表", content: "徐缺：主角。", type: "chapter", importKind: "frontmatter" },
+      { id: "n1", order: 1, title: "第一章", content: "正文开始。", type: "chapter", importKind: "chapter" },
+    ]);
+    const withFm: any = await GET({ url: "http://x/api?projectId=p1" } as any, makeParams("p1"));
+    expect(withFm.payload.chapters.map((c: any) => c.id)).toEqual(["f1", "n1"]);
+    expect(withFm.payload.chapters[0].source).toBe("imported");
+
+    const noFm: any = await GET(
+      { url: "http://x/api?includeFrontMatter=0" } as any,
+      makeParams("p1"),
+    );
+    expect(noFm.payload.chapters.map((c: any) => c.id)).toEqual(["n1"]);
+  });
+
   it("prisma 抛错 → 统一脱敏错误（不透传内部 SQL / 表名）", async () => {
     prismaMock.project.findUnique.mockRejectedValueOnce(
       new Error("SQLITE_ERROR: no such table: Project")

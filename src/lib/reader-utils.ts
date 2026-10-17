@@ -51,6 +51,23 @@ export function pickInitialChapterId(
   return ids[0];
 }
 
+/**
+ * 打开时定位到哪一章。
+ *
+ * 优先级：URL 显式指定 > 上次读到哪 > 从头。
+ * URL 优先是必须的——「导入完成跳到最后一章」「从某章开始读」这类链接
+ * 如果被 localStorage 记忆覆盖，点了等于没点。
+ */
+export function resolveInitialChapterId(
+  ids: string[],
+  requestedId: string | null,
+  rememberedId: string | null,
+): string | null {
+  if (!ids.length) return null;
+  if (requestedId && ids.includes(requestedId)) return requestedId;
+  return pickInitialChapterId(ids, rememberedId);
+}
+
 /** 主题按顺序循环（不在列表里则回到默认），用于「切换阅读主题」按钮 */
 export function cycleTheme(current: string): ReaderTheme {
   const idx = READER_THEMES.indexOf(current as ReaderTheme);

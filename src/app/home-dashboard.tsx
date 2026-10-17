@@ -14,6 +14,7 @@ import { GENRE_TEMPLATES } from "@/core/templates/genres";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { useConfirmDelete } from "@/components/workspace/useConfirmDelete";
+import { NovelImportLauncher } from "@/components/import/NovelImportLauncher";
 import { Modal } from "@/components/ui/Modal";
 import { ImportDialog } from "@/components/workspace/ImportDialog";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -169,6 +170,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
     router.push(`/workspace/${id}`);
   };
 
+  // 导入小说（txt / epub / docx）→ 落库为章节链，可读可续写
+  const [novelImportOpen, setNovelImportOpen] = useState(false);
+
   const { deletingId, remove: deleteProject } = useConfirmDelete({
     title: "移入回收站",
     description: (id, name) => `确定删除「${name}」？将移入回收站，可在回收站恢复（默认不彻底删除）。`,
@@ -235,6 +239,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             </button>
             <button onClick={() => importBackupRef.current?.click()} className="btn-ghost hidden md:inline-flex text-xs h-8 w-8 rounded-xl items-center justify-center tooltip-trigger" data-tooltip="从 .nfproject 备份包导入" aria-label="导入备份">
               <Icon name="package" size={13} />
+            </button>
+            <button onClick={() => setNovelImportOpen(true)} className="btn-ghost hidden md:inline-flex text-xs h-8 w-8 rounded-xl items-center justify-center tooltip-trigger" data-tooltip="导入小说（txt / epub / docx），可读可续写" aria-label="导入小说">
+              <Icon name="book" size={13} />
             </button>
             <input ref={importBackupRef} type="file" accept=".nfproject,application/json" className="hidden" aria-label="从 .nfproject 备份包导入" onChange={handleImportBackup} />
           </div>
@@ -424,6 +431,11 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
           </button>
         </div>
       </Modal>
+
+      {/* 导入小说（txt / epub / docx）弹窗 */}
+      {novelImportOpen && (
+        <NovelImportLauncher open onClose={() => setNovelImportOpen(false)} />
+      )}
 
       {/* 导入 .nfproject 备份包弹窗 */}
       {importFile && (

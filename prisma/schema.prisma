@@ -216,6 +216,20 @@ model StoryNode {
   order    Int @default(0)
   status   String @default("outline_only") // ContentStatus
 
+  // ★ 导入小说系统（M2）：来源与角色
+  //   source=imported  → 这章正文来自导入的原始小说，任何 AI 生成/续写都不应覆盖它
+  //   source=ai        → AI 生成
+  //   source=user      → 用户手写/手改（含「从此继续写」接的章）
+  // 有了它，「读完想接着写」才成立：续写章是 user，新书，而导入正文是 imported，不会被污染。
+  source String @default("ai")
+
+  // 导入节点的角色（M2）：frontmatter=扉页/简介/人物表，volume=卷名页，chapter=正文章节
+  // 分开是为了阅读器目录能折叠附录、写作区不把人物表当章节要字数。
+  importKind String? @map("import_kind")
+
+  // 导入来源指纹（同一个文件重复导入不产生第二份）
+  importSourceKey String? @map("import_source_key")
+
   // 确认流程：确认定稿时间戳（null=未确认）
   confirmedAt DateTime? @map("confirmed_at")
 
@@ -270,6 +284,7 @@ model StoryNode {
   @@index([parentId])
   @@index([branchId])
   @@index([deletedAt])
+  @@index([importSourceKey])
 }
 
 // ─── 正文版本快照 (Story Node Revision) ──────────────────

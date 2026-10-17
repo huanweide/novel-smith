@@ -27,6 +27,46 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.145",
+    date: "2026-10-17",
+    title: "导入小说系统 M2：落库 + 续写闭环打通，导入不再是只读归档",
+    sections: [
+      {
+        label: "🗄️ 落库闭环",
+        items: [
+          "新增 commit.ts：解析结果一键写进 StoryNode 链，不另建归档表，导入完立刻就是能读能续写的正文",
+          "每个导入节点带三态标记：source=imported 原文 / importKind=frontmatter 扉页附录 / volume 卷名页，前端一眼分得清哪些是原文、哪些是自己写的",
+          "同文件重复导入幂等：importSourceKey 命中即跳过，不会把同一本书翻倍灌进项目",
+          "两段式 API：POST /api/import/novel 支持 mode=preview（只出报告不落库）与 mode=commit（真写库）",
+        ],
+      },
+      {
+        label: "✍️ 续写闭环",
+        items: [
+          "新增 /api/import/novel/continue：在所有已有节点之后新建 source=user 的空白章，notes 自动记「承接自导入章节《…》」",
+          "阅读器顶栏新增「继续写」按钮，一点就在导入内容之后接着写，不再需要手动新建项目再拷贝",
+          "导入完成后自动跳到第一章末尾（/read/{id}?node=anchor），阅读器定位优先级改为 URL 参数 > 上次记忆 > 开头",
+        ],
+      },
+      {
+        label: "🖱️ 交互入口",
+        items: [
+          "首页顶栏新增「导入小说」入口，Launcher 串起：选文件 → 选新建项目 / 导入到已有项目 → 预览报告 → 确认导入",
+          "预览面板逐章列出标题、字数、卷/附录类型、正文片段，并对偏短偏长章标 ⚠，导入前就能看出分章对不对",
+          "高级选项可手动指定编码与自定义分章正则，M1 嗅探不准时的兜底",
+        ],
+      },
+      {
+        label: "🧪 验证",
+        items: [
+          "新增 import-m2.test.ts 6 例（短前言并回、空节点、扉页识别、正文不误标、短 txt 入库、空文件告警）",
+          "chapters 路由补 includeFrontMatter 用例：默认带前置页、includeFrontMatter=0 只给正文",
+          "修 chapters 路由对空 request.url 的崩溃（此前会 500），tsc --incremental false 0 错",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.144",
     date: "2026-10-17",
     title: "导入小说系统 M1：任意格式解析内核落地，26 本真实语料验收通过",
