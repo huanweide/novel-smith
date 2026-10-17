@@ -32,12 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.150";
+export const LATEST_VERSION = "v3.1.151";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "修：跑完 next build 后 localhost:3001 打不开——build 重建 .next 会把跑着的服务句柄撞掉",
-  "现在 npm run build 会自动绕开：构建前停掉 3001 上的服务，构建完自动拉回来",
-  "停之前会先确认那个进程确实是 node，PID 会被系统复用，认错了会误杀别的程序",
-  "服务日志统一落 server.log，不用再靠猜进程死没死",
+  "把「服务怎么起」这套踩坑固化成 scripts/start-novel-server.cmd + 计划任务 NovelSmith-3001",
+  "以后开机自动起 3001，构建完自动拉回来，不再出现「又开不开」",
+  "四个错误做法都试过并记档：后台 & / detached 会被父 shell 带走、VBS 是 LOLBin 被拦、schtasks 直跑 node 找不到仓库根",
+  "最难查的一个：.cmd 必须是 CRLF 行尾，LF 的批处理文件 cmd.exe 直接不执行且日志一行都不写",
+  "safe-build 会在构建前自动把行尾修正回 CRLF",
 ];

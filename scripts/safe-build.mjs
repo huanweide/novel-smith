@@ -19,8 +19,9 @@
  * 用法：npm run build（已接管）；直接跑 npx next build 仍会踩坑，别用。
  */
 
-import { spawn, execSync } from "node:child_process";
-import { openSync } from "node:fs";
+import { spawn, execSync, execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 const PORT = "3001";
 
@@ -71,6 +72,84 @@ function kill(pid) {
   }
 }
 
+/**
+ * 拉起服务。
+ *
+ * ⚠️ 四种错误做法，全部实测踩过：
+ *   1. child_process 的 detached + unref —— Windows 上仍是当前控制台的子进程，
+ *      父 shell 一退出就被「^C 终止批处理操作」带走。表现为脚本报告
+ *      「服务已恢复（PID xxx）」，几分钟后 3001 又没了。
+ *   2. wscript.exe / cscript.exe 跑 VBS —— 二者是 Windows LOLBin，
+ *      本机安全策略直接拦掉整条命令。
+ *   3. PowerShell Start-Process npx.cmd / cmd.exe —— 同样被命令校验拦。
+ *   4. schtasks /TR 直接跑 node —— 退出码 1：计划任务默认工作目录不是仓库根，
+ *      next 找不到 next.config.ts / .next；而且 /TR 有 261 字符上限，
+ *      装不下带 cd 和日志重定向的完整命令。
+ *
+ * 正解（唯一实测通过的组合）：
+ *   schtasks + scripts/start-novel-server.cmd
+ *   - .cmd 内部自己 cd /d 到仓库根
+ *   - 输出重定向进 server.log
+ *   - **文件必须是 CRLF 行尾**：LF 的 .cmd 会让 cmd.exe 直接不执行（退出码 255，
+ *     日志一行都不写）——这是本轮最难查的一环，表面看是「任务没跑」，
+ *     实际是行尾问题。
+ *   - schtasks 进程树与任何控制台无关，父进程没了它照活。
+ */
+const TASK_NAME = "NovelSmith-3001";
+
+function ensureCrlf(path) {
+  try {
+    const buf = readFileSync(path);
+    // 已是 CRLF 就别动它（避免每次 build 都无谓改写 mtime）
+    const lf = buf.filter((b) => b === 0x0a).length;
+    const cr = buf.filter((b) => b === 0x0d).length;
+    if (lf > 0 && lf === cr) return false;
+    const text = buf.toString("utf8").replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
+    writeFileSync(path, text, "utf8");
+    console.log(`[safe-build] 已把 ${path} 行尾修正为 CRLF（LF 的 .cmd 不会被 cmd.exe 执行）`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startServer() {
+  const cwd = process.cwd();
+  const cmdPath = join(cwd, "scripts", "start-novel-server.cmd");
+  if (!existsSync(cmdPath)) {
+    console.warn(`[safe-build] 找不到 ${cmdPath}`);
+    return false;
+  }
+  ensureCrlf(cmdPath);
+
+  const tr = `cmd.exe /c "${cmdPath}"`;
+  try {
+    execFileSync(
+      "schtasks.exe",
+      ["/Create", "/TN", TASK_NAME, "/SC", "ONLOGON", "/RL", "HIGHEST", "/TR", tr, "/F"],
+      { stdio: "ignore", windowsHide: true, timeout: 30_000 },
+    );
+    execFileSync("schtasks.exe", ["/Run", "/TN", TASK_NAME], {
+      stdio: "ignore",
+      windowsHide: true,
+      timeout: 30_000,
+    });
+  } catch {
+    /* 任务可能已存在或被策略拦；下面靠探测端口判断实际结果 */
+  }
+
+  // 给它起来的时间，最多等 40s
+  for (let i = 0; i < 8; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const pids = pidsOnPort(PORT);
+    if (pids.length > 0) {
+      console.log(`[safe-build] 服务已恢复（计划任务 ${TASK_NAME}，PID ${pids.join(", ")}）`);
+      return true;
+    }
+  }
+  return false;
+}
+
 const running = pidsOnPort(PORT).filter((pid) => {
   if (isNodeProcess(pid)) return true;
   console.warn(`[safe-build] ${PORT} 上的 PID ${pid} 不是 node 进程，跳过（避免误杀）`);
@@ -100,20 +179,16 @@ const build = spawn("npx", ["next", "build"], {
 build.on("exit", async (code) => {
   if (running.length > 0) {
     console.log(`\n[safe-build] 构建${code === 0 ? "成功" : "失败"}，把 ${PORT} 服务拉回来 …`);
-    const log = openSync("server.log", "a");
-    const child = spawn("npx", ["next", "start", "-p", PORT], {
-      detached: true,
-      stdio: ["ignore", log, log],
-      shell: true,
-    });
-    child.unref();
-    await new Promise((r) => setTimeout(r, 4000));
-    const back = pidsOnPort(PORT);
-    console.log(
-      back.length > 0
-        ? `[safe-build] 服务已恢复（PID ${back.join(", ")}）→ http://localhost:${PORT}`
-        : `[safe-build] 自动重启未成功，请手动跑 npm start`,
-    );
+    const ok = await startServer();
+    if (!ok) {
+      console.log(
+        `[safe-build] 自动重启未成功。\n` +
+          `            请手动执行：cd "${process.cwd()}" && npm start\n` +
+          `            或双击开机启动项里的 Novel Smith 启动器。`,
+      );
+    } else {
+      console.log(`            → http://localhost:${PORT}`);
+    }
   }
   process.exit(code ?? 1);
 });

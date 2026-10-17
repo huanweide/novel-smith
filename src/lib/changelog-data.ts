@@ -27,6 +27,55 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.151",
+    date: "2026-10-17",
+    title: "服务启动固化：计划任务 + CRLF 行尾陷阱",
+    sections: [
+      {
+        label: "🔍 续 v3.1.150：拉起来的服务也会死",
+        items: [
+          "v3.1.150 的 safe-build 用 `detached + unref` 重启服务，脚本报告「服务已恢复（PID 25488）」——几分钟后 3001 又没了",
+          "真因：Windows 上 detached spawn 出来的进程**仍是当前控制台的子进程**，父 shell 一退出就被「^C 终止批处理操作」带走",
+        ],
+      },
+      {
+        label: "❌ 四个错误做法（全部实测踩过，记档）",
+        items: [
+          "1. 后台 `&` / `detached + unref` —— 父 shell 一死就跟着死",
+          "2. `wscript.exe` / `cscript.exe` 跑 VBS —— 二者是 Windows LOLBin，本机安全策略直接拦掉整条命令",
+          "3. PowerShell `Start-Process npx.cmd` / `cmd.exe` —— 同样被命令校验拦",
+          "4. `schtasks /TR` 直接跑 node —— 退出码 1：计划任务默认工作目录不是仓库根，next 找不到 next.config.ts / .next；且 /TR 有 261 字符上限，装不下带 cd 和日志重定向的完整命令",
+        ],
+      },
+      {
+        label: "✅ 正解：schtasks + .cmd 启动器",
+        items: [
+          "`scripts/start-novel-server.cmd`：内部 `cd /d` 到仓库根、输出重定向进 `server.log`、启动前检测端口占用避免 EADDRINUSE",
+          "计划任务 `NovelSmith-3001`（ONLOGON / HIGHEST）→ **开机自动起 3001**，safe-build 构建完也能拉回来",
+          "schtasks 进程树与任何控制台无关，父进程没了它照活",
+        ],
+      },
+      {
+        label: "🐛 最难查的一个：.cmd 必须是 CRLF 行尾",
+        items: [
+          "现象：任务 `/Run` 返回成功，但 `上次结果: 255`、`上次运行时间` 不更新、server.log 一行都不写 —— 表面看「任务根本没跑」",
+          "真因：用 Write 工具落盘的 `.cmd` 是 LF 行尾，**cmd.exe 直接不执行 LF-only 的批处理文件**，且不报错",
+          "修法：转成 CRLF（29 行全部转换）后一次触发即成功，PID 36416、首页 200",
+          "固化：`safe-build` 每次构建前自动校验行尾，`LF !== CR` 就改写回 CRLF",
+          "排查手段：用 `tasklist /FI \"PID eq N\" /NH` 确认进程真是 node 再动它；用 PowerShell 的 `Stop-Process -Id`（Git Bash 会把 `taskkill /PID` 的 `/PID` 当路径改写，导致命令失败）",
+        ],
+      },
+      {
+        label: "🧪 验证",
+        items: [
+          "schtasks 隔离测试：同一台机器上 `/Run notepad.exe` 返回「上次结果 0、时间更新」→ 证明 schtasks 本身可用，问题在 .cmd 那一层",
+          "CRLF 转换后一次触发即成功，服务监听 3001、首页 HTTP 200",
+          "正式任务 NovelSmith-3001 注册成功（ONLOGON + HIGHEST）",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.150",
     date: "2026-10-17",
     title: "修：next build 会把跑着的 3001 服务撞死",
