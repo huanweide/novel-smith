@@ -56,6 +56,10 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # 首次运行时仓库还没建 Pages 站点，默认 enablement=false 会报 404；
+          # 打开后由本 action 自动把 Pages 启用为 GitHub Actions 构建模式。
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
