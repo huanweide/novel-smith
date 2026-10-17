@@ -63,8 +63,10 @@ export function ImportAssetsPanel({
   const [data, setData] = useState<AssetsPayload | null>(null);
   const [pickedChars, setPickedChars] = useState<Set<string>>(new Set());
   const [pickedLore, setPickedLore] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<"" | "approve" | "reject">("");
+  const [busy, setBusy] = useState<"" | "approve" | "reject" | "prefill">("");
   const [loading, setLoading] = useState(true);
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [prefillMsg, setPrefillMsg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +101,46 @@ export function ImportAssetsPanel({
     else next.add(id);
     setter(next);
   };
+
+  /** M4：AI 预填——把草稿补成完整卡（烧 token，所以要用户明确点头） */
+  const doPrefill = useCallback(async () => {
+    setBusy("prefill");
+    setPrefillMsg("");
+    try {
+      const res = await fetch("/api/import/novel/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          action: "prefill",
+          characters: [...pickedChars],
+          lore: [...pickedLore],
+          autoApprove,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toastError(json.error ?? "预填失败");
+        return;
+      }
+      const r = json.result;
+      const cOk = (r.characters ?? []).filter((c: { ok: boolean }) => c.ok).length;
+      const lOk = (r.lore ?? []).filter((l: { ok: boolean }) => l.ok).length;
+      const cFail = (r.characters ?? []).length - cOk;
+      const lFail = (r.lore ?? []).length - lOk;
+      setPrefillMsg(
+        `预填完成：角色 ${cOk} 条、世界设定 ${lOk} 条` +
+        (cFail + lFail > 0 ? `；${cFail + lFail} 条原文证据不足被跳过` : ""),
+      );
+      toastSuccess("AI 预填完成");
+      await load();
+    } catch (e) {
+      const f = describeStreamError(e);
+      toastError(f ? `${f.title}：${f.description}` : "网络异常，预填失败");
+    } finally {
+      setBusy("");
+    }
+  }, [projectId, pickedChars, pickedLore, autoApprove, load]);
 
   const apply = useCallback(
     async (action: "approve" | "reject") => {
@@ -272,7 +314,17 @@ export function ImportAssetsPanel({
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={doPrefill}
+          disabled={
+            busy !== "" || (pickedChars.size === 0 && pickedLore.size === 0)
+          }
+          className="rounded-lg border border-[var(--nv-accent)] px-3 py-1.5 text-xs text-[var(--nv-accent)] disabled:opacity-50"
+        >
+          {busy === "prefill" ? "AI 预填中…" : "AI 预填所选"}
+        </button>
         <button
           type="button"
           onClick={() => apply("approve")}
@@ -294,6 +346,24 @@ export function ImportAssetsPanel({
           {busy === "reject" ? "丢弃中…" : "丢弃所选"}
         </button>
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-[var(--nv-text-muted)]">
+        <input
+          type="checkbox"
+          checked={autoApprove}
+          onChange={(e) => setAutoApprove(e.target.checked)}
+        />
+        预填后直接采纳（不再待审）
+        <span className="ml-1">
+          — LLM 也会编造设定，建议保持关闭，先扫一眼再用
+        </span>
+      </label>
+
+      {prefillMsg && (
+        <div className="rounded-lg border border-[var(--nv-border)] p-2 text-xs text-[var(--nv-text-secondary)]">
+          {prefillMsg}
+        </div>
+      )}
     </div>
   );
 }
