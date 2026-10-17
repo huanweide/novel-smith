@@ -153,4 +153,39 @@ describe("HumanizePanel", () => {
       confirmSpy.mockRestore();
     }
   });
+
+  // ── 套用前后对比（v3.1.140，「成就时刻」）──
+  // 守的是即时反馈这个设计：套用成功必须让用户看见「你刚刚完成了什么」。
+
+  it("没套用过时没有对比条", () => {
+    renderPanel(AI_TEXT);
+    expect(screen.queryByText(/套用前 \d+ 分/)).toBeNull();
+  });
+
+  it("套用成功后出现「套用前 X 分 → 现在 Y 分 ↓N 分」对比条", async () => {
+    const onApplyFixes = vi.fn().mockResolvedValue({ ok: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      render(<HumanizePanel open onClose={() => {}} text={AI_TEXT} onApplyFixes={onApplyFixes} />);
+      fireEvent.click(screen.getByText(/套用 \d+ 处到本章/));
+      await waitFor(() => expect(screen.queryByText(/套用前 \d+ 分/)).toBeTruthy());
+      expect(screen.queryByText(/现在 \d+ 分/)).toBeTruthy();
+      expect(screen.queryByText(/↓ \d+ 分/)).toBeTruthy();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("确认框取消 → 不套用，也没有对比条", async () => {
+    const onApplyFixes = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      render(<HumanizePanel open onClose={() => {}} text={AI_TEXT} onApplyFixes={onApplyFixes} />);
+      fireEvent.click(screen.getByText(/套用 \d+ 处到本章/));
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText(/套用前 \d+ 分/)).toBeNull();
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
 });
