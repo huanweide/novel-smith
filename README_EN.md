@@ -202,9 +202,8 @@ Clear boundaries beat inflated claims:
 
 If Novel Smith helped you finish a story, you can buy the author a coffee — entirely optional, and it changes nothing about the features.
 
-- **WeChat QR**: Settings → scroll to the bottom "赞助支持" section, scan with WeChat
+- **WeChat QR**: In the app, open "Settings → 赞助支持" and scan the author's own QR code
 - **GitHub Sponsor**: the Sponsor button on this repo — the same QR code
-- Want your own QR? Drop `wechat-qr.png` into `public/sponsor/` (see `public/sponsor/README.md`)
 
 > The QR image is just a payment entry point — no keys, no credentials, a plain static file that is safe to commit. The project collects no donation amounts or messages on any backend.
 
