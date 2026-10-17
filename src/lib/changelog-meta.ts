@@ -32,12 +32,13 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.136";
+export const LATEST_VERSION = "v3.1.137";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "设定库认得出你在写谁：正文写「那个叛变北境的将军」、设定写「北境守将·曾率部倒戈」时，此前关键词一个都对不上，这条设定永远注入不到 prompt，AI 只会按「将军=忠臣」去写，把叛徒写成了忠臣。现在补一层语义比对——意思对得上就召回，不要求字面重合",
-  "你不需要做任何操作：没配 embedding key 时行为与更新前完全一致；老设定由后台悄悄补，补不上也不影响正常写作（任何失败都静默退回关键词召回）",
-  "修复一个真实安全漏洞：伪造 X-Forwarded-For 可绕过全部入站访问控制（一次放行 = 137 个 API 的读写权）。现已改为按部署形态选择信任来源，未知来源一律拦下；ALLOW_PUBLIC 必须配套令牌才生效",
-  "门禁：tsc 0 错 · vitest 2027 测试通过 · next build 通过 · GitHub CI 双 job 全绿",
+  "README 说人话：新增「和直接跟 AI 聊天写有什么不一样」六行对比表 +「它不是什么」五条边界声明——把「聊天窗口是健谈的陌生人，本项目是住在你电脑里、记得你所有设定的写作工程台」这句话讲给零基础的人听",
+  "修四个文档与代码不符的安全说明（严重）：文档此前声称「只设 ALLOW_PUBLIC 不会开放访问」，而代码行为是未配令牌即放行——错误方向是让用户低估暴露面；同时纠正「npm run dev 只监听 127.0.0.1」的错觉（实际绑定所有接口，局域网可达是刻意放行场景）",
+  "修一个死脚本：deploy-local.ps1 还在跑 Docker + PostgreSQL 流程，而仓库早已全量迁往本地 SQLite（连 docker-compose.yml 都不存在），Windows 用户照它走第一步就卡死。已重写为 SQLite 一键版并新增 -Loopback 参数",
+  "修两个 Postgres 时代遗留的测试占位串：它们把 DATABASE_URL 默认成 postgresql://…，让 prisma.ts 去 mkdir 一个不存在的目录，三个测试文件在干净环境必红",
+  "门禁：tsc 0 错 · vitest 182 文件 2048 测试全绿 · next build 通过 · GitHub CI 全绿",
 ];
