@@ -7,6 +7,7 @@ import { confirmDialog, toastError, toastSuccess, toastInfo } from "@/components
 import { describeHttpError } from "@/lib/stream-error";
 import { useConfirmDelete } from "@/components/workspace/useConfirmDelete";
 import { EmptyState, Loading } from "@/components/ui/States";
+import { NovelImportLauncher } from "@/components/import/NovelImportLauncher";
 
 interface TaskBrief {
   id: string;
@@ -28,6 +29,9 @@ export default function DissectPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadHint, setLoadHint] = useState<string | null>(null);
+  // v3.1.149：拆书页内置「导入小说」入口——拆书是逆向学习别人的写法，
+  // 导入是把自己已有的稿子落成作品，两者常被混淆，页面上直接说清并给第二条路。
+  const [novelImportOpen, setNovelImportOpen] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -113,12 +117,20 @@ export default function DissectPage() {
               拆书导航
             </h1>
           </div>
-          <Link
-            href="/dissect/new"
-            className="btn-primary flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium"
-          >
-            <Icon name="plus" size={14} /> 新建拆书
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setNovelImportOpen(true)}
+              className="btn-ghost flex items-center gap-1.5 rounded-lg border border-[var(--nv-accent)]/45 px-4 py-2 text-sm text-[var(--nv-accent)] transition-colors hover:bg-[var(--nv-accent-soft)]"
+            >
+              <Icon name="upload" size={14} /> 导入小说
+            </button>
+            <Link
+              href="/dissect/new"
+              className="btn-primary flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium"
+            >
+              <Icon name="plus" size={14} /> 新建拆书
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -152,12 +164,28 @@ export default function DissectPage() {
             title="还没有拆书任务"
             description="上传一本小说原文，AI 将自动拆解为世界观、角色、情节脉络等维度"
             action={
-              <Link
-                href="/dissect/new"
-                className="btn-primary inline-flex items-center gap-1.5 rounded-lg px-6 py-3 text-sm font-medium"
-              >
-                <Icon name="plus" size={16} /> 开始第一次拆书
-              </Link>
+              <div className="flex flex-col items-center gap-4">
+                <Link
+                  href="/dissect/new"
+                  className="btn-primary inline-flex items-center gap-1.5 rounded-lg px-6 py-3 text-sm font-medium"
+                >
+                  <Icon name="plus" size={16} /> 开始第一次拆书
+                </Link>
+                <div className="max-w-md rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-4 text-left">
+                  <p className="text-sm text-[var(--nv-text-secondary)]">
+                    拆书是<b className="text-[var(--nv-text-primary)]">逆向学习别人的写法</b>，不产生正文。
+                  </p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+                    如果你已经有自己的稿子（txt / epub / docx），想让 AI 接着往下写，应该用「导入小说」——导入后直接落进「我的作品」，并自动提炼角色、世界观和伏笔。
+                  </p>
+                  <button
+                    onClick={() => setNovelImportOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--nv-accent)]/45 px-4 py-2 text-sm text-[var(--nv-accent)] transition-colors hover:bg-[var(--nv-accent-soft)]"
+                  >
+                    <Icon name="upload" size={14} /> 导入小说，导入即成作品
+                  </button>
+                </div>
+              </div>
             }
             className="surface-elevated border-solid border-[var(--nv-border-2)]"
           />
@@ -231,6 +259,11 @@ export default function DissectPage() {
           </div>
         )}
       </main>
+
+      {/* 导入小说弹窗：导入后由组件内部 router.push 跳进新作品 */}
+      {novelImportOpen && (
+        <NovelImportLauncher open onClose={() => setNovelImportOpen(false)} />
+      )}
     </div>
   );
 }
