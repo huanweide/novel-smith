@@ -12,21 +12,22 @@
 
 | 项 | 值 |
 |---|---|
-| **真身路径** | `C:\Users\Administrator\WorkBuddy\2026-07-25-14-19-44\novel-forge` |
+| **真身路径** | `C:\Users\Administrator\Projects\novel-smith` |
 | GitHub 仓库 | `https://github.com/huanweide/novel-smith`（公开） |
 | 默认分支 | `main` |
 | 本地分支 | `main` |
-| 包名 / 版本 | `novel-smith` v3.1.135 |
+| 包名 / 版本 | `novel-smith` v3.1.141 |
 | 本地端口 | 3001 |
 
 **这些是冒牌货 / 旧副本，别在上面改代码：**
 
 | 路径 | 是什么 | 状态 |
 |---|---|---|
-| `C:\c\Users\...\2026-07-25-14-19-44\novel-forge` | 同名旧镜像 | 停在 v3.1.53，remote 还是旧名 novel-forge，**落后数十个版本** |
-| `C:\Users\Administrator\Projects\novel-forge` | 很老的克隆 | 停在 v0.26，分支 master |
+| `C:\Users\Administrator\WorkBuddy\2026-07-25-14-19-44\novel-forge` | ⚠️ **最危险的旧副本**：remote 是对的（novel-smith）、目录名却是旧名，极易误判成真身 | 实际停在 v3.1.135（commit c469d1f），package.json 更是停留在 3.1.53，**落后 5+ 个版本**；2026-10-17 已由 `Projects\novel-smith` 全新克隆取代 |
+| `C:\Users\Administrator\Projects\novel-forge` | 很老的克隆 | remote 还是旧名 novel-forge，停在 v0.26，分支 master |
 | `C:\Users\Administrator\Desktop\Projects\novel-forge-ours` | 很老的克隆 | 停在 v0.26，分支 master |
 | `C:\Users\Administrator\Desktop\Projects\novel-forge-github(.bak)` | **竞品** RhythmicWave/NovelForge 的克隆 | 只用来做竞品调研，不是我们的 |
+| `C:\c\Users\...` | 早期镜像残留 | 随时可删，删前确认没有独有未推送提交 |
 
 > 判断真身的唯一标准：`git remote get-url origin` 返回 `novel-smith`，且 `package.json` 的 name 是 `novel-smith`。
 
@@ -99,6 +100,15 @@ CI 已配 `tags-ignore: snap/*`，推快照标签不会触发流水线（否则�
 ---
 
 ## 五、版本更新记录（最新在上）
+
+### v3.1.141 — 2026-10-17 — 文档体检：真身路径纠偏 + ROADMAP 回填 56 版本 + 新增文档链接检查脚本（DOC-HEALTH-1）
+
+- **背景**：docs/ 与门面 md 长期无人体检。新写 `scripts/check-doc-links.py` 首跑即抓到 13 处断链/过期引用，其中最危险的是本文件「真身路径」还指向 `WorkBuddy\2026-07-25-14-19-44\novel-forge`——该克隆实际停在 v3.1.135（package.json 更是 3.1.53），按图索骥的会话会在落后 5 版本的目录里改代码。
+- **修正**：① 真身改指 `C:\Users\Administrator\Projects\novel-smith`（判定标准不变），旧副本全部降级为冒牌货清单并标注真实版本；② `AGENTS.md` 三处路径同步；③ `ROADMAP.md` 回填 v3.1.85→140 共 56 版本——**P1 三项（F11 沉浸 v3.1.101 / 多项目切换 v3.1.102 / 视野优化 v3.1.105+106）与 P2 世界书冲突可视化（v3.1.103/104）其实早已交付**，「完成一项回填一项」规则此前未执行；测试基线 129/1363 → 183 文件 2056 通过；两份仓库外输入加注解；④ `IMPLEMENTATION-PLAN.md` 加历史快照横幅 + 4 处过期路径标注；⑤ 调研计划 P0-2 补「已落地」回填（net-guard + proxy.ts 形态与预案不同，「137 路由零鉴权」证据已过期）；⑥ 升级计划 B2 注解：FirstRunGuide.tsx 从未按该名创建，意图由首页零门槛引导条（v3.1.135）+ OnboardingModal + 横幅调整三处落地。
+- **新增工具**：`scripts/check-doc-links.py`——52 个文档路径引用体检，断链退出码 1；带 9 处「已知历史引用」白名单（有意保留的决策记录），新增断链仍会红。可挂 CI / pre-push。
+- **修好烂脚本**：`scripts/bump-version.js` 自 v3.1.115 前后（LATEST_VERSION 迁去 changelog-meta.ts）就已坏掉——读旧文件一跑就报错；且 VERSIONS 插入正则写死换行符匹配不上 CRLF、失败静默写回。已修：行尾无关 + 插入后校验 + throw。
+- **门禁**：tsc 0 错 · vitest 183 文件 2056 通过（2 skipped，共 2058）· next build 通过。
+- **注**：v3.1.136–v3.1.140 五个版本（补发 Release、README 说人话、语义召回可见性、双入口成就时刻）此前未登本台账，本次一并锚定；逐版本详情以 `CHANGELOG.md` 为准。
 
 ### v3.1.135 — 2026-09-12 — 吸星改造 1：首页零门槛引导 + README 首屏重构（STAR-READINESS-1）
 ### v3.1.134 — 2026-09-12 — 全站 UI 走查收口：右侧面板 tab 断字修复（TAB-WRAP）

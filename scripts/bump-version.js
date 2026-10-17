@@ -11,19 +11,22 @@
  *   node scripts/bump-version.js --title "标题" --items "功能:改A,改B" --items "修复:修C"
  *
  * 自动做的事：
- *   1. 从 changelog-data.ts 读取当前版本号
+ *   1. 从 changelog-meta.ts 读取当前版本号（v3.1.115 起 LATEST_VERSION 唯一住处）
  *   2. 按规则 bump（--patch → 0.8.4, --minor → 0.9.0, --major → 1.0.0）
- *   3. 在 VERSIONS 数组最前面插入新版本条目
- *   4. 更新 LATEST_VERSION
- *   5. 更新 CHANGELOG_BRIEF
+ *   3. 在 changelog-data.ts 的 VERSIONS 数组最前面插入新版本条目
+ *   4. 更新 changelog-meta.ts 的 LATEST_VERSION
+ *   5. 更新 changelog-meta.ts 的 CHANGELOG_BRIEF
  *   6. 写入文件
  *   7. 同步 README.md / README_EN.md 顶部的「当前版本」行（防版本漂移）
+ *
+ * 注意：package.json 的 version 与 CHANGELOG.md 条目仍需手动同步（本脚本不碰）。
  */
 
 const fs = require("fs");
 const path = require("path");
 
-const CHANGELOG_PATH = path.join(__dirname, "..", "src", "lib", "changelog-data.ts");
+const META_PATH = path.join(__dirname, "..", "src", "lib", "changelog-meta.ts");
+const DATA_PATH = path.join(__dirname, "..", "src", "lib", "changelog-data.ts");
 
 // ─── 参数解析 ─────────────────────────────────────────────────
 
@@ -122,14 +125,17 @@ function readCurrentVersion(fileContent) {
   return latMatch[1];
 }
 
-// ─── 生成新的 changelog-data.ts 内容 ─────────────────────
+// ─── 生成新的 changelog-meta.ts 内容 ────────────────────
 
-function generateNewFile(fileContent, newVersion, date, title, sections, briefItems) {
+function generateNewMeta(metaContent, newVersion, briefItems) {
   // 替换 LATEST_VERSION
-  let result = fileContent.replace(
+  let result = metaContent.replace(
     /export const LATEST_VERSION\s*=\s*"[^"]+"/,
     `export const LATEST_VERSION = "${newVersion}"`
   );
+  if (!result.includes(`LATEST_VERSION = "${newVersion}"`)) {
+    throw new Error("LATEST_VERSION 替换失败（文件结构变了？），终止 bump");
+  }
 
   // 替换 CHANGELOG_BRIEF
   const briefItemsStr = briefItems.map(item => `  "${item}",`).join("\n");
@@ -137,28 +143,32 @@ function generateNewFile(fileContent, newVersion, date, title, sections, briefIt
     /export const CHANGELOG_BRIEF\s*=\s*\[[\s\S]*?\];/,
     `export const CHANGELOG_BRIEF = [\n${briefItemsStr}\n];`
   );
-
-  // 在 VERSIONS 数组第一个元素前插入新条目
-  const sectionsStr = sections.map(s =>
-    `      {\n        label: "${s.label}",\n        items: [\n${s.items.map(item => `          "${item}",`).join("\n")}\n        ],\n      },`
-  ).join("\n");
-
-  const newEntry = `  {
-    version: "${newVersion}",
-    date: "${date}",
-    title: "${title}",
-    sections: [
-${sectionsStr}
-    ],
-  },`;
-
-  // 找到 VERSIONS 数组的第一个元素
-  result = result.replace(
-    /(export const VERSIONS: VersionEntry\[\] = \[\n)(\s*\{)/,
-    `$1${newEntry}\n$2`
-  );
+  if (!result.includes(`"${briefItems[0]}",`)) {
+    throw new Error("CHANGELOG_BRIEF 替换失败，终止 bump");
+  }
 
   return result;
+}
+
+// ─── 在 changelog-data.ts 的 VERSIONS 数组最前面插入条目 ──
+//
+// 行尾陷阱：changelog-data.ts 是 CRLF 行尾（Windows 编辑器历史遗留），
+// 正则里写死 \n 会匹配不上，而 String.replace 不匹配时静默返回原串——
+// 表现就是「bump 成功但 VERSIONS 没插入」。所以：① 正则兼容 \r?\n；
+// ② 插入后校验，没插进去直接 throw，不许静默写回。
+
+function insertVersionsEntry(dataContent, newEntry) {
+  const eol = dataContent.includes("\r\n") ? "\r\n" : "\n";
+  const entry = newEntry.replace(/\n/g, eol);
+  const re = /(export const VERSIONS: VersionEntry\[\] = \[)(\r?\n)(\s*\{)/;
+  if (!re.test(dataContent)) {
+    throw new Error("VERSIONS 数组声明没匹配到（文件结构变了？），终止 bump，避免静默丢失插入");
+  }
+  const out = dataContent.replace(re, `$1$2${entry}$2$3`);
+  if (!out.includes(`version: "${entry.match(/version: "([^"]+)"/)[1]}"`)) {
+    throw new Error("VERSIONS 插入后校验失败，终止 bump");
+  }
+  return out;
 }
 
 // ─── 生成公告摘要 ───────────────────────────────────────
@@ -222,8 +232,9 @@ function syncReadmeVersion(newVersion) {
 const opts = parseArgs(args);
 
 // 读取现有文件
-const fileContent = fs.readFileSync(CHANGELOG_PATH, "utf-8");
-const currentVersion = readCurrentVersion(fileContent);
+const metaContent = fs.readFileSync(META_PATH, "utf-8");
+const dataContent = fs.readFileSync(DATA_PATH, "utf-8");
+const currentVersion = readCurrentVersion(metaContent);
 
 // 计算新版本号
 const newVersion = bumpVersion(currentVersion, opts.bump);
@@ -249,11 +260,27 @@ const briefItems = generateBrief(sections);
 // 标题默认为第一个 section 的 label
 const title = opts.title || sections[0]?.label || "更新";
 
-// 生成新文件
-const newFile = generateNewFile(fileContent, newVersion, date, title, sections, briefItems);
+// 组装 VERSIONS 新条目
+const sectionsStr = sections.map(s =>
+  `      {\n        label: "${s.label}",\n        items: [\n${s.items.map(item => `          "${item}",`).join("\n")}\n        ],\n      },`
+).join("\n");
+
+const newEntry = `  {
+    version: "${newVersion}",
+    date: "${date}",
+    title: "${title}",
+    sections: [
+${sectionsStr}
+    ],
+  },`;
+
+// 生成新文件（meta 改版本号/摘要，data 插 VERSIONS 条目）
+const newMeta = generateNewMeta(metaContent, newVersion, briefItems);
+const newData = insertVersionsEntry(dataContent, newEntry);
 
 // 写入
-fs.writeFileSync(CHANGELOG_PATH, newFile, "utf-8");
+fs.writeFileSync(META_PATH, newMeta, "utf-8");
+fs.writeFileSync(DATA_PATH, newData, "utf-8");
 
 // 同步 README / README_EN 顶部的「当前版本」行（防版本漂移复发）
 const { synced, skipped } = syncReadmeVersion(newVersion);
@@ -265,11 +292,12 @@ console.log(`📅 日期: ${date}`);
 console.log(`📝 标题: ${title}`);
 console.log(`📋 公告摘要:`);
 briefItems.forEach((b, i) => console.log(`   ${i + 1}. ${b}`));
-console.log(`\n📂 文件: ${CHANGELOG_PATH}`);
+console.log(`\n📂 文件: ${META_PATH} + ${DATA_PATH}`);
 if (synced.length > 0) console.log(`📄 README 版本行已同步: ${synced.join(" / ")}`);
 if (skipped.length > 0) console.log(`⚠️  README 版本行未同步: ${skipped.join(" / ")}`);
-console.log(`\n下一步:`);
-console.log(`   git add src/lib/changelog-data.ts`);
+console.log(`\n下一步（本脚本不碰的两处，记得手动同步）:`);
+console.log(`   1. package.json 的 version → ${newVersion.replace(/^v/, "")}`);
+console.log(`   2. CHANGELOG.md 顶部插入 ${newVersion} 完整条目`);
+console.log(`   git add src/lib/changelog-meta.ts src/lib/changelog-data.ts package.json CHANGELOG.md`);
 console.log(`   git commit -m "chore: bump to ${newVersion}"`);
-console.log(`   npm run deploy    # 部署到自有服务器（npm run build && npm start）`);
 console.log();
