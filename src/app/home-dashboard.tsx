@@ -240,8 +240,8 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <button onClick={() => importBackupRef.current?.click()} className="btn-ghost hidden md:inline-flex text-xs h-8 w-8 rounded-xl items-center justify-center tooltip-trigger" data-tooltip="从 .nfproject 备份包导入" aria-label="导入备份">
               <Icon name="package" size={13} />
             </button>
-            <button onClick={() => setNovelImportOpen(true)} className="btn-ghost hidden md:inline-flex text-xs h-8 w-8 rounded-xl items-center justify-center tooltip-trigger" data-tooltip="导入小说（txt / epub / docx），可读可续写" aria-label="导入小说">
-              <Icon name="book" size={13} />
+            <button onClick={() => setNovelImportOpen(true)} className="btn-ghost inline-flex text-xs h-8 px-2.5 rounded-xl items-center gap-1.5 tooltip-trigger" data-tooltip="导入小说（txt / epub / docx），导入即变成我的作品" aria-label="导入小说">
+              <Icon name="upload" size={13} /><span className="hidden lg:inline">导入小说</span>
             </button>
             <input ref={importBackupRef} type="file" accept=".nfproject,application/json" className="hidden" aria-label="从 .nfproject 备份包导入" onChange={handleImportBackup} />
           </div>
@@ -263,10 +263,17 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
                 用 AI 探讨灵感、拆解好书、管理角色与世界观——从一句话构思到完整成稿，一站式完成。
               </p>
             </div>
-            <div className="nf-hero-rise flex shrink-0 gap-3" style={{ animationDelay: "360ms" }}>
+            <div className="nf-hero-rise flex shrink-0 flex-wrap gap-3" style={{ animationDelay: "360ms" }}>
               <Link href="/explore" className="btn-primary nf-btn-flow text-sm px-7 py-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium shadow-[0_0_24px_rgba(228,184,99,0.30)]">
                 <Icon name="sparkles" size={15} /> 开始创作
               </Link>
+              {/* v3.1.149：导入小说独立成 CTA（不再藏在顶栏无文字图标里） */}
+              <button
+                onClick={() => setNovelImportOpen(true)}
+                className="btn-ghost inline-flex items-center gap-1.5 rounded-xl border border-[var(--nv-accent)]/45 px-5 py-3.5 text-sm text-[var(--nv-accent)] transition-colors hover:bg-[var(--nv-accent-soft)]"
+              >
+                <Icon name="upload" size={15} /> 导入小说
+              </button>
               <Link href="/dissect" className="btn-ghost text-sm px-5 py-3.5 rounded-xl inline-flex items-center gap-1.5">
                 <Icon name="book" size={14} /> 拆书分析
               </Link>
@@ -334,10 +341,13 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
           </div>
         ) : projects.length === 0 ? (
           <div className="py-10">
-            <p className="text-center text-[var(--nv-text-tertiary)] text-sm mb-8">还没有小说项目，挑一种方式开始你的故事：</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <FeatureCard featured icon="sparkles" title="探讨模式" desc="对话式构建世界观、角色与大纲，从一句话灵感聊到完整纲要" href="/explore" cta="开始探讨" />
-              <FeatureCard icon="book" title="拆书分析" desc="上传文本，逆向学习结构与文风" href="/dissect" cta="去拆书" />
+            <p className="text-center text-[var(--nv-text-tertiary)] text-sm mb-8">
+              还没有小说项目。三种方式各管一件事，挑一种开始你的故事：
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <FeatureCard icon="upload" title="导入小说" desc="已有 txt / epub / docx 稿子？导入后直接变成可读可续写的作品，并自动提炼角色、世界观、伏笔" cta="导入我的小说" onClick={() => setNovelImportOpen(true)} />
+              <FeatureCard featured icon="sparkles" title="探讨模式" desc="从零构思：对话式构建世界观、角色与大纲，从一句话灵感聊到完整纲要" href="/explore" cta="开始探讨" />
+              <FeatureCard icon="book" title="拆书分析" desc="逆向学习别人的结构与文风，不生成正文——想「变成我的作品」请用导入小说" href="/dissect" cta="去拆书" />
               <FeatureCard icon="shield" title="去 AI 味检测" desc="粘贴一段文字，本地扫描机器味、逐段给改法——不需要 API Key 就能用" href="/detector" cta="立刻试试" />
             </div>
             <div className="mt-4 text-center">
@@ -361,6 +371,13 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
                 <h2 className="text-sm font-semibold tracking-[0.18em] text-[var(--nv-text-secondary)]">我的作品</h2>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setNovelImportOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--nv-accent)]/45 px-2.5 py-1 text-[11px] text-[var(--nv-accent)] transition-colors hover:bg-[var(--nv-accent-soft)]"
+                >
+                  <Icon name="upload" size={11} />
+                  导入小说
+                </button>
                 {residueList.length > 0 && (
                   <button
                     onClick={() => { setHygieneSel([]); setHygieneOpen(true); }}
@@ -377,6 +394,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <div ref={staggerRef} className="home-stagger nf-bookshelf grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               <div data-stagger-item data-stagger-index={0} className="home-stagger-item">
                 <NewBookCard />
+              </div>
+              <div data-stagger-item data-stagger-index={0.5} className="home-stagger-item">
+                <ImportBookCard onClick={() => setNovelImportOpen(true)} />
               </div>
               {projects.map((p, i) => (
                 <div key={p.id} data-stagger-item data-stagger-index={i + 1} className="home-stagger-item">
@@ -809,6 +829,23 @@ function NewBookCard() {
   );
 }
 
+// ─── 子组件：导入已有小说卡（书架常驻入口 · v3.1.149） ─────
+function ImportBookCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="nf-book3d nf-newbook group flex h-full min-h-[240px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[var(--nv-border-3)] text-[var(--nv-text-tertiary)] transition-all hover:border-[var(--nv-accent)]/50 hover:text-[var(--nv-text-primary)]"
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-accent)] transition-transform duration-200 group-hover:scale-110 group-hover:border-[var(--nv-accent)]/40 group-hover:bg-[var(--nv-accent-soft)]">
+        <Icon name="upload" size={20} />
+      </span>
+      <span className="text-sm font-medium">导入小说</span>
+      <span className="text-[11px] text-[var(--nv-text-muted)]">txt / epub / docx · 导入即成作品</span>
+    </button>
+  );
+}
+
 // ─── 子组件：起步引导卡 ─────────────────────────────────────
 
 function FeatureCard({
@@ -818,21 +855,22 @@ function FeatureCard({
   href,
   cta,
   featured = false,
+  onClick,
   className,
 }: {
   icon: IconName;
   title: string;
   desc: string;
-  href: string;
+  href?: string;
   cta: string;
   featured?: boolean;
+  /** 触发弹窗类动作时传；有 onClick 时渲染为 <button>，否则渲染为 <Link> */
+  onClick?: () => void;
   className?: string;
 }) {
-  return (
-    <Link
-      href={href}
-      className={`group surface-elevated rounded-2xl p-5 flex flex-col hover:border-primary/30 transition-all ${featured ? "sm:col-span-2 p-7" : ""} ${className ?? ""}`}
-    >
+  const cls = `group surface-elevated rounded-2xl p-5 flex flex-col text-left hover:border-primary/30 transition-all ${featured ? "sm:col-span-2 p-7" : ""} ${className ?? ""}`;
+  const inner = (
+    <>
       <div className={`w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3 ${featured ? "w-12 h-12" : ""}`}>
         <Icon name={icon} size={featured ? 24 : 20} />
       </div>
@@ -841,6 +879,18 @@ function FeatureCard({
       <span className="text-xs text-primary group-hover:text-primary font-medium inline-flex items-center gap-1">
         {cta} <Icon name="arrowRight" size={12} className="transition-transform duration-200 group-hover:translate-x-1" />
       </span>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cls}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={href ?? "#"} className={cls}>
+      {inner}
     </Link>
   );
 }
