@@ -147,12 +147,13 @@ function collectSpeechTagged(samples: SampledChapter[]): Map<string, number> {
     "g",
   );
   for (const s of samples) {
-    for (const [rx] of [[re], [re2]] as const) {
+    for (const rx of [re, re2]) {
       rx.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = rx.exec(s.text)) !== null) {
-        // 贪婪的{2,4} 会把动词的尾巴也吃进来（「林川说道」→候选「林川说道」），
-        // 必须先剥掉与说话动词重叠的尾部，只留下人名本体。
+        // 贪婪的{2,4} 会把动词的尾巴一起吃进来（「林川说道」→候选「林川说道」），
+        // 也可能从上一小句尾巴咬（「旁边的苏长老沉声道」→候选「边的苏长老」），
+        // 所以先剥尾部修饰与说话动词，再交给人名校验。
         const cand = stripSpeechTail(m[1]!);
         if (!isPlausibleName(cand)) continue;
         tally.set(cand, (tally.get(cand) ?? 0) + 1);
@@ -162,23 +163,66 @@ function collectSpeechTagged(samples: SampledChapter[]): Map<string, number> {
   return tally;
 }
 
-/** 剥掉候选名尾部与说话动词重叠的部分：「林川说道」→「林川」 */
+/**
+ * 剥掉候选名尾部与说话方式重叠的部分。
+ *
+ * 为什么不能只剥单字：中文里说话动词常带两字修饰（「低声说道」「沉声道」
+ * 「冷笑道」），贪婪的 {2,4} 会把整个修饰语吃进候选，于是：
+ *   「他低声说道」→「他低声」
+ *   「苏长老沉声道」→「老沉声」
+ *   「有人低声道」  →「人低声」
+ * 这些长度都是 3，光靠剥「说/道」一个字剥不干净。
+ *
+ * 做法：反复剥尾部的两字修饰语（它们本身就是 SPEECH_TAG 的一部分），
+ * 再剥单字停用字。
+ */
 function stripSpeechTail(cand: string): string {
   let s = cand;
+  // 先剥两字说话修饰（低声 / 沉声 / 淡笑 / 冷笑 / 怒道 …）
+  for (let i = 0; i < 3; i++) {
+    if (s.length < 3) break;
+    const tail2 = s.slice(-2);
+    if (!SPEECH_MODIFIER_2.has(tail2)) break;
+    s = s.slice(0, -2);
+  }
+  // 再剥单字停用字（说道 / 道 / 问 / 答 …）
   for (let i = 0; i < 3; i++) {
     if (s.length < 2) break;
     const last = s[s.length - 1]!;
     if (!NAME_STOP_CHARS.has(last)) break;
     s = s.slice(0, -1);
   }
+  // 再剥尾部否定/副词修饰：「林川没有答话」→「林川没有」→「林川」
+  for (let i = 0; i < 3; i++) {
+    if (s.length < 2) break;
+    const tail2 = s.slice(-2);
+    if (!NEGATIVE_TAIL_2.has(tail2)) break;
+    s = s.slice(0, -2);
+  }
   return s;
 }
+
+/** 说话动词前的常见两字否定/副词修饰，作为候选名尾部时整体剥掉 */
+const NEGATIVE_TAIL_2 = new Set([
+  "没有", "不曾", "并未", "未曾", "只好", "只能", "却是", "只是", "也是", "又是",
+  "便也", "仍旧", "依然", "始终", "终究", "连忙", "急忙", "赶紧", "不禁",
+]);
+
+/** SPEECH_TAG 里的两字修饰语，作为候选名尾部时整体剥掉 */
+const SPEECH_MODIFIER_2 = new Set([
+  "低声", "沉声", "轻声", "淡笑", "冷笑", "怒道", "叹道", "笑道", "喝道", "喊道",
+  "喃喃", "低语", "怒喝", "冷笑", "失笑", "苦笑", "大笑", "笑问", "笑答", "开口",
+]);
 
 /** 收集称谓型人名：`青云宗主`、`玄天老祖` 等（尾字是称谓，前面 1~2 字是人名） */
 function collectHonorific(samples: SampledChapter[]): Map<string, number> {
   const tally = new Map<string, number>();
   for (const tail of HONORIFIC_TAIL) {
-    const rx = new RegExp(`([\\u4e00-\\u9fff]{2,3})${tail}`, "g");
+    // ⚠️ 窗口必须**收紧到 2 字**：{2,3} 的贪婪会从上一小句尾巴开始切
+    //（「旁边的苏长老」→ 候选「边的苏长老」→ 因首字「边」被拒 → 苏长老整个漏掉）。
+    // 称谓型人名的名字部分绝大多数是 2 字（苏长老=苏+长老、云老祖=云+老祖），
+    // 取 3 字反而引入了跨句噪声。
+    const rx = new RegExp(`([\\u4e00-\\u9fff]{2})${tail}`, "g");
     for (const s of samples) {
       rx.lastIndex = 0;
       let m: RegExpExecArray | null;
@@ -195,6 +239,9 @@ function collectHonorific(samples: SampledChapter[]): Map<string, number> {
 /** 是否像一个可入库的中文人名 */
 function isPlausibleName(cand: string): boolean {
   if (cand.length < 2 || cand.length > 4) return false;
+  // 首字是代词/虚词 → 一定不是人名。
+  // 这条挡掉了大量切分碎片（「他低声」「有人低」的「他/有」开头）。
+  if (IMPOSSIBLE_HEAD.has(cand[0]!)) return false;
   if (cand.length === 4) return hasSurname(cand);
   // 含明显功能/代词字的丢弃
   for (const ch of cand) {
@@ -203,8 +250,19 @@ function isPlausibleName(cand: string): boolean {
   }
   // 「他们」「我们」「自己」这类代词
   if (/^(他们|我们|你们|自己|对方|此人|众人|大家|别人|他人|别人)$/.test(cand)) return false;
-  return hasSurname(cand) || cand.length === 3;
+  // ⚠️ 3 字候选必须**有姓氏**才算数。
+  // 旧实现「cand.length === 3」直接放行，等于所有三字垃圾串都能建卡，
+  // 这就是「他低声」「林川没有」混进角色列表的原因。
+  return hasSurname(cand);
 }
+
+/** 首字为代词/虚词时不可能是人名（「他低声」「有人低」「老沉声」） */
+const IMPOSSIBLE_HEAD = new Set([
+  "他", "她", "它", "我", "你", "您", "咱", "谁", "众", "有", "无", "不", "没",
+  "这", "那", "哪", "什", "怎", "但", "却", "又", "也", "就", "才", "都", "再",
+  "很", "太", "更", "最", "还", "已", "将", "被", "把", "让", "使", "令",
+  "一", "两", "几", "某", "另", "各", "每", "全", "半", "多", "少", "好", "请",
+]);
 
 /** 是否以姓氏开头（复姓优先） */
 function hasSurname(name: string): boolean {
@@ -324,35 +382,49 @@ const LEAD_JUNK = new Set([
   "一", "两", "三", "四", "五", "六", "七", "八", "九", "十", "这", "那", "其",
   // 量词：柄青锋剑 / 把玄天鼎 / 支长剑
   "柄", "把", "支", "条", "颗", "枚", "件", "张", "面", "枚", "缕", "丝",
+  // 首字量词（detector 把量词切进了实体名里）：一座青铜 / 一口鼎
+  // ⚠️ 不要放「道」——「玄天大道」这类正当设定名会被误伤
+  "座", "口", "部", "尊", "位", "名", "双", "对", "群", "堆", "批",
 ]);
-const TRAIL_JUNK = new Set(["的", "了", "着", "过", "们", "呢", "吧", "啊", "之", "所", "而"]);
+const TRAIL_JUNK = new Set([
+  "的", "了", "着", "过", "们", "呢", "吧", "啊", "之", "所", "而",
+  // 尾部量词：青铜古「座」/ 一「口」鼎 / 半「部」剑谱
+  "座", "口", "部", "只", "把", "柄", "支", "条", "颗", "枚", "件", "张", "面",
+  "缕", "丝", "尊", "位", "名", "双", "对", "群", "堆", "批",
+  // detector 的贪婪切分把下一句的开头粘进来了：「章玄天鼎」「苏长老亲自引」
+  "章", "节", "回", "卷", "篇", "段", "引", "亲", "自", "曰", "云",
+]);
 
 /**
  * 残留动词字：detector 的模式是「贪婪取 1~3 字 + 后缀」，
  * 所以「林川发现剑身」会切出「川发现剑」这种横跨人名与动词的碎片。
  * 含这些字的名字一律拒——宁可漏一条法宝，不可往世界书里灌垃圾。
  */
-const VERB_IN_NAME = /[发现了想起说出走来看听吃喝来到去过给做想会能要]|[一二三不]道/;
+const VERB_IN_NAME = /[发现了想起说出走来看听吃喝来到去过给做想会能要镇守护主领]/;
+// 「X 道」只在**带数字前缀**时才是切分碎片（「一道剑光」「三道伤口」），
+// 「玄天大道」「天道法则」这类正当设定名必须放过——之前误伤过。
+const VERB_TAIL_NUM = /[一二三四五六七八九十两]道/;
 
-function cleanEntityName(raw: string): string | null {
+function cleanEntityName(raw: string): null | string {
   let s = raw.trim();
-  // 最多剥 2 轮，避免「的玄天鼎」这种需要剥两次的
-  for (let i = 0; i < 2; i++) {
+  // 交替剥首尾 junk，最多 4 轮。
+  // 「苏长老亲自引」要先剥「引」→「苏长老亲自」再剥「自」才干净，
+  // 只剥固定 2 轮会漏（实测这正是碎片残留的主因）。
+  for (let i = 0; i < 4; i++) {
+    let changed = false;
     if (s.length >= 2 && LEAD_JUNK.has(s[0]!)) {
       s = s.slice(1);
-      continue;
+      changed = true;
     }
-    break;
-  }
-  for (let i = 0; i < 2; i++) {
     if (s.length >= 2 && TRAIL_JUNK.has(s[s.length - 1]!)) {
       s = s.slice(0, -1);
-      continue;
+      changed = true;
     }
-    break;
+    if (!changed) break;
   }
   if (s.length < 2) return null;
   if (VERB_IN_NAME.test(s)) return null;
+  if (VERB_TAIL_NUM.test(s)) return null;
   return isCompleteEntityName(s) ? s : null;
 }
 

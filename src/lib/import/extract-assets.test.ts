@@ -226,3 +226,71 @@ describe("M3 · 只有姓氏频次证据的候选被拒", () => {
     expect(chars.map((c) => c.name)).toContain("林川");
   });
 });
+
+// ─── v3.1.152：两字说话修饰 + 三字垃圾串回归 ─────────────────
+//
+// 端到端实测发现的真 bug：测试文本里明明有「林川说道」「苏长老」，
+// 提炼却出 0 个角色，只剩「他低声 / 林川没有 / 人低声 / 老沉声」这类碎片。
+//
+// 根因两个，叠加：
+//   1. stripSpeechTail 只剥单字（说/道/问/答），剥不掉「低声」「沉声」这类
+//      两字修饰 —— 贪婪的 {2,4} 把整个修饰语吃进候选了。
+//   2. isPlausibleName 里 `cand.length === 3` 直接放行，等于所有三字垃圾串
+//      都能建卡。
+
+describe("extractCharacters · 说话修饰与三字碎片", () => {
+  const MOD = [
+    "「我不后悔。」林川低声说道。",
+    "「少年人，你可知这条路？」苏长老沉声道。",
+    "林川没有答话，只是把剑握紧了几分。",
+    "有人低声道：「这人是谁？」",
+    "「这里是青云宗。」他沉声道。",
+  ].join("\n");
+
+  const names = extractCharacters(sampleChapters(repeat(MOD, 4)), { minMentions: 2 });
+
+  it("剥掉两字说话修饰，不产出「他低声」这类碎片", () => {
+    for (const bad of ["他低声", "人低声", "老沉声", "林川没有"]) {
+      expect(names.map((c) => c.name)).not.toContain(bad);
+    }
+  });
+
+  it("三字候选必须有姓氏，不能无条件放行", () => {
+    // 旧实现「length === 3」直接放行 → 「他低声」这种也能建卡
+    expect(names.map((c) => c.name)).not.toContain("他低声");
+  });
+
+  it("正常角色仍能识别出来", () => {
+    expect(names.map((c) => c.name)).toContain("林川");
+    expect(names.map((c) => c.name)).toContain("苏长老");
+  });
+
+  it("产出的每一条都有硬证据", () => {
+    for (const c of names) {
+      expect(
+        c.evidence.includes("speech") || c.evidence.includes("honorific"),
+      ).toBe(true);
+    }
+  });
+});
+
+describe("extractLore · 量词与贪婪切分碎片", () => {
+  it("剥掉首尾量词，不留「座青铜」「口鼎」", () => {
+    const text = [
+      "山门之后，一座青铜古鼎静静矗立在广场中央。",
+      "鼎身刻满玄奥符文，人人都说是玄天鼎。",
+      "广场上所有人都屏住了呼吸。",
+    ].join("\n");
+    const lore = extractLore(sampleChapters(repeat(text, 4)), { minMentions: 2 });
+    const names = lore.map((l) => l.name);
+    for (const bad of ["座青铜", "口鼎", "本宗镇派"]) {
+      expect(names).not.toContain(bad);
+    }
+  });
+
+  it("正当设定名不被量词规则误伤", () => {
+    const text = "玄天鼎是本宗镇派之宝，青锋剑亦在其中。".repeat(6);
+    const lore = extractLore(sampleChapters(repeat(text, 4)), { minMentions: 2 });
+    expect(lore.map((l) => l.name)).toContain("玄天鼎");
+  });
+});
