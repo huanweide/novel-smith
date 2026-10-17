@@ -26,16 +26,29 @@ beyond `localhost`. There is a network-level guard in front of every `/api/*` ro
 accidentally exposing the app to a LAN or the public internet; it does not protect against other
 people on the same network.
 
-### Start on loopback only
+### Know what the server binds to
 
 ```bash
-npm run dev          # listens on 127.0.0.1
-npm run start        # listens on 127.0.0.1
+npm run dev          # binds to ALL interfaces by default (0.0.0.0)
+npm run start        # binds to ALL interfaces by default (0.0.0.0)
 ```
 
-Do **not** pass `0.0.0.0` unless you understand the exposure. If you need remote access, prefer a
-tunnel that only forwards to `127.0.0.1` (for example Cloudflare Tunnel) over binding to all
-interfaces.
+**Next.js binds every interface unless told otherwise** — `npm run dev` is reachable from
+anything that can route to your machine, including everyone on the same Wi-Fi. The access guard
+lets LAN addresses through on purpose (so you can open the app on your phone at `192.168.x.x`),
+which means "it is on my own network" is **not** the same as "it is private".
+
+If you only ever use it from the same machine, bind to loopback explicitly:
+
+```bash
+# Windows (PowerShell)
+$env:HOSTNAME="127.0.0.1"; npm run dev
+# macOS / Linux
+HOSTNAME=127.0.0.1 npm run dev
+```
+
+For remote access, prefer a tunnel that only forwards to `127.0.0.1` (for example Cloudflare
+Tunnel) over binding to all interfaces.
 
 ### Environment variables
 
@@ -44,7 +57,7 @@ interfaces.
 | `TRUSTED_PROXY_MODE` | `trust-proxy-header` | Which source is trusted for the client IP. See below. |
 | `ALLOW_UNKNOWN_SOURCE` | `false` | Set to `true` only as a temporary escape hatch when the address cannot be determined. |
 | `ALLOW_PUBLIC` | `false` | Allow requests that are definitively **not** from localhost/LAN. |
-| `ALLOW_PUBLIC_TOKEN` | *(unset)* | Required together with `ALLOW_PUBLIC=true`. Setting only `ALLOW_PUBLIC` will **not** open access — this is deliberate, so that one mistyped environment variable cannot leave the app exposed for months. |
+| `ALLOW_PUBLIC_TOKEN` | *(unset)* | Optional hardening. When set together with `ALLOW_PUBLIC=true`, every request must carry a matching token or it is blocked. **Without it, `ALLOW_PUBLIC=true` alone opens access** (legacy behaviour, kept for backwards compatibility) — so set both, and treat the token as mandatory in practice. |
 
 ### Choosing `TRUSTED_PROXY_MODE`
 

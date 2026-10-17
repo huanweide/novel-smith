@@ -14,7 +14,7 @@
 
 [⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.136** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.137** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
@@ -76,7 +76,26 @@ Novel Smith automates the grunt work — so you can focus on the creative work.
 
 ---
 
+## How Is This Different From Just Chatting With an AI?
+
+You can already open a chat window and ask an AI to help you write. Here is the difference:
+
+| | Chatting With an AI | Novel Smith |
+|---|---|---|
+| **Does it remember your lore?** | Forgets between windows; characters change personality session to session | Worldbook + character cards accumulate automatically; relevant lore is injected before every chapter |
+| **Do characters drift?** | The protagonist in chapter 30 often feels like a different person | Auto-fill keeps character state current; contradictions are detected after each chapter |
+| **Do planted foreshadows pay off?** | You keep your own notebook and hope | Foreshadow tracker reminds you what was planted but never resolved |
+| **How do you handle the AI flavor?** | Ask the AI to "sound natural", then submit AI-flavored prose anyway | 12 local rules flag exactly which sentences read as AI-written, why, and how to fix them |
+| **Where does the manuscript live?** | Scattered across dozens of chat logs | One project, one local database, one-click export to TXT / Markdown / EPUB / DOCX |
+| **Who sees your text?** | Everything is uploaded to someone else's server | Manuscripts and API keys never leave your machine |
+
+In one line: **a chat window is a talkative stranger; Novel Smith is a writing workstation that lives on your computer and remembers every setting you ever wrote.**
+
+---
+
 ## Core Highlights
+
+**12 local AI-trace rules** (9 paragraph-level + 3 whole-text) run entirely in your browser — no upload, no API cost, re-check as often as you like. Every hit tells you which sentence, why, and how to fix it. **15 lorebook categories** routed by a deterministic classifier. **2048 test cases** gate every change. **137 API routes**, all serving localhost only.
 
 - **Lore pipeline (auto-fill, optional)** — After each chapter, extract structured facts and sync them to character cards, lorebook entries, and storyline beats.
 - **Long-form memory** — Sliding window + long-range chapter compression + S/A/B event tiers keep the AI coherent across 100+ chapters.
@@ -152,9 +171,21 @@ Since v3.1.115 every `/api/*` route sits behind a built-in access guard: **only 
 
 When no trustworthy source is available the request is **blocked** rather than allowed. `ALLOW_UNKNOWN_SOURCE=true` is the temporary escape hatch.
 
-To serve publicly, `ALLOW_PUBLIC=true` must be set **together with** `ALLOW_PUBLIC_TOKEN=<a long random string>`. Setting only `ALLOW_PUBLIC` will not open access — that is deliberate, so a single mistyped variable cannot leave the app exposed for months. See [SECURITY.md](SECURITY.md).
+To serve publicly, `ALLOW_PUBLIC=true` is required, and `ALLOW_PUBLIC_TOKEN=<a long random string>` is **strongly recommended alongside it**. Be aware: `ALLOW_PUBLIC` on its own also opens access — that is legacy behaviour kept for backwards compatibility. The token's purpose is to raise the bar from "one mistyped variable" to "two mistakes before the app is exposed". See [SECURITY.md](SECURITY.md).
 
 > This is an **IP allow-list, not authentication**. It protects against accidental public deployment, not against other people on the same LAN. Under `trust-cf-only`, an attacker who can reach the port directly around Cloudflare can still forge `CF-Connecting-IP` — **no code can detect that**. The real defence is binding to `127.0.0.1` plus a firewall, so the tunnel is the only way in.
+
+---
+
+## What It Is Not
+
+Clear boundaries beat inflated claims:
+
+- **Not an online service** — No account system, no cloud sync, no "subscribe to unlock more chapters". It is a local program that runs on your machine; your data is one SQLite file.
+- **Not a fully automatic book machine** — It manages settings, memory, detection, and export, but you approve every outline and every chapter. You are the author; it is the workstation.
+- **Only detection works without a Key** — AI generation, continuation, and polishing need your own API key. Detection, consistency checks, foreshadow tracking, and exports are local and free forever.
+- **Not a note app with backlinks** — The worldbook and character cards are structured archives designed for long-form writing (15 categories, auto-classified, auto-filled), not a general-purpose note tool.
+- **No guarantee of passing any platform's review** — The local detector is a rule-based scan of common AI-writing patterns that helps you catch issues early. It does not predict any specific platform's algorithm.
 
 ---
 
