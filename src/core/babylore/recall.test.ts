@@ -101,6 +101,22 @@ describe("recallContext - 语义兜底：不传就与改动前完全一致", () 
     expect(items[0].score).toBeGreaterThan(0);
   });
 
+  it("v3.1.138：语义命中带 matchedBy=semantic 与原始 similarity，供 UI 标注", () => {
+    const items = recallContext("那个叛变北境的将军握着十万兵权", LB, [], {
+      similarities: [0.85],
+      candidates: [{ source: "lorebook", title: "北境守将", content: "曾率部倒戈" }],
+    });
+    expect(items[0].matchedBy).toBe("semantic");
+    expect(items[0].similarity).toBe(0.85);
+  });
+
+  it("v3.1.138：关键词命中带 matchedBy=keyword，且不带 similarity", () => {
+    const items = recallContext("北境守将来了", LB, []);
+    expect(items).toHaveLength(1);
+    expect(items[0].matchedBy).toBe("keyword");
+    expect(items[0].similarity).toBeUndefined();
+  });
+
   it("相似度不达标 → 仍不召回（宁漏不污染上下文）", () => {
     const items = recallContext("那个叛变北境的将军", LB, [], {
       similarities: [0.3],

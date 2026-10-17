@@ -107,7 +107,7 @@ export const DEFAULT_SEMANTIC_THRESHOLD = 0.62;
 export function acceptSemanticCandidate(
   cand: SemanticCandidate,
   threshold: number = DEFAULT_SEMANTIC_THRESHOLD,
-): { source: "lorebook" | "table"; title: string; content: string; score: number } | null {
+): { source: "lorebook" | "table"; title: string; content: string; score: number; similarity: number } | null {
   const t = Number.isFinite(threshold) ? threshold : DEFAULT_SEMANTIC_THRESHOLD;
   if (!Number.isFinite(cand.similarity) || cand.similarity < t) return null;
   // 语义召回的分数直接用相似度（乘100 与关键词分同量级，便于同一列表排序观察）
@@ -116,5 +116,9 @@ export function acceptSemanticCandidate(
     title: cand.title,
     content: cand.content,
     score: mixScore(0, cand.similarity),
+    // v3.1.138：把原始相似度带出来，供 UI 标注「这条是语义召回的，像在哪、多像」。
+    // 没有它，用户看到设定被注入也分不清是关键词命中的还是语义捞回来的——
+    // 而「字面不重合却被召回」正是这个功能最该被看见的时刻。
+    similarity: cand.similarity,
   };
 }

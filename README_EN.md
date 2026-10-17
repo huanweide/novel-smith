@@ -14,7 +14,7 @@
 
 [⚡ Try in 30 seconds (no API key)](https://novel-forge-nu.vercel.app/detector) · [🖼 UI Preview](https://novel-forge-nu.vercel.app) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.137** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.138** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
@@ -95,7 +95,7 @@ In one line: **a chat window is a talkative stranger; Novel Smith is a writing w
 
 ## Core Highlights
 
-**12 local AI-trace rules** (9 paragraph-level + 3 whole-text) run entirely in your browser — no upload, no API cost, re-check as often as you like. Every hit tells you which sentence, why, and how to fix it. **15 lorebook categories** routed by a deterministic classifier. **2048 test cases** gate every change. **137 API routes**, all serving localhost only.
+**12 local AI-trace rules** (9 paragraph-level + 3 whole-text) run entirely in your browser — no upload, no API cost, re-check as often as you like. Every hit tells you which sentence, why, and how to fix it. **15 lorebook categories** routed by a deterministic classifier. **2051 test cases** gate every change. **137 API routes**, all serving localhost only.
 
 - **Lore pipeline (auto-fill, optional)** — After each chapter, extract structured facts and sync them to character cards, lorebook entries, and storyline beats.
 - **Long-form memory** — Sliding window + long-range chapter compression + S/A/B event tiers keep the AI coherent across 100+ chapters.

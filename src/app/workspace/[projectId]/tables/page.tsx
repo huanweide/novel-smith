@@ -36,6 +36,10 @@ interface LoreTableT {
     source: string;
     title: string;
     content: string;
+    /** v3.1.138：本条是被哪条路径捞回来的——keyword 关键词命中 / semantic 语义补漏 */
+    matchedBy?: "keyword" | "semantic";
+    /** 仅语义命中：余弦相似度 0~1 */
+    similarity?: number;
   }
 
   export default function TablesPage() {
@@ -285,9 +289,23 @@ interface LoreTableT {
             <button onClick={runRecall} disabled={busy} className="btn-ghost text-xs py-2 px-4 rounded-xl mt-2 disabled:opacity-50">预览召回</button>
             {recallItems.length > 0 && (
               <div className="mt-3 space-y-2">
+                {recallItems.some((it) => it.matchedBy === "semantic") && (
+                  <div className="text-[11px] leading-relaxed rounded-lg px-2.5 py-1.5 bg-[var(--nv-success)]/10 border border-[var(--nv-success)]/25 text-[var(--nv-text-secondary)]">
+                    <span className="font-medium text-[var(--nv-success)]">语义召回 × {recallItems.filter((it) => it.matchedBy === "semantic").length}</span>
+                    {" "}——这些条目的关键词一个都没出现在上下文里，是靠「意思对得上」捞回来的。没有这层能力，它们会被整条跳过，AI 只能按通用印象去写。
+                  </div>
+                )}
                 {recallItems.map((it, i) => (
                   <div key={i} className="text-xs bg-[var(--nv-surface-2)] rounded-lg p-2">
                     <span className="text-[var(--nv-primary)]">[{it.source}] {it.title}</span>：{it.content}
+                    {it.matchedBy === "semantic" && (
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium align-middle bg-[var(--nv-success)]/15 text-[var(--nv-success)] border border-[var(--nv-success)]/30"
+                        title={`语义相似度 ${((it.similarity ?? 0) * 100).toFixed(0)}% —— 关键词未命中，靠意思对得上召回`}
+                      >
+                        <Icon name="sparkles" size={10} /> 语义召回{it.similarity != null ? ` ${(it.similarity * 100).toFixed(0)}%` : ""}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
