@@ -20,6 +20,8 @@ import { badRequest } from "@/lib/validators";
 import { parseToNovel } from "@/lib/import/parsers";
 import { checkHealth } from "@/lib/import/types";
 import { commitImport } from "@/lib/import/commit";
+import { extractAssets, summarizeAssets, type ExtractedAssets } from "@/lib/import/extract-assets";
+import { seedAssets } from "@/lib/import/seed-assets";
 
 export const maxDuration = 300;
 
@@ -34,6 +36,9 @@ export async function POST(request: Request) {
     const mode = String(form.get("mode") ?? "preview");
     const encodingHint = form.get("encoding") ? String(form.get("encoding")) : undefined;
     const regexHint = form.get("regex") ? String(form.get("regex")) : undefined;
+    // M3：是否顺带提炼前史资产（角色卡/世界书/伏笔草稿）
+    const extractFlag = String(form.get("extractAssets") ?? "");
+    const wantExtract = mode === "commit" && extractFlag === "1";
 
     if (!projectId) return badRequest("缺少 projectId", "projectId");
 
@@ -109,11 +114,37 @@ export async function POST(request: Request) {
       );
     }
 
+    // ─── M3：顺带提炼前史资产 ───
+    // 提炼失败**不阻断导入**：正文已经落库了，为一张草稿卡把整本书回滚
+    // 是本末倒置。这里降级为返回 warning，作者可稍后手动重跑 /api/import/novel/assets。
+    let assets: Awaited<ReturnType<typeof seedAssets>> | null = null;
+    let extractPreview: ReturnType<typeof summarizeAssets> | null = null;
+    const extractWarnings: string[] = [];
+
+    if (wantExtract) {
+      try {
+        const extracted = extractAssets(novel.chapters);
+        extractPreview = summarizeAssets(extracted);
+        assets = await seedAssets({
+          projectId,
+          assets: extracted,
+          importSourceKey: result.sourceKey ?? null,
+        });
+      } catch (err) {
+        extractWarnings.push(
+          `前史资产提炼失败（正文已正常导入，不影响使用）：${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     return NextResponse.json({
       mode: "commit",
       ...result,
       // 续写锚点：阅读器「从此继续写」直接用它
       continueAnchorId: result.lastChapterNodeId,
+      assets,
+      extractPreview,
+      ...(extractWarnings.length > 0 ? { extractWarnings } : {}),
     });
   } catch (err) {
     return jsonError(err);

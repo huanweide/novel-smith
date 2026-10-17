@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/icons";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { describeHttpError, describeStreamError } from "@/lib/stream-error";
+import { ImportAssetsPanel } from "@/components/import/ImportAssetsPanel";
 
 /**
  * 导入小说对话框（Import Novel · M2）
@@ -43,6 +44,16 @@ interface PreviewResult {
   warnings: string[];
 }
 
+interface SeededInfo {
+  charactersCreated: number;
+  charactersSkipped: number;
+  loreCreated: number;
+  loreSkipped: number;
+  commitmentsCreated: number;
+  commitmentsSkipped: number;
+  digestsUpdated: boolean;
+}
+
 const ENCODINGS = [
   { v: "", label: "自动识别（推荐）" },
   { v: "utf-8", label: "UTF-8" },
@@ -76,6 +87,9 @@ export function NovelImportDialog({
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState<"preview" | "commit" | null>(null);
   const [err, setErr] = useState("");
+  // M3：默认勾选——导入后不提炼前史，等于项目是空壳，第一次续写必崩
+  const [wantExtract, setWantExtract] = useState(true);
+  const [seeded, setSeeded] = useState<SeededInfo | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
@@ -86,6 +100,13 @@ export function NovelImportDialog({
     setShowAdvanced(false);
     setRegex("");
   }, []);
+
+  /** 草稿处理完（采纳/丢弃）→ 才真正关闭并跳转 */
+  const finishAfterAssets = useCallback(() => {
+    setSeeded(null);
+    onImported?.(null);
+    onClose();
+  }, [onImported, onClose]);
 
   const doPreview = useCallback(async () => {
     if (!file) return;
@@ -126,6 +147,7 @@ export function NovelImportDialog({
       fd.append("mode", "commit");
       if (encoding) fd.append("encoding", encoding);
       if (regex.trim()) fd.append("regex", regex.trim());
+      if (wantExtract) fd.append("extractAssets", "1");
 
       const res = await fetch("/api/import/novel", { method: "POST", body: fd });
       const json = await res.json();
@@ -133,10 +155,21 @@ export function NovelImportDialog({
         setErr(json.error ?? "导入失败");
         return;
       }
+      if (json.extractWarnings?.length) {
+        setErr(json.extractWarnings.join("\n"));
+      }
+      if (json.assets) setSeeded(json.assets as SeededInfo);
+
+      // 有草稿时不直接跳走：先让作者看一眼要审什么，再决定去哪
+      const hasDrafts = (json.assets?.charactersCreated ?? 0) + (json.assets?.loreCreated ?? 0) > 0;
       if (json.duplicate) {
         toastSuccess(json.message);
       } else {
         toastSuccess(json.message ?? "导入完成");
+      }
+      if (hasDrafts) {
+        reset();
+        return; // 留在原地，让下面的草稿面板露出来
       }
       onImported?.(json.continueAnchorId ?? null);
       reset();
@@ -147,7 +180,7 @@ export function NovelImportDialog({
     } finally {
       setBusy(null);
     }
-  }, [file, projectId, encoding, regex, onImported, onClose, reset]);
+  }, [file, projectId, encoding, regex, wantExtract, onImported, onClose, reset]);
 
   const h = preview?.health;
   const needsEncodingHelp =
@@ -172,15 +205,28 @@ export function NovelImportDialog({
           <button
             type="button"
             onClick={() => {
+              if (seeded) {
+                finishAfterAssets();
+                return;
+              }
               reset();
               onClose();
             }}
             disabled={!!busy}
             className="rounded-lg border border-[var(--nv-border)] px-4 py-2 text-sm disabled:opacity-50"
           >
-            取消
+            {seeded ? "稍后再说" : "取消"}
           </button>
-          {!preview ? (
+          {seeded && (
+            <button
+              type="button"
+              onClick={finishAfterAssets}
+              className="rounded-lg bg-[var(--nv-accent)] px-4 py-2 text-sm font-medium text-[var(--nv-accent-fg)]"
+            >
+              完成，去阅读
+            </button>
+          )}
+          {!preview && !seeded ? (
             <button
               type="button"
               onClick={doPreview}
@@ -189,7 +235,7 @@ export function NovelImportDialog({
             >
               {busy === "preview" ? "解析中…" : "解析并预览"}
             </button>
-          ) : (
+          ) : preview && !seeded ? (
             <button
               type="button"
               onClick={doCommit}
@@ -200,7 +246,7 @@ export function NovelImportDialog({
                 ? "导入中…"
                 : `确认导入 ${h?.chapterCount ?? 0} 个节点`}
             </button>
-          )}
+          ) : null}
         </>
       }
     >
@@ -279,6 +325,25 @@ export function NovelImportDialog({
           )}
         </div>
 
+        {/* ─── M3：顺带提炼前史 ─── */}
+        {!seeded && (
+          <label className="flex items-start gap-2 rounded-lg border border-[var(--nv-border)] p-3 text-xs">
+            <input
+              type="checkbox"
+              checked={wantExtract}
+              onChange={(e) => setWantExtract(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">导入后顺带提炼前史资产（推荐）</span>
+              <div className="mt-0.5 text-[var(--nv-text-muted)]">
+                扫描正文里的人物、法宝功法地名和未兑现的伏笔，生成角色卡 / 世界书草稿与时间线摘要。
+                草稿默认待审，采纳后才影响写作上下文。跳过这步的话，第一次续写时 AI 读不到前 900 章的人名与伏笔。
+              </div>
+            </span>
+          </label>
+        )}
+
         {needsEncodingHelp && (
           <div className="rounded-lg border border-[var(--nv-warn)]/40 bg-[var(--nv-warn)]/5 p-3 text-xs text-[var(--nv-text-secondary)]">
             正文看着像乱码？在上面「解析异常」里手动指定编码（国产 txt 通常选 GBK / GB18030），然后重新解析。
@@ -351,6 +416,18 @@ export function NovelImportDialog({
               )}
             </div>
           </div>
+        )}
+
+        {/* ─── M3：前史草稿面板 ─── */}
+        {seeded && (
+          <ImportAssetsPanel
+            projectId={projectId}
+            seeded={seeded}
+            onDone={() => {
+              setSeeded(null);
+              toastSuccess("前史草稿处理完毕");
+            }}
+          />
         )}
       </div>
     </Modal>
