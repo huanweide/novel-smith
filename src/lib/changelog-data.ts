@@ -27,6 +27,82 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.137",
+    date: "2026-10-17",
+    title: "README 说人话 + 修四个文档与代码不符的安全说明 + 修一个死脚本与两个过时测试",
+    sections: [
+      {
+        label: "文档（运营位）",
+        items: [
+          "新增「和直接跟 AI 聊天写有什么不一样」六行对比表（中英同步）：设定还记得吗 / 人物会漂移吗 / 伏笔埋了能收吗 / AI 味怎么处理 / 稿子在哪 / 文字经过谁",
+          "新增「它不是什么」五条边界声明（中英同步）：不是在线服务、不是全自动写书机、不需要 Key 的只是检测、不是笔记软件套壳、不保证过审",
+          "核心亮节补量化导语：12 条本地规则 / 15 类世界书 / 2048 个测试 / 137 个路由，数字全部从代码核实",
+          "收尾一句话：聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、记得你所有设定的写作工程台",
+        ],
+      },
+      {
+        label: "安全（文档与代码对齐）",
+        items: [
+          "「只设 ALLOW_PUBLIC 不会开放访问」是错的：SECURITY.md 与中英 README 三处都这么写，而代码与测试固化的行为是未配令牌即放行（兼容旧版部署刻意保留）。错误方向是让用户低估暴露面，比高估危险",
+          "「npm run dev 监听 127.0.0.1」是错的：Next 默认绑定所有接口，而访问控制对局域网 IP 刻意放行（手机连家里 Wi-Fi 是合法场景）。「在我自己网上」不等于「只有我能看」",
+          "修 v3.1.136 条目里的同一处错误陈述，历史公告与实现对齐",
+        ],
+      },
+      {
+        label: "修复",
+        items: [
+          "deploy-local.ps1 是死脚本：还在跑 docker compose + pg_isready，仓库连 docker-compose.yml 都不存在、DATABASE_URL 早已是 SQLite。已重写为 SQLite 一键版并加 -Loopback 参数",
+          "两个 Postgres 时代遗留的测试占位串把 DATABASE_URL 默认成 postgresql://…，让 prisma.ts 去 mkdir 不存在的目录，干净环境下三个测试文件必红。已改为 file:./data/novelforge.db",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 182 文件 2048 测试全绿 · next build 通过 · GitHub CI 全绿",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v3.1.136",
+    date: "2026-10-17",
+    title: "设定库认得出你在写谁（语义召回）＋ 修复伪造 X-Forwarded-For 可绕过全部入站访问控制",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "设定召回不再只认字面：正文写「那个叛变北境的将军」、设定写「北境守将·曾率部倒戈」时，此前关键词一个都对不上，这条设定永远注入不到 prompt，AI 只会按「将军=忠臣」去写，把叛徒写成忠臣。现在补一层语义比对，意思对得上就召回",
+          "分五层落地，每层独立可测：余弦打分（纯函数）→ 向量客户端（零新增依赖）→ 数据库落 embedding 列 → 历史设定回填 → 召回时比对生效",
+          "你不需要做任何操作：没配 embedding key 时行为与更新前逐位一致；老设定由后台悄悄补，补不上也不影响正常写作",
+          "阈值 0.62 宁漏不污染：错误塞进一条无关设定会带偏 AI，比漏掉一条更伤",
+        ],
+      },
+      {
+        label: "安全",
+        items: [
+          "修复真实漏洞：入站访问控制完全采信请求头取客户端 IP，而请求头是客户端自己写的——绕过前置代理直连端口时手写一个 X-Forwarded-For: 192.168.1.5 即被判为内网放行，等于授予全部 137 个 API 的读写权（写库、改稿、白刷作者自己的 AI Key 额度）",
+          "改为信任分级三模式：trust-proxy-header（默认向后兼容）/ trust-cf-only（公网推荐，只信 CF-Connecting-IP）/ direct（只认 TCP 对端）。未知来源一律拦下",
+          "ALLOW_PUBLIC=true 可搭配 ALLOW_PUBLIC_TOKEN 加固：配了令牌就必须带对；未配令牌时单独设 ALLOW_PUBLIC 仍会开放（兼容旧版部署，详见 SECURITY.md）",
+          "403 响应体带机器可读 reason；攻击验证脚本 17/17，伪造 XFF / X-Real-IP / Host 三条绕过路径均已封死",
+        ],
+      },
+      {
+        label: "仓库",
+        items: [
+          "内部工作文档归置 docs/internal/（根目录 md 15→9），访客第一眼看到的是产品说明而不是作者草稿纸",
+          "补发 v3.1.135 的 tag 与 Release——此前 tag 停在 v3.1.84 而 CHANGELOG 已写到 v3.1.135，51 个版本没发版",
+          "新增版本一致性守卫 workflow：三处版本号不一致则 PR 红，tag 落后则警告并给出补发命令",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 2027 测试通过 · next build 通过 · GitHub CI 双 job 全绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.135",
     date: "2026-09-12",
     title: "吸星改造 1：首页零门槛引导 + README 首屏重构（STAR-READINESS-1）",

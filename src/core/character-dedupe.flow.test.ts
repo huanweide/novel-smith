@@ -49,8 +49,9 @@ const card = (id: string, name: string, extra: Partial<any> = {}) => ({
 });
 
 beforeAll(async () => {
+  // v3.1.137：占位串随项目迁 SQLite（postgres URL 会让 prisma.ts 的 mkdir 直接炸）
   process.env.DATABASE_URL =
-    process.env.DATABASE_URL ?? "postgresql://postgres@127.0.0.1:5432/novelforge";
+    process.env.DATABASE_URL ?? "file:./data/novelforge.db";
   const mod = await import("./character-dedupe");
   dedupeCharacters = mod.dedupeCharacters;
 });
