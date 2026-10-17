@@ -27,6 +27,33 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.139",
+    date: "2026-10-17",
+    title: "去 AI 味检测有了「成就时刻」：套用前后分数对比 + 底部引导重排",
+    sections: [
+      {
+        label: "新功能",
+        items: [
+          "一键套用后页面常驻「套用前 23 分 · 明显 → 现在 8 分 · 干净 ↓15 分」对比条——你刚刚完成了什么一眼看懂；此前只显示当前分数，改动发生了却没有任何反馈",
+          "撤销回原点时基线快照失效，对比条随之消失",
+          "检测页底部引导重排：新用户下一步不再是「去配 Key」（全站流失最大一步），先展示不配 Key 的能力（边写边检测/设定建档/伏笔追踪/导出），Key 降级为「解锁 AI 续写」普通链接",
+        ],
+      },
+      {
+        label: "测试",
+        items: [
+          "新增 DetectorPanel.test.tsx 4 条用例固化新行为（对比条出现 / 撤销后消失 / footer 引导顺序）",
+        ],
+      },
+      {
+        label: "门禁",
+        items: [
+          "tsc 0 错 · vitest 183 文件 2055 测试全绿 · next build 通过 · GitHub CI 全绿",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.138",
     date: "2026-10-17",
     title: "语义召回看得见了：预览召回标注命中路径（关键词 / 语义 N%）",
