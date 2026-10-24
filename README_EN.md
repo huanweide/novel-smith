@@ -14,7 +14,7 @@
 
 [⚡ Try in 30 seconds (no API key)](https://huanweide.github.io/novel-smith/) · [🖼 UI Preview](https://huanweide.github.io/novel-smith/) · [📦 Quick Start](#quick-start) · [中文 README](README.md) · [⭐ Star on GitHub](https://github.com/huanweide/novel-smith/stargazers)
 
-**Current Version: v3.1.142** · Local SQLite, zero-config · 17 built-in presets · MIT License
+**Current Version: v3.1.153** · Local SQLite, zero-config · 17 built-in presets · MIT License
 
 **Try it in 30 seconds — no API key, nothing to install**
 ![AI Trace Detector Demo](docs/screenshots/demo.gif)
