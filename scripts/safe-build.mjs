@@ -99,6 +99,52 @@ function kill(pid) {
  *   - .cmd 必须是 CRLF 行尾（见 ensureCrlf）
  *   - ONSTART 只在开机触发，所以构建完要显式 /Run 一次（就是这里）
  */
+/**
+ * 防漂移门禁：README 中英两处「当前版本」必须等于 package.json.version。
+ * 不匹配直接 exit(1)，拦在 next build 之前（避免白跑 16 分钟构建）。
+ * 这是第 N 次 README 版本号漂移后的根治手段——发版 bump 五件套时容易漏 README。
+ */
+function checkReadmeVersion() {
+  const cwd = process.cwd();
+  let pkgVersion;
+  try {
+    pkgVersion = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).version;
+  } catch (e) {
+    console.error("[safe-build] 无法读取 package.json version：", e.message);
+    process.exit(1);
+  }
+
+  const checks = [
+    { file: "README.md", re: /当前版本：v(\d+\.\d+\.\d+)/ },
+    { file: "README_EN.md", re: /Current Version: v(\d+\.\d+\.\d+)/ },
+  ];
+
+  let ok = true;
+  for (const { file, re } of checks) {
+    let text;
+    try {
+      text = readFileSync(join(cwd, file), "utf8");
+    } catch (e) {
+      console.warn(`[safe-build] 跳过 ${file}（读取失败：${e.message}）`);
+      continue;
+    }
+    const m = text.match(re);
+    const readmeVersion = m ? m[1] : null;
+    if (readmeVersion !== pkgVersion) {
+      ok = false;
+      console.error(
+        `[safe-build] 版本漂移（构建被拦）：${file} 写的是 v${readmeVersion ?? "未找到"}，` +
+          `但 package.json 是 v${pkgVersion}。\n` +
+          `            先 bump README 的版本号再构建（这是第 N 次漂移了，别再手滑）。`,
+      );
+    } else {
+      console.log(`[safe-build] OK ${file} 版本号 v${readmeVersion} 与 package.json 一致`);
+    }
+  }
+
+  if (!ok) process.exit(1);
+}
+
 const TASK_NAME = "NovelSmith-3001";
 
 function ensureCrlf(path) {
@@ -174,6 +220,9 @@ if (running.length > 0) {
 } else {
   console.log(`[safe-build] ${PORT} 上没有服务，直接构建`);
 }
+
+// —— 防漂移门禁：README 版本号必须等于 package.json，否则拦在构建前 ——
+checkReadmeVersion();
 
 console.log("[safe-build] 开始 next build …\n");
 const build = spawn("npx", ["next", "build"], {
