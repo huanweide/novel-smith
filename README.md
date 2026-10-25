@@ -333,4 +333,26 @@ MIT License — 详见 [LICENSE](LICENSE)
 
 ---
 
+
+
+---
+
+## 同一作者的其他工具
+
+**顺手点个 Star，帮同族工具被更多人看见：**
+
+**字幕 / 视频全家桶**（解决「把视频变成文字」的不同环节）：
+- 🎬 [bili-subtitle-universal](https://github.com/huanweide/bili-subtitle-universal) · 全网视频字幕提取 + 无字幕 AI 听写
+- 🎓 [zhihuishu-helper](https://github.com/huanweide/zhihuishu-helper) · 智慧树网课自动播放 / 断点续播 / AI 答题（不瞎蒙）
+- 🔴 [live-subtitle](https://github.com/huanweide/live-subtitle) · 直播实时字幕
+- ✂️ [video-brief](https://github.com/huanweide/video-brief) · 视频内容速览
+
+**代码健康全家桶**（18 轴零依赖 CLI）：
+- 🩺 [family-showcase](https://github.com/huanweide/family-showcase) · 所有 doctor 工具的总览枢纽
+
+**命令行利器**：
+- 🔧 [idiot-index](https://github.com/huanweide/idiot-index) · [recall-cli](https://github.com/huanweide/recall-cli) · [forge-safeguard](https://github.com/huanweide/forge-safeguard-20260812)
+
+**全部仓库**：<https://github.com/huanweide?tab=repositories>
+
 > Novel Smith · AI 小说工坊 · 本地优先 · 数据自有
