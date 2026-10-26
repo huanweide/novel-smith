@@ -19,6 +19,23 @@ jobs:
           node-version: "20"
       - name: Install
         run: npm ci || npm install
+      # Prisma Client 生成必须有 DATABASE_URL，否则会「静默成功但什么都不生成」：
+      # postinstall 里的 `prisma generate` 在 install 阶段拿不到 DATABASE_URL，
+      # 退出码仍是 0，却不会产出 src/generated/prisma —— 紧接着的 tsc 就会因为
+      # `Cannot find module '@/generated/prisma/client'` 报 200+ 个错，CI 直接变红。
+      # 所以这里在 install 之后、tsc 之前，显式带 DATABASE_URL 再生成一次。
+      - name: Generate Prisma Client
+        run: |
+          npx prisma generate
+          # 静默失败兜底：上面那条命令在缺 DATABASE_URL 时会 exit 0 但不产出文件，
+          # 这里显式检查产物，把「200+ 个莫名其妙的 tsc 报错」收敛成一句人话。
+          if [ ! -f src/generated/prisma/client.ts ]; then
+            echo "::error::Prisma Client 未生成（src/generated/prisma/client.ts 不存在）——检查 DATABASE_URL 与 prisma.config.ts"
+            exit 1
+          fi
+          echo "Prisma Client 已生成：src/generated/prisma/client.ts"
+        env:
+          DATABASE_URL: "file:./data/novelforge.db"
       # 直连 SQLite 的集成测试（chat-sessions / babylore 自检等）需要真实的表结构。
       # 项目卖点是「clone 后零安装即用本地 SQLite」，CI 里跑一次 db push 正好验证这条路径。
       # 缺这一步时这些套件会以 PrismaClientKnownRequestError 整组失败（表不存在）。

@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="Novel Smith — AI 小说工坊" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f16"/>
+      <stop offset="0.55" stop-color="#11161f"/>
+      <stop offset="1" stop-color="#161d29"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.80" cy="0.16" r="0.55">
+      <stop offset="0" stop-color="#d4af6a" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#d4af6a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8cf94"/>
+      <stop offset="1" stop-color="#c79a4e"/>
+    </linearGradient>
+    <linearGradient id="quill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8cf94"/>
+      <stop offset="1" stop-color="#8f6a2f"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect width="1280" height="320" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1280" height="3" fill="url(#gold)" opacity="0.85"/>
+
+  <!-- 左侧图标：羽毛笔 -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 216 74 C 176 100 134 158 100 232 C 132 200 172 148 200 104 Z"
+          fill="url(#quill)" opacity="0.92"/>
+    <path d="M 216 74 C 186 118 142 176 100 232" fill="none" stroke="#f3e3bd" stroke-width="2.5" opacity="0.75"/>
+    <g stroke="#f3e3bd" stroke-width="1.6" opacity="0.45">
+      <path d="M 196 104 L 176 96"/>
+      <path d="M 180 128 L 158 122"/>
+      <path d="M 163 153 L 139 149"/>
+      <path d="M 145 179 L 121 177"/>
+      <path d="M 128 205 L 104 205"/>
+    </g>
+    <path d="M 100 232 L 84 254 L 104 250 Z" fill="#e8cf94"/>
+  </g>
+  <path d="M 62 268 L 230 268" stroke="url(#gold)" stroke-width="2" opacity="0.35"/>
+
+  <!-- 标题区 -->
+  <text x="272" y="136" font-size="64" font-weight="700" fill="url(#gold)" letter-spacing="1">Novel Smith</text>
+  <text x="276" y="180" font-size="24" font-weight="500" fill="#cdd6e4">AI 小说工坊 · 本地优先 · 数据自有</text>
+
+  <!-- 特性胶囊 -->
+  <g font-size="17" font-weight="600">
+    <rect x="276" y="212" width="212" height="44" rx="22" fill="url(#glass)" stroke="#d4af6a" stroke-opacity="0.45"/>
+    <text x="296" y="240" fill="#e8cf94">12 条去 AI 味规则</text>
+
+    <rect x="504" y="212" width="214" height="44" rx="22" fill="url(#glass)" stroke="#d4af6a" stroke-opacity="0.45"/>
+    <text x="524" y="240" fill="#e8cf94">本地 SQLite 零配置</text>
+
+    <rect x="734" y="212" width="186" height="44" rx="22" fill="url(#glass)" stroke="#d4af6a" stroke-opacity="0.45"/>
+    <text x="754" y="240" fill="#e8cf94">一键导出 5 种格式</text>
+  </g>
+
+  <text x="276" y="292" font-size="14" fill="#5b6678">MIT 开源 · 无需 Docker · 无需账号 · 你的未发表稿件不出本机</text>
+
+  <!-- 右侧：段落级绿/黄/红评分示意（本地过审自检的真实形态） -->
+  <g transform="translate(966,74)">
+    <rect x="0" y="0" width="256" height="168" rx="14" fill="#0b0f16" stroke="#2a3342"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#8b97a8">本地过审自检 · 段落评分</text>
+    <g>
+      <rect x="20" y="52" width="216" height="12" rx="6" fill="#1a2230"/>
+      <rect x="20" y="52" width="192" height="12" rx="6" fill="#22c55e"/>
+      <rect x="20" y="80" width="216" height="12" rx="6" fill="#1a2230"/>
+      <rect x="20" y="80" width="126" height="12" rx="6" fill="#eab308"/>
+      <rect x="20" y="108" width="216" height="12" rx="6" fill="#1a2230"/>
+      <rect x="20" y="108" width="70" height="12" rx="6" fill="#ef4444"/>
+      <rect x="20" y="136" width="216" height="12" rx="6" fill="#1a2230"/>
+      <rect x="20" y="136" width="206" height="12" rx="6" fill="#22c55e"/>
+    </g>
+  </g>
+</svg>

@@ -6,142 +6,153 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 <!-- /badges -->
 
-![Novel Smith](docs/banner.svg)
+<p align="center">
+  <img src="assets/banner.svg" alt="novel-smith">
+</p>
 
-# Novel Smith — AI 小说工坊
+# 🔨 Novel Smith — AI 小说工坊
 
-> **中文**：把「写长篇」从体力活变成创意活。  
-> **English**: A local-first AI writing workshop for long-form web novels — characters, lore, outlines, and chapters, all in one place.
+> **中文**：聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、记得你所有设定的写作工程台。
+> **English**: A local-first AI writing workshop for long-form Chinese web novels — characters, lore, outlines, and chapters, all on your own machine.
 
 `TypeScript` · `Local-First` · `分层记忆引擎` · `中文长篇` · `去 AI 味（本地过审）` · `数据不出本机 · 隐私零上传`
 
-[⚡ 30 秒试用 · 不用配 Key](https://huanweide.github.io/novel-smith/) · [🖼 界面预览](https://huanweide.github.io/novel-smith/) · [📦 快速开始](#快速开始) · [📖 English README](README_EN.md) · [⭐ 点 Star 支持](https://github.com/huanweide/novel-smith/stargazers)
+**一句话灵感 → 探讨设定 → 自动填表 → 批量写作 → 本地过审 → 导出成书**
 
-**当前版本：v3.1.153** · 本地 SQLite 零配置 · 开箱 17 个示范预设 · 一键导出 5 种格式 · MIT 开源
+[30 秒看懂](#30-秒看懂) · [界面一览](#界面一览) · [它能做什么](#它能做什么) · [特性](#特性) · [快速开始](#快速开始) · [命令速查](#命令速查) · [架构](#架构) · [加一条你自己的规则](#加一条你自己的规则) · [路线图](#路线图) · [贡献](#贡献) · [⭐ Star](#-star)
 
-**先花 30 秒试一下（不用配 Key、不用安装）**
-![去 AI 味检测演示](docs/screenshots/demo.gif)
+**当前版本：v3.1.153** · 本地 SQLite 零配置 · 2163 个测试用例 · 140 个 API 路由 · 17 个内置示范预设 · MIT 开源
 
+---
 
-打开 **[在线 demo 里的「去 AI 味检测」](https://huanweide.github.io/novel-smith/)**，粘贴一段你自己的文字 —— 立刻拿到检测报告：命中了哪些 AI 痕迹、每处的原文片段、为什么算 AI 味、可以怎么改。
+## 30 秒看懂
 
-这一步**全程在你浏览器里跑**：不联网、不上传、不需要 API Key。它用的正是本项目最核心的差异化能力（本地规则引擎）。
+先别装、别配 Key。**打开[在线 demo 的「去 AI 味检测」](https://huanweide.github.io/novel-smith/)**，粘一段你自己的文字，立刻拿到报告。
 
-## 🖼️ 界面一览（真实运行截图，非概念图）
+下面这份是**真实跑出来的输出**（用本仓库 `src/core/humanize` 规则引擎跑下面这段 AI 腔文字）：
 
-**首页 · 小说宇宙入口** —— 灵感文体墙、一键开始创作、导入小说、拆书分析。
+```
+输入：
+值得注意的是，夜色中的古城显得格外静谧。他缓缓睁开双眼，心中不由得微微一凛，
+仿佛有什么东西正在暗处窥视着自己。
 
-![Novel Smith 首页](docs/screenshots/home.png)
+综上所述，这场突如其来的变故，不仅仅改变了他一个人的命运，更是深刻地影响了
+整个家族的未来走向。他深吸一口气，目光坚定地望向远方——那里，是希望的所在。
 
-**AI 协作创作工作台 · 11 步引导式开篇** —— 左侧构建配置、中间 AI 对话共创、右侧设定自动沉淀。
+阳光透过树叶的缝隙洒落下来，形成斑驳的光影。她轻轻叹了口气，似乎想要说些什么，
+却最终什么也没有说出口。
+```
 
-![Novel Smith 写作工作台](docs/screenshots/explore.png)
+```
+=== 本地过审自检报告 ===
+AI 痕迹指数  69 / 100          等级：痕迹明显（noticeable）
 
+原始统计（可解释，不是玄学分数）
+  总字数 181 · 句数 6 · 平均句长 30.2 字 · 句长标准差 9.00
+  破折号密度 5.50 /千字 · AI 高频词 27.60 /千字 · 短句占比 0.0%
 
-**想用完整功能？在自己电脑上两分钟跑起来**
+按规则聚合
+  ai-vocab          AI 高频词            high    x5
+  uniform-sentence  句长过于均匀         medium  x1
+  progressive-pair  「不仅…而且…」递进句  medium  x1
 
-生成正文、拆书、角色与世界书管理这些功能要写本地 SQLite 文件，所以需要在你自己的机器上运行。步骤见下方 [快速开始](#快速开始)。**你的文字不出本机。**
+逐段评分
+  [P0] ██████████ 100  命中 3 处
+      · AI 高频词(high)  "值得注意的是，夜色中的古城显得格外静…"
+        为什么: 典型的说明文过渡腔，小说对话与叙述里几乎没人会这么起句。
+        怎么改: 直接删掉，让事实自己说话，或换成具体的人物动作。
+      · 句长过于均匀(medium)
+        为什么: 6 个句子的长度标准差只有 9.0 字（平均 30.2 字），像用尺子量过。
+        怎么改: 刻意加入几个短句（3-8 字）制造节奏变化，长句里塞进一个破句。
+  [P1] ██████████ 100  命中 2 处
+      · AI 高频词(high)  "综上所述，这场突如其来的变故，不…"
+        为什么: 论文腔，出现在小说正文里非常突兀。
+        怎么改: 整句删掉，或改成人物的判断与抉择。
+      · 「不仅…而且…」递进句(medium)
+        为什么: 把两件能分开说的事拧成一个长句，读着累，也是 AI 凑层次感的常用手法。
+  [P2] ██████████ 100  命中 2 处
+      · AI 高频词(high)  "阳光透过树叶的缝隙洒落下来，形成斑驳…"
+        为什么: AI 写环境描写的固定模板句。
+        怎么改: 换成与情节相关的环境细节，别用通用美景填充。
+```
 
-**哪些功能不需要 Key**
+**这一段全程在你浏览器里跑**：不联网、不上传、不调模型、不花一分钱 —— 你的未发表稿件一个字节都不出本机。这一点是任何云端 AI 检测都做不到的（它们都要求你把稿件传上去）。
 
-| 功能 | 需要 API Key |
+> ⚠️ 规则引擎只能帮你**降低机器味**，不能保证通过任何平台的 AI 率审核。平台算法不公开且持续变化，结果仅供参考。
+
+---
+
+## 界面一览
+
+真实运行截图，不是概念图。完整演示见[在线 demo](https://huanweide.github.io/novel-smith/)。
+
+| 首页 · 小说宇宙入口 | 探讨模式 · 对话式构建世界观 |
+|---|---|
+| ![](docs/screenshots/home.png) | ![](docs/screenshots/explore.png) |
+
+| 首页 | 工作台 |
+|---|---|
+| ![](docs/screenshots/novel-smith-home.png) | ![](docs/screenshots/novel-smith-workbench.png) |
+
+完整闭环演示（从一句话灵感到去 AI 味过审）：
+
+![工作流演示](docs/screenshots/demo.gif)
+
+---
+
+## 它能做什么
+
+写一个长篇，最怕的不是开头，而是**写到一半**——第 30 章的主角突然像换了个人，第 12 章埋的伏笔再也没提起过，AI 越写越水。
+
+Novel Smith 把这些「记不住的活」交给工程台自动管，你只管创意和落笔：
+
+```
+你：一句话灵感「修真世界里，一个不能用术法的少年」
+
+  Round 1  探讨模式     → 11 步引导式对话，把一句话聊成完整世界观
+  Round 2  自动建档     → 抽取人物/地点/势力 → 建角色卡 + 世界书词条（15 类自动路由）
+  Round 3  批量写作     → 先出 1-10 章章纲给你改，确认后后台逐章写正文
+  Round 4  分层记忆注入 → 近 4 章全文 + 近 3 章摘要 + 远楼层 AI 压缩，写 100 章不降智
+  Round 5  本地过审自检 → 12 条规则逐段扫描，绿/黄/红标出哪句像 AI、为什么、怎么改
+  Round 6  一键导出     → TXT / Markdown / HTML / EPUB / DOCX
+```
+
+**生成正文、拆书、角色与世界书管理要写本地 SQLite 文件**，所以要在你自己机器上跑（在线 demo 跑在无状态云环境，写不了本地文件）。**你的文字不出本机。**
+
+### 哪些功能不需要 API Key
+
+| 功能 | 需要 Key |
 |---|---|
 | 去 AI 味检测、本地过审自检 | **不需要** —— 纯本地规则引擎 |
 | 字数统计、一致性检查、伏笔追踪、角色关系图 | 不需要 |
 | 拆书分析、导出 Word / EPUB | 不需要 |
 | AI 生成正文、续写、精修、角色对话 | 需要（用你自己的 Key） |
 
-> 在线 demo 跑在无状态云环境（写不了本地文件），所以只有「不需要写库」的功能能在线上体验；完整功能请在本地跑。
-
 ---
 
-## 它解决什么问题
+## 特性
 
-写长篇小说最怕的不是开头，而是**写到一半**——
-
-- 角色越写越多，前面的人设忘了；
-- 伏笔埋了没收，设定前后矛盾；
-- AI 写到 30 章以后开始"失忆"、越写越水；
-- 想不出新剧情，坐在文档前发呆；
-- 导出给编辑的 Word 格式一团糟。
-
-Novel Smith 就是要把这些脏活、累活、记不住的活**交给 AI 自动管**，你只管创意和落笔。
-
----
-
-## 界面实拍
-
-| 首页 · 项目与示例入口 | 探讨模式 · 对话式构建世界观 |
-|---|---|
-| ![](docs/screenshots/home.png) | ![](docs/screenshots/explore.png) |
-
-## 60 秒看懂工作流
-
-![工作流演示](docs/screenshots/demo.gif)
-
-从「一句话灵感」到「去 AI 味过审」的完整闭环：① 首页开箱即用 → ② 探讨模式对话式构建世界观 → ③ 自动填表建档 → ④ 本地过审自检（段落绿/黄/红评分，稿件不上传）。
-
----
-
-## 为什么选 Novel Smith
-
-| 你现在的痛苦 | 传统做法 | Novel Smith |
-|---|---|---|
-| 写到 50 章忘了前面的设定 | 手动翻文档、做 Excel | **自动填表**：每章生成后抽人物/地点/势力 → 自动建角色卡与世界书词条 |
-| 角色多了关系理不清 | 自己画图或凭记忆 | **关系图**：节点可拖动、位置记忆、双击开卡 |
-| AI 写越长越降智 | 全文硬塞上下文 | **分层记忆引擎**：近 4 章全文 + 近 3 章摘要 + AI 远楼层压缩 |
-| 想不出剧情 | 空文档硬想 | **探讨模式 11 步 + 缝合怪推进**：从一句话到完整世界观，主线完结自动续新线 |
-| 导出格式乱 | 自己排版 | **一键导出** TXT / Markdown / HTML / EPUB / DOCX |
-| 数据在云端、怕隐私泄露 | 依赖第三方服务 | **本地 SQLite**：API Key 与正文全在你电脑上，无需 Docker、无需账号 |
-
----
-
-## 和直接跟 AI 聊天写有什么不一样
-
-你可能已经会开个聊天窗口让 AI 帮你写。差别在这里：
-
-| | 直接跟 AI 聊天 | Novel Smith |
-|---|---|---|
-| **设定还记得吗** | 聊完就忘，下次开新窗口人物性格都对不上 | 世界书 + 角色卡自动累积，每章生成前自动注入相关设定 |
-| **人物会漂移吗** | 第 30 章的主角常常像换了个人 | 自动填表持续更新角色状态，写完自动检测前后矛盾 |
-| **伏笔埋了能收吗** | 全凭你自己拿小本本记 | 伏笔追踪台账，埋了没说的自动提醒 |
-| **AI 味怎么处理** | 让 AI「写自然点」，然后接着交 AI 味的稿 | 本地 12 条规则扫描，逐段标出哪句像 AI、为什么、怎么改 |
-| **写完的稿子在哪** | 散落在几十个聊天记录里，找一个下午 | 一个项目一套库，一键导出 TXT / Markdown / EPUB / DOCX |
-| **你的文字经过谁** | 全部上传到对方服务器 | 正文和 Key 都不出本机 |
-
-一句话：**聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、记得你所有设定的写作工程台。**
-
----
-
-## 核心亮点
-
-**12 条本地去 AI 味规则**（9 条段落级 + 3 条全文级）全部在你浏览器里跑——不上传、不花 Key 的钱、想跑几遍跑几遍，每一处命中都告诉你「哪句、为什么、怎么改」。**15 类世界书**由确定性分类器自动路由填表，**2058 个测试用例**守着每一次改动，**140 个 API 路由**全部只服务本机。
-
-| 亮点 | 说明 |
-|------|------|
-| **设定管线（自动填表可选）** | 生成章节后，开启「自动填表」即自动抽结构化表格 → 自动建角色卡/世界书 → 自动检测角色关系 → 自动回写故事线；默认关，纯手写作家不被动打扰 |
-| **长篇小说不降智** | 分层记忆引擎：滑动窗口 + AI 远楼层压缩 + S/A/B 四级事件记忆，写 100 章人设/伏笔/设定不丢、不退化 |
-| **批量写作两段流** | 一次生成 1-10 章：先出章纲给你改，确认后再后台逐章写正文，可关窗口继续跑 |
-| **缝合怪推进** | 主线完结后自动构造承接的新主线，剧情永不干涸；三档节奏（快/均衡/慢热）可调 |
-| **角色卡体系** | AI 填满（全字段 + 性格三层 + 故事线 + 关系）、AI 扩展、全选联动、自动分类、自动去重合并 |
-| **可拖动关系图** | 角色卡内置「人际关系」列表 + 关系图双视图，节点可拖、位置记忆、双击开卡 |
-| **数据自有** | 本地 SQLite 文件库（`./data/novelforge.db`），零配置开箱即用；无云服务、无订阅、无账号 |
-| **拆书学习** | 15 维拆解他人作品 + 仿写引擎，越拆越会写 |
-| **零门槛开局** | 17 个示范预设、一键示例小说《山海拾遗》、8 题材开局，clone 即用 |
-| **世界卡 15 分类体系** | 命运体系/物理/公开体系等 15 类设定模块，确定性分类器自动路由填表 |
-| **故事线进度量化** | 主线/支线七要素 + 章节进展百分比，AI 写章实时感知剧情 |
-| **本地过审自检（去 AI 味）** | 写完一键跑「去 AI 味」扫描：零联网、零成本、段落级绿/黄/红评分，逐段高亮 AI 腔命中点（套话/堆砌/空洞副词），未发表稿件**全程留本机不上传**，投稿前自己先过一遍 |
+- **🔍 去 AI 味规则引擎（12 条 · 默认全开）** —— 9 条段落级 + 3 条全文级，全部基于正则与统计，零 LLM 调用、零网络请求；每条命中都给出「原文片段 + 为什么 + 怎么改」，不打分黑箱。实现见 `src/core/humanize/rules.ts`。
+- **🧠 分层记忆引擎（默认）** —— 近 4 章全文 + 近 3 章摘要 + 远楼层 AI 压缩三层装配，配 S/A/B/C 四级事件衰减（S 级永久、C 级 5 章后清理），写 100 章人设/伏笔/设定不丢。实现见 `src/lib/memory-decay.ts`、`src/core/memory/`。
+- **📋 自动填表管线（可选 · 默认关）** —— 每章生成后抽结构化表格 → 自动建角色卡与世界书词条 → 检测角色关系 → 回写故事线；纯手写作家不会被被动打扰。实现见 `src/core/assembly/engine.ts`。
+- **📖 世界书 15 类确定性分类器** —— 地理/势力/力量体系/命运体系/物理/公开体制…共 15 类，按关键词加权自动路由填表，不做模糊猜测。实现见 `src/lib/world-category-classifier.ts`。
+- **⚖️ 写作规则引擎（特异性裁决）** —— 规则带 6 档作用域（全局/卷/章节范围/事件类型/角色场景/条件触发），冲突时按「优先级 vs 特异性」裁决并给出胜出理由。实现见 `src/core/rules.ts`。
+- **🧵 缝合怪推进器** —— 主线完结后自动构造承接的新主线，剧情永不干涸；三档节奏（快/均衡/慢热）可调。入口见 `src/app/api/storylines/generate/route.ts`。
+- **🔒 网络闸门（默认只认本机）** —— 全部 `/api/*` 带一层访问控制，公网来源默认 403；三种信任模式可选（`trust-proxy-header` / `trust-cf-only` / `direct`），防「误部署到公网」。实现见 `src/lib/net-guard.ts`、`src/proxy.ts`。
+- **💾 本地单一 SQLite 文件库** —— `./data/novelforge.db`，零配置开箱即用；备份就是复制这个文件。无云服务、无订阅、无账号、无遥测。
+- **📦 五格式一键导出** —— TXT / Markdown / HTML / EPUB / DOCX，纯本地打包。实现见 `src/core/docx.ts`、`src/core/epub.ts`。
 
 ---
 
 ## 快速开始
 
-> 最省事（推荐）：clone 后只需一行命令，自动完成「生成 .env → 建本地数据库表 → 启动」：
->
-> ```bash
-> npm run dev:db
-> ```
-> 浏览器打开 `http://localhost:3001` 即可。
+### 最省事（一行）
+
+```bash
+npm run dev:db     # 生成 .env → 建本地数据库表 → 启动
+```
+
+浏览器打开 `http://localhost:3001` 即可。
 
 ### 手动分步
 
@@ -149,116 +160,187 @@ Novel Smith 就是要把这些脏活、累活、记不住的活**交给 AI 自�
 git clone https://github.com/huanweide/novel-smith.git
 cd novel-smith
 cp .env.example .env          # 默认即用本地 SQLite，无需手改
-npm install                  # 安装依赖（含 better-sqlite3 预编译二进制）
+npm install                  # 安装依赖（含 better-sqlite3 原生模块）
 npm run dev:db               # 建表 + 启动
 # 浏览器打开 http://localhost:3001
 ```
 
-> 数据全部存在 `./data/novelforge.db`（一个本地文件），不依赖任何外部数据库服务。备份就是复制这个文件。  
-> `.env` 已被 `.gitignore` 忽略，不会上传 GitHub；API Key 安全。
+```
+$ npm run dev:db
+✔ .env 已生成（DATABASE_URL="file:./data/novelforge.db"）
+✔ Prisma schema 已同步到 ./data/novelforge.db
+✔ 17 个内置示范预设已播种
+  ▲ Next.js 16.3.8
+  - Local:   http://localhost:3001
+  ✓ Ready in 2.4s
+```
 
----
+> 数据全部存在 `./data/novelforge.db`（一个本地文件），不依赖任何外部数据库服务。
+> `.env` 与 `/data/` 都被 `.gitignore` 忽略，不会上传 GitHub。
 
-## 零门槛试用：不配 Key 也能先尝一口
-
-还没注册任何 AI 平台、不想先花钱？**可以先体验本项目最有杀伤力的那个功能**：
+### 零门槛试用：不配 Key 也能先尝一口
 
 ```bash
-npm run dev:db     # 起站后打开：http://localhost:3001/detector
+npm run dev:db     # 起站后打开 http://localhost:3001/detector
 ```
 
-**去 AI 味检测**——粘贴一段文字，立刻看到它有多像 AI 写的：
+去 AI 味检测给你：一个总分 + 四档等级（基本干净 / 轻微 / 明显 / 严重）、逐段绿黄红色条、**每一处都告诉你为什么像 AI 写的、怎么改**、六项可解释的原始统计。觉得好用了，再去「设置」页配 Key。
 
-- 一个总分 + 四档等级（基本干净 / 轻微 / 明显 / 严重）；
-- 逐段绿 · 黄 · 红色条，**每一处都告诉你「为什么像 AI 写的」和「怎么改」**；
-- 六项可解释的原始统计（破折号密度、句长波动、短句占比、AI 词密度……），不是玄学分数。
+### 首次配置 LLM 提供商
 
-关键是：**它纯本地跑，不联网、不调模型、不需要 API Key**，你的未发表稿件**一个字节都不出本机**——
-这一点是任何云端 AI 检测都做不到的（它们都要求你把稿件传上去）。
+1. 右上角 **设置** → 选提供商（推荐 **硅基流动**，国产便宜，DeepSeek 全系可用）
+2. 填 API Key → 点 **测试连接** → 确认「连接成功」→ **保存设置**
 
-觉得好用了，再去「设置」页配 Key，解锁 AI 写作的全部能力。
-
----
-
-## 功能全景
-
-```
-Novel Smith
-├── 首页            → 项目管理（创建/删除/概览）
-├── 探讨模式         → 对话式构建小说世界（11步骤+抽卡）
-├── 工作台           → 核心写作界面
-│   ├── 角色管理        → 角色卡 + AI填满/扩展/分类/去重合并 + 关系图
-│   ├── 世界书          → 设定词条 + AI 自动补充（触发词注入）
-│   ├── 大纲/章节       → 章纲折叠、一键直出正文、章名自动生成
-│   ├── 自动填表        → 一键追评所有未填章节（后台运行）
-│   ├── 批量写作        → 1-10 章：先生成章纲确认，再后台写正文
-│   ├── 故事线          → 主线/支线七要素 + 章节进展时间轴 + 缝合怪推进
-│   ├── 智能审阅        → AI 评分诊断 + 合格自动定稿 + 智能交付全书
-│   ├── 本地过审自检      → 去 AI 味扫描：段落级绿/黄/红评分 + 逐段命中高亮，稿件不上传
-│   └── 工具箱/统计      → 冲突推演、叙事能量曲线、写作监测
-├── 拆书系统         → 15维度智能拆解 + 仿写引擎
-├── 设置            → LLM 提供商 + API Key + 骨架/配置/记忆衰减
-└── 更新公告         → 完整版本历史
-```
-
----
-
-## 模板市集（社区雏形）
-
-想把你的**大纲模板 / 风格卡 / 角色卡**分享给别人？本仓库内置 `templates/` 目录作为起点：
-
-- [`templates/大纲模板.md`](templates/大纲模板.md) — 三幕结构 + 主线七要素 + 卷纲骨架
-- [`templates/风格卡模板.md`](templates/风格卡模板.md) — 文风参数 + 禁用写法 + 句式特征
-- [`templates/角色卡预设.md`](templates/角色卡预设.md) — 性格三层 + 动机恐惧 + 关系网
-
-复制对应文件、填上你的设定即可直接使用；也欢迎把你的版本发到仓库 **Discussions（模板分享）** 区，让更多人复用。更多「可分享模板」会持续沉淀进这个目录。
-
----
-
-## 首次使用向导
-
-### 配置 LLM 提供商
-
-1. 点右上角 **设置**
-2. 选择 LLM 提供商（推荐 **硅基流动**，国产便宜，DeepSeek 全系可用）
-3. 填入你的 API Key
-4. 点 **测试连接** → 确认「连接成功」
-5. 点 **保存设置**
-
-| 提供商 | 获取 Key 地址 | 价格参考 | 推荐模型 |
-|--------|-------------|---------|---------|
+| 提供商 | 获取 Key | 价格参考 | 推荐模型 |
+|---|---|---|---|
 | 硅基流动 | [siliconflow.cn](https://siliconflow.cn) | ¥0.001~/1K tokens | `deepseek-ai/DeepSeek-V4-Flash` |
 | DeepSeek 官方 | [platform.deepseek.com](https://platform.deepseek.com) | ¥0.002~/1K tokens | `deepseek-v4-flash` |
 | OpenAI | [platform.openai.com](https://platform.openai.com) | $0.005~/1K tokens | `gpt-4o` |
 | Groq | [console.groq.com](https://console.groq.com) | 免费额度 | `llama-3.3-70b-versatile` |
 | 自定义 | 任何 OpenAI 兼容服务 | 看服务商 | 看服务商 |
 
-### 开箱预设与创意工坊
-
 首次打开「创意工坊」会自动播种 **17 个内置示范预设**，点「套用」即可开写，无需手填表。
 
 ---
 
-## 技术栈
+## 命令速查
 
-- **前端框架**：Next.js 16 (App Router) + React 19
-- **样式**：Tailwind CSS v4（虚空玻璃设计系统）
-- **数据库**：本地 SQLite（better-sqlite3 原生模块）+ Prisma 7
-- **API**：Next.js API Routes + SSE 流式响应 + 后台任务表
-- **AI**：多提供商 LLM（OpenAI 兼容协议）
-- **构建**：Turbopack（开发）/ Webpack（生产）
-- **类型检查**：TypeScript strict mode（零错误门禁）
+| 命令 | 用途 |
+|---|---|
+| `npm run dev:db` | 建本地库 + 启动开发服务器（推荐入口） |
+| `npm run dev` | 仅启动开发服务器（`localhost:3001`，Turbopack HMR） |
+| `npm run build` | 生产构建（走 `scripts/safe-build.mjs` 守卫） |
+| `npm start` | 启动生产服务器 |
+| `npm test` | 跑全部 vitest 用例（2163 个） |
+| `npm run test:coverage` | 带覆盖率的测试 |
+| `npx tsc --noEmit` | TypeScript 严格模式检查（零错误才算过） |
+| `npm run lint` | ESLint（**存量技术债，暂不硬门禁**） |
+| `npm run lint:colors` | 颜色守卫 ARCH-7（软提醒，不阻断） |
+| `npm run doctor` | 环境自检（依赖/数据库/配置） |
+| `npx prisma studio` | 数据库可视化面板（`localhost:5555`） |
+| `npx prisma db push` | 同步 Prisma schema → 本地 SQLite |
+| `npm run db:seed` | 播种内置预设与示例数据 |
 
 ---
 
-## 本地开发
+## 架构
 
-```bash
-npm run dev            # 开发服务器 (localhost:3001, Turbopack HMR)
-npx tsc --noEmit       # TypeScript 编译检查（零错误才算过）
-npx prisma studio      # 数据库可视化管理面板 (localhost:5555)
-npx prisma db push     # 同步 Prisma schema → 数据库表
+**一句话**：本地 SQLite 单文件为地基，写作流程是一条「装载上下文 → 生成 → 蒸馏回写 → 本地过审」的闭环；设定与记忆不是塞进 prompt 的一次性文本，而是会随每一章自动沉淀、自动衰减的结构化档案。
+
+### 核心概念
+
+| 概念 | 含义 |
+|---|---|
+| **分层记忆（Tiered Memory）** | 近 4 章全文 + 近 3 章摘要 + 远楼层 AI 压缩的三层上下文装配，解决「写越长越降智」 |
+| **事件分级（S/A/B/C）** | 事件重要性四档，配遗忘曲线式衰减：S 永久、A 30 章降 B、B 15 章降 C、C 5 章删除 |
+| **蒸馏（Distillation）** | 每章写完后抽取结构化事实，回写角色卡 / 世界书 / 故事线，让设定随写作自动生长 |
+| **世界书（World Book）** | 15 类设定词条库，按触发词在生成前注入上下文 |
+| **自动填表（Assembly）** | 把 AI 抽出的表格自动建成角色卡与世界书词条，并检测角色关系 |
+| **去 AI 味（Humanize）** | 12 条纯本地规则扫描，段落级绿/黄/红评分，给「为什么 + 怎么改」，绝不自动改写正文 |
+| **规则特异性（Specificity）** | 写作规则按 6 档作用域加权，冲突时按优先级/特异性裁决并给出胜出理由 |
+
+### 写作闭环
+
 ```
+        ┌──────────────────────────────────────────┐
+        │                                          │
+  一句话灵感                                        │
+        │                                          │
+        ▼                                          │
+   探讨模式（11 步）──► 世界观 / 角色 / 势力           │
+        │                                          │
+        ▼                                          │
+   装载上下文 ◄──── 分层记忆（近章全文 + 摘要 + 远楼压缩）│
+        │          ◄──── 世界书触发词注入              │
+        │          ◄──── 写作规则（特异性裁决）         │
+        ▼                                          │
+   章纲生成 ──► 你确认/修改 ──► 正文生成               │
+        │                                          │
+        ▼                                          │
+   蒸馏回写 ──► 角色卡 / 世界书 / 故事线 ──────────────┘
+        │
+        ▼
+   本地过审自检（12 条规则，段落级评分）
+        │
+        ├── 命中少 ──► 定稿 ──► 导出 TXT/MD/HTML/EPUB/DOCX
+        └── 命中多 ──► 回到正文（作者自己改，机器不代笔）
+```
+
+### 核心模块
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| 去 AI 味规则库 | `src/core/humanize/rules.ts` | 9 条段落级 + 3 条全文级规则，纯正则与统计 |
+| 过审评分入口 | `src/core/humanize/index.ts` | 汇总 5 项可解释统计 → 总分 + 等级 + 逐段报告 |
+| 一键修复建议 | `src/core/humanize/fixes.ts` | 只给确定性改法，且**必须作者点「套用」才执行** |
+| 平台风险提示 | `src/core/humanize/platform-risk.ts` | 按常见平台口径给风险提示（不预测具体算法） |
+| 记忆衰减引擎 | `src/lib/memory-decay.ts` | S/A/B/C 四级遗忘曲线，与伏笔系统互不干扰 |
+| 语义召回 | `src/core/memory/semantic-recall.ts` | 远楼层事件的相关性召回 |
+| 记忆分类器 | `src/lib/memory-classifier.ts` | 判定事件归属的记忆层与类别 |
+| 蒸馏评分器 | `src/core/distillation/scorer.ts` | 事件重要性与 S/A/B/C 分级打分 |
+| 上下文装载 | `src/core/pipeline/context-loader.ts` | 组装分层记忆 + 世界书 + 规则的单次注入上下文 |
+| 章纲/正文生成 | `src/core/pipeline/generate-chapter-outline.ts`、`plan-chapter.ts` | 先章纲后正文的两段流 |
+| 自动填表管线 | `src/core/assembly/engine.ts` | 表格 → 角色卡/世界书 → 关系检测 → 回写 |
+| 世界书分类器 | `src/lib/world-category-classifier.ts` | 15 类确定性路由，单一权威源派生标签 |
+| 写作规则引擎 | `src/core/rules.ts` | 6 档作用域权重 + 冲突裁决 |
+| 一致性检查 | `src/core/consistency/detectConflicts.ts` | 抽取事实 → 检测冲突 → 给修复建议 |
+| 伏笔追踪 | `src/core/foreshadowing.ts` | 埋了没收的自动提醒 |
+| 故事线推进 | `src/core/storyline/generate.ts`、`execute-task.ts` | 主线/支线七要素 + 缝合怪推进 |
+| 拆书与仿写 | `src/core/dissect/engine.ts`、`imitation-engine.ts` | 15 维拆解他人作品 + 仿写 |
+| 网络闸门 | `src/lib/net-guard.ts`、`src/proxy.ts` | `/api/*` 访问控制与三种信任模式 |
+| 导出 | `src/core/docx.ts`、`src/core/epub.ts` | 本地打包 DOCX / EPUB |
+
+更深的类比式讲解见 [ARCHITECTURE.md](ARCHITECTURE.md)，逐模块细节见 [`docs/architecture-reference/`](docs/architecture-reference/)。
+
+---
+
+## 加一条你自己的规则
+
+去 AI 味引擎是开放的——你发现自己文风里的机器味，可以自己加一条规则（`src/core/humanize/rules.ts`）：
+
+```ts
+// 规则示例：识别「双重否定再转折」这个 AI 签名句式
+export function detectNegativeParallel(text: string, offset = 0): AiTraceHit[] {
+  const hits: AiTraceHit[] = [];
+  const re = /不是([^，。！？；\n]{1,20})[，、]不是([^，。！？；\n]{1,20})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    hits.push({
+      ruleId: "negative-parallel",
+      ruleName: "否定式排比",
+      severity: "high",
+      excerpt: excerptAt(text, m.index, m[0].length),
+      start: offset + m.index,
+      end: offset + m.index + m[0].length,
+      reason: "连续两次否定再转折，几乎成了 AI 写作的签名句式。",
+      suggestion: "直接写「是什么」，别先绕两个「不是什么」。",
+    });
+  }
+  return hits;
+}
+
+// 挂进段落级规则表即可生效
+export const PARAGRAPH_RULES = [/* ...既有规则, */ detectNegativeParallel] as const;
+```
+
+规则写好后 `npm test` 会跑全部 2163 个用例守住既有行为。模板类扩展（大纲 / 风格卡 / 角色卡）直接往 `templates/` 目录提即可。
+
+---
+
+## 路线图
+
+- [x] 本地 SQLite 单文件架构（零配置、无需 Docker）
+- [x] 去 AI 味规则引擎 + 在线 demo 零门槛试用
+- [x] 分层记忆引擎 + 事件分级衰减
+- [x] 自动填表管线 + 世界书 15 类分类器
+- [x] 批量写作两段流（先章纲后正文）
+- [x] 智能审阅 + 五格式导出
+- [x] `/api/*` 访问控制与三种信任模式
+- [ ] 清理 ESLint 存量技术债（1134 errors，多为历史 `no-explicit-any`），解除豁免转为硬门禁
+- [ ] 预设社区化：内置示范预设的导入/导出与分享闭环
+- [ ] 更多内置示范预设与题材开局
+
+完整排期与历史交付台账见 [ROADMAP.md](ROADMAP.md)。
 
 ---
 
@@ -269,82 +351,67 @@ npm run build          # 构建生产版本
 npm start              # 启动生产服务器
 ```
 
-> **公网部署前必读**：自 v3.1.115 起，全部 `/api/*` 带一层内置访问控制——**只接受来自本机或局域网的请求**，公网来源一律返回 403（放行 `localhost` / `127.` / `10.` / `192.168.` / `172.16~31.` / `169.254.` / `::1` / `*.local`）。这是防「误部署到公网」的底线，不是账号体系。
->
-> **v3.1.136 起这层防护升级为「信任分级」**。此前客户端 IP 完全采信 `X-Forwarded-For` 等请求头，而请求头是客户端自己写的——绕过前置代理直连端口时，手动加一个 `X-Forwarded-For: 192.168.1.5` 就能伪装成内网放行。现在改为按部署形态选择信任来源：
+> **公网部署前必读**：自 v3.1.115 起，全部 `/api/*` 带一层内置访问控制——**只接受来自本机或局域网的请求**，公网来源一律返回 403（放行 `localhost` / `127.` / `10.` / `192.168.` / `172.16~31.` / `169.254.` / `::1` / `*.local`）。这是防「误部署到公网」的底线，**不是账号体系**。
 
 > | `TRUSTED_PROXY_MODE` | 采信什么 | 适用 |
 > | --- | --- | --- |
-> | `trust-proxy-header`（默认） | `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP` → `Host` | 前面确有反代且信任它清洗头。**向后兼容原有行为** |
-> | `trust-cf-only` | 只信 `CF-Connecting-IP`（由 Cloudflare 边缘写入并覆盖伪造值） | **暴露公网时推荐** |
+> | `trust-proxy-header`（默认） | `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP` → `Host` | 前面确有反代且信任它清洗头 |
+> | `trust-cf-only` | 只信 `CF-Connecting-IP` | **暴露公网时推荐** |
 > | `direct` | 一个请求头都不信，只认 TCP 对端地址 | 无前置代理 |
 
-> 拿不到可信来源时一律**拦下**（不再默认放行）。临时放行走 `ALLOW_UNKNOWN_SOURCE=true`。
->
-> 若确实要对外提供服务：`ALLOW_PUBLIC=true` **强烈建议同时**设 `ALLOW_PUBLIC_TOKEN=<自定义长随机串>`。注意：只设 `ALLOW_PUBLIC` 不设令牌**也会开放访问**（这是为兼容旧版部署保留的行为）——令牌的意义是把「一个环境变量手滑」升级为「两个都手滑才裸奔」。完整说明见 [SECURITY.md](SECURITY.md)。
->
-> ⚠️ 这层是**网段白名单，不是身份认证**。它挡得住误部署到公网，挡不住同一内网里的其他人。`trust-cf-only` 模式下若攻击者能绕过 Cloudflare 直连端口，伪造 `CF-Connecting-IP` 仍会被采信——**代码层堵不住**，真正的防线是只监听 `127.0.0.1` + 防火墙，让隧道成为唯一入口。
+> 拿不到可信来源时一律**拦下**。临时放行走 `ALLOW_UNKNOWN_SOURCE=true`；若确实要对外提供服务，`ALLOW_PUBLIC=true` **强烈建议同时**设 `ALLOW_PUBLIC_TOKEN=<自定义长随机串>`。完整说明见 [SECURITY.md](SECURITY.md)。
+
+> ⚠️ 这层是**网段白名单，不是身份认证**。它挡得住误部署到公网，挡不住同一内网里的其他人。真正的防线是只监听 `127.0.0.1` + 防火墙。
 
 ---
 
-## 安全与隐私
+## 贡献
 
-- API Key 只存本地 SQLite，从未上传任何服务器
-- 数据库、正文、设定、导出文件全部在你自己的电脑上
-- 无云服务、无遥测、无账号体系
-- `.env`、运行时状态、数据库文件、*.pem 全部被 `.gitignore` 忽略
-- CI 含安全检查，代码中无硬编码密钥
+个人开源项目，欢迎一切形式的参与。**想动手先看 [CONTRIBUTING.md](CONTRIBUTING.md)**——里面有从零起站、目录结构、三道门禁到「怎么提一个好 Issue」的完整路径。
+
+1. **点 Star** —— 最简单也最有用的支持。
+2. **开 Issue** —— Bug / 新功能 / 文档错，用 Issue 模板提（附版本号 + 复现步骤）。想聊想法、晒作品去 **Discussions**。
+3. **提 PR** —— 改前先 `./scripts/git-snapshot.sh create "说明"` 拍快照，改完跑三道门禁（`npx tsc --noEmit` / `npm test` / `npm run build`）。
+
+> 预设是社区共建的最好素材——你打磨出的文风 / 世界观 / 角色卡，可以导出 `.preset.json` 分享，或写进 Issue，我们很乐意把它变成内置示范预设。
+
+本地开发：
+
+```bash
+npm run dev            # 开发服务器 (localhost:3001)
+npx tsc --noEmit       # 类型检查（零错误才算过）
+npm test               # 2163 个用例
+npx prisma studio      # 数据库面板 (localhost:5555)
+```
+
+---
+
+## 安全边界
+
+- **不上传** —— 正文、设定、API Key 全部在你自己的 SQLite 文件里，无云服务、无遥测、无账号体系。
+- **不代笔** —— 去 AI 味只标出痕迹并给建议；即便带「一键套用」的修复，也**永远只在作者亲手点下时执行**，不自动改写正文。
+- **不保证过审** —— 规则引擎只能降低机器味，不预测任何具体平台的算法。
+- **不是在线服务** —— 没有账号、没有云端同步、没有「会员解锁更多章节」。
+- `.env`、`/data/`、`*.db`、证书与凭据文件全部被 `.gitignore` 忽略；CI 含安全检查，代码中无硬编码密钥。
 
 ---
 
 ## 它不是什么
 
-把边界说清楚，比把功能吹上天有用：
-
-- **不是在线服务**——没有账号体系、没有云端同步、没有「会员解锁更多章节」。它就是一个跑在你电脑上的本地程序，数据是一个 SQLite 文件。
-- **不是全自动写书机**——它管设定、管记忆、管检测、管导出，但每一章的章纲和正文都要你点头。作者是你，它是工程台。
-- **不需要 Key 也能用的只是检测**——AI 生成、续写、精修要配你自己的 API Key；去 AI 味检测、一致性检查、伏笔追踪、导出这些纯本地功能永远免费、永远离线。
-- **不是笔记软件的双向链接套壳**——世界书和角色卡是为「写长篇」设计的结构化档案（15 类、自动分类、自动填表），不是通用笔记。
-- **不保证过审**——「本地过审自检」是按常见 AI 腔特征做的规则扫描，帮你提前排雷；平台怎么判是平台的事，它不预测任何具体平台的算法。
-
----
-
-## 贡献与反馈
-
-Novel Smith 是个人开源项目，欢迎一切形式的参与。**想动手？先看 [CONTRIBUTING.md](CONTRIBUTING.md)**——
-里面有从零起站、目录结构、三道门禁到「怎么提一个好 Issue」的完整路径。
-
-三步就能参与：
-
-1. **点 Star** —— 最简单也最有用的支持，让项目被更多人看到。
-2. **开 Issue** —— 遇到 Bug、想到好功能、文档有错，直接用 Issue 模板提（附版本号 + 复现步骤即可）。
-   想聊想法、晒作品、问用法？去仓库的 **Discussions** 区。
-3. **提 PR** —— 修 bug、补预设、加特性。改前先 `./scripts/git-snapshot.sh create "说明"` 拍个快照，
-   改完跑三道门禁（`tsc` / `vitest` / `next build`）。
-
-> 预设是社区共建的最好素材——你打磨出的好文风 / 世界观 / 角色卡，可以导出 `.preset.json` 分享，
-> 或写进 Issue 里，我们很乐意把它变成内置示范预设。也可以直接往 `templates/` 目录提模板。
+- **不是全自动写书机** —— 每一章的章纲和正文都要你点头。作者是你，它是工程台。
+- **不需要 Key 的只是检测** —— AI 生成/续写/精修要配你自己的 Key；检测、一致性检查、伏笔追踪、导出这些纯本地功能永远免费、永远离线。
+- **不是笔记软件的双向链接套壳** —— 世界书和角色卡是为「写长篇」设计的结构化档案（15 类、自动分类、自动填表）。
 
 ---
 
 ## 赞助支持
 
-如果 Novel Smith 真的帮你把故事写了出来，请我喝杯奶茶就行 —— 纯自愿，不影响任何功能，也不夹带任何广告。
+如果 Novel Smith 真的帮你把故事写了出来，请我喝杯奶茶就行 —— 纯自愿，不影响任何功能，也不夹带广告。
 
-- **微信扫码**：打开软件「设置 → 赞助支持」，扫的是我（作者）本人的收款码
-- **GitHub Sponsor**：仓库主页的 Sponsor 按钮，走的是同一张码
+- **微信扫码**：打开软件「设置 → 赞助支持」
+- **GitHub Sponsor**：仓库主页的 Sponsor 按钮
 
-> 收款码只是一张「转账入口」图片，不含任何密钥或凭据，纯静态文件。项目不做任何赞助金额或留言的后端收集。
-
----
-
-## 许可证
-
-MIT License — 详见 [LICENSE](LICENSE)
-
----
-
-
+> 收款码只是一张「转账入口」图片，不含任何密钥或凭据。项目不做任何赞助金额或留言的后端收集。
 
 ---
 
@@ -354,7 +421,7 @@ MIT License — 详见 [LICENSE](LICENSE)
 
 **字幕 / 视频全家桶**（解决「把视频变成文字」的不同环节）：
 - 🎬 [bili-subtitle-universal](https://github.com/huanweide/bili-subtitle-universal) · 全网视频字幕提取 + 无字幕 AI 听写
-- 🎓 [zhihuishu-helper](https://github.com/huanweide/zhihuishu-helper) · 智慧树网课自动播放 / 断点续播 / AI 答题（不瞎蒙）
+- 🎓 [zhihuishu-helper](https://github.com/huanweide/zhihuishu-helper) · 智慧树网课自动播放 / 断点续播 / AI 答题
 - 🔴 [live-subtitle](https://github.com/huanweide/live-subtitle) · 直播实时字幕
 - ✂️ [video-brief](https://github.com/huanweide/video-brief) · 视频内容速览
 
@@ -366,4 +433,19 @@ MIT License — 详见 [LICENSE](LICENSE)
 
 **全部仓库**：<https://github.com/huanweide?tab=repositories>
 
+---
+
+## License
+
+MIT License — 详见 [LICENSE](LICENSE)
+
+---
+
+## ⭐ Star
+
+🔨 如果这个工坊帮你把故事写了出来，**点个 Star** 让更多写长篇的人看见它。
+[![Star](https://img.shields.io/github/stars/huanweide/novel-smith?style=social)](https://github.com/huanweide/novel-smith/stargazers)
+
 > Novel Smith · AI 小说工坊 · 本地优先 · 数据自有
+
+[English README →](README_EN.md)
