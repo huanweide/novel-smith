@@ -16,10 +16,17 @@
 > **English**: A local-first AI workshop for long-form web novels that keeps character consistency across 100+ chapters — auto worldbuilding, offline AI-flavor detection, zero uploads.
 
 `TypeScript` · `Local-First` · `分层记忆引擎` · `中文长篇` · `去 AI 味（本地过审）` · `数据不出本机 · 隐私零上传`
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org) [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev) [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![SQLite](https://img.shields.io/badge/SQLite-local-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org) [![LLM](https://img.shields.io/badge/LLM-DeepSeek%20%2F%20OpenAI%20兼容-4D6BFE?style=flat-square)](https://platform.deepseek.com) [![Local-First](https://img.shields.io/badge/Local--First-%E9%9B%B6%E4%B8%8A%E4%BC%A0-22C55E?style=flat-square)](https://github.com/huanweide/novel-smith)
 
 **一句话灵感 → 探讨设定 → 自动填表 → 批量写作 → 本地过审 → 导出成书**
 
 > 💡 **一句话定位**：AI 写小说最怕写到一半——人设崩了、设定前后矛盾、读起来一股 AI 味。Novel Smith 把**记忆 / 设定 / 世界书 / 角色卡**全留在你电脑里，让 AI 写 100 章也不崩；再离线过一遍 AI 味自检。**你的未发表稿件一个字节都不上传。**
+
+<p align="center">
+  <a href="https://huanweide.github.io/novel-smith/"><b>▶ 在线 Demo（去 AI 味检测 · 免 Key）</b></a>
+  &nbsp;·&nbsp;
+  <a href="#快速开始"><b>🚀 一行命令本地跑起来</b></a>
+</p>
 
 ## ✨ 四个核心能力（一句话说清它能干嘛）
 
@@ -28,9 +35,24 @@
 - 🔒 **未发表稿件零上传** —— 全部存在你电脑上的一个本地 SQLite 文件里，正文和 API Key 都不出本机；无账号、无云、无遥测。
 - 🔍 **离线去 AI 味自检** —— 12 条本地规则逐句标出"哪像 AI、为什么、怎么改"，不联网、不调模型、不花一分钱（下面 30 秒就能试）。
 
+## 谁该用 / 谁先别用
+
+**这套工坊适合你，如果——**
+- 你在写（或想写）中长篇网文 / 小说，需要长期维护人设、伏笔、世界观；
+- 你用过 AI 写小说，却被「写到 30 章就失忆、人设崩了」劝退过；
+- 你介意把未发表稿件传到任何云端；
+- 你想要「AI 干活、你拍板」的协作感，而不是一键生成一整本没灵魂的文字。
+
+**先别急着用，如果——**
+- 你只想要一句提示词自动吐出一整本小说（这不现实，我们也故意不做）；
+- 你完全不想在本地跑任何程序、连 `npm` 都不碰——可以先去[在线 demo](https://huanweide.github.io/novel-smith/) 试去 AI 味，但完整功能需本地跑；
+- 你只写短篇文案、社媒推文等一次性文本。
+
 [30 秒看懂](#30-秒看懂) · [核心能力](#四个核心能力一句话说清它能干嘛) · [界面一览](#界面一览) · [它能做什么](#它能做什么) · [特性](#特性) · [快速开始](#快速开始) · [命令速查](#命令速查) · [架构](#架构) · [加一条你自己的规则](#加一条你自己的规则) · [路线图](#路线图) · [贡献](#贡献) · [⭐ Star](#-star)
 
 **当前版本：v3.1.153** · 本地 SQLite 零配置 · 2163 个测试用例 · 140 个 API 路由 · 17 个内置示范预设 · MIT 开源
+
+> 最近几个版本重点打磨：**分层记忆抗失忆** · **离线去 AI 味 12 条规则** · **网络闸门防误部署到公网** · **自动建档管线** —— 都跑在本地、稿件零上传。
 
 ---
 
@@ -110,6 +132,17 @@ AI 痕迹指数  69 / 100          等级：痕迹明显（noticeable）
 ---
 
 ## 它能做什么
+
+### 按你的目标，找对应能力
+
+| 你想做成的事 | Novel Smith 怎么帮你 |
+| --- | --- |
+| 把一句话灵感变成完整世界观 | 探讨模式：11 步引导式对话，把灵感聊成设定 / 角色 / 大纲 |
+| 写长也不崩人设、不丢伏笔 | 分层记忆引擎：近 4 章全文 + 近 3 章摘要 + 远楼层压缩，写 100 章不降智 |
+| 不想拿小本本记设定 | 自动填表管线：每章抽人物 / 地点 / 势力 → 角色卡 + 世界书（15 类自动分类） |
+| 降低稿子的机器味 | 去 AI 味规则引擎：12 条本地规则逐句标「为什么像 AI、怎么改」，不联网不花钱 |
+| 稿件别传上云 | 本地 SQLite 单文件库：无账号、无云、无遥测，一个字节不上传 |
+| 导出给编辑 / 平台发布 | 一键五格式导出：TXT / Markdown / HTML / EPUB / DOCX |
 
 写一个长篇，最怕的不是开头，而是**写到一半**——第 30 章的主角突然像换了个人，第 12 章埋的伏笔再也没提起过，AI 越写越水。
 
