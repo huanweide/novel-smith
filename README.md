@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/github/license/huanweide/novel-smith)](LICENSE)
 [![CI](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml/badge.svg)](https://github.com/huanweide/novel-smith/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/huanweide/novel-smith)](https://github.com/huanweide/novel-smith/stargazers)
-[![在线演示 · 去 AI 味检测](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-%E5%8E%BB%20AI%20%E5%91%B3%E6%A3%80%E6%B5%8B-22c55e)](https://huanweide.github.io/novel-smith/)
+[![在线演示 · 规则引擎自检](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-%E8%A7%84%E5%88%99%E5%BC%95%E6%93%8E%E8%87%AA%E6%A3%80-22c55e)](https://huanweide.github.io/novel-smith/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 <!-- /badges -->
 
@@ -19,6 +19,8 @@
 
 **一句话灵感 → 探讨设定 → 自动填表 → 批量写作 → 本地过审 → 导出成书**
 
+> 💡 **一句话定位**：AI 写小说最怕写到一半——人设崩了、设定前后矛盾、读起来一股 AI 味。Novel Smith 把**记忆 / 设定 / 世界书 / 角色卡**全留在你电脑里，让 AI 写 100 章也不崩；再离线过一遍 AI 味自检。**你的未发表稿件一个字节都不上传。**
+
 [30 秒看懂](#30-秒看懂) · [界面一览](#界面一览) · [它能做什么](#它能做什么) · [特性](#特性) · [快速开始](#快速开始) · [命令速查](#命令速查) · [架构](#架构) · [加一条你自己的规则](#加一条你自己的规则) · [路线图](#路线图) · [贡献](#贡献) · [⭐ Star](#-star)
 
 **当前版本：v3.1.153** · 本地 SQLite 零配置 · 2163 个测试用例 · 140 个 API 路由 · 17 个内置示范预设 · MIT 开源
@@ -27,7 +29,7 @@
 
 ## 30 秒看懂
 
-先别装、别配 Key。**打开[在线 demo 的「去 AI 味检测」](https://huanweide.github.io/novel-smith/)**，粘一段你自己的文字，立刻拿到报告。
+Novel Smith 是一个**写长篇的本地工作台**，去 AI 味检测只是它完全离线跑的「规则引擎」里最直观的一项能力。先不装、不配 Key，**打开[在线 demo](https://huanweide.github.io/novel-smith/)**，粘一段你自己的文字，立刻看到规则引擎怎么逐句标出 AI 腔、为什么、怎么改。
 
 下面这份是**真实跑出来的输出**（用本仓库 `src/core/humanize` 规则引擎跑下面这段 AI 腔文字）：
 
