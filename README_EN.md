@@ -21,7 +21,7 @@
 
 [30-Second Demo](#30-second-demo) · [Screenshots](#screenshots) · [What It Does](#what-it-does) · [Features](#features) · [Quick Start](#quick-start) · [Command Reference](#command-reference) · [Architecture](#architecture) · [Add Your Own Rule](#add-your-own-rule) · [Roadmap](#roadmap) · [Contributing](#contributing) · [⭐ Star](#-star)
 
-**Current Version: v3.1.153** · Local SQLite, zero-config · 2163 tests · 140 API routes · 17 built-in presets · MIT License
+**Current Version: v3.1.156** · Local SQLite, zero-config · 2163 tests · 140 API routes · 17 built-in presets · MIT License
 
 ---
 

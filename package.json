@@ -1,7 +1,8 @@
 {
   "name": "novel-smith",
-  "version": "3.1.153",
+  "version": "3.1.156",
   "private": true,
+  "main": "src-electron/main.js",
   "scripts": {
     "dev": "next dev -p 3001",
     "dev:db": "node scripts/dev-with-db.mjs",
@@ -17,7 +18,8 @@
     "import:dry": "tsx scripts/import-dry.ts",
     "import:corpus": "tsx scripts/import-corpus.ts",
     "test:coverage": "vitest run --coverage",
-    "db:migrate-json": "node scripts/migrate-json-fields.mjs"
+    "db:migrate-json": "node scripts/migrate-json-fields.mjs",
+    "dist": "npm run build && node scripts/deref-prisma-symlinks.mjs && electron-builder --win"
   },
   "engines": {
     "node": ">=20"
@@ -30,6 +32,7 @@
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.11",
     "gpt-tokenizer": "^4.0.0",
     "jszip": "^3.10.2",
     "lucide-react": "^1.52.0",
@@ -56,6 +59,7 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "^4.1.10",
+    "electron-builder": "^26.18.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.8",
     "jsdom": "^25.0.1",

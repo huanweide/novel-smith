@@ -1,0 +1,63 @@
+appId: com.novelsmith.app
+productName: Novel Smith
+# electron-builder 要求精确版本（不能用 ^37.0.0 范围），否则无法下载对应运行时
+electronVersion: 37.10.3
+# 关键修复：npmRebuild 必须关掉。
+# 原因：开 true 时 electron-builder 会用 electron-rebuild 重新处理原生模块，
+# 而 electron-rebuild 默认 buildFromSource=false → 去拉「预编译 ABI-136」的 better-sqlite3，
+# 覆盖掉我们手动 node-gyp 重编好的 ABI-127 二进制 → 运行时 dlopen 失败、app 打不开。
+# 关闭后直接复制项目里已是 ABI-127（Node 22 / Electron 37 通用）的 better-sqlite3，行为可控。
+npmRebuild: false
+directories:
+  output: release
+  buildResources: assets
+# 自动更新发布源：将来在 GitHub Releases 发版即可触发自动更新。
+# 注意：build 本身不发布（除非显式 --publish），仅把更新地址写入 latest.yml。
+# 本地验证可用环境变量 NS_UPDATE_FEED 覆盖为自托管地址。
+publish:
+  provider: github
+  owner: huanweide
+  repo: novel-smith
+# 关键修复：asar 关闭。
+# 实测 electron-builder 26 + @electron/asar 在本机打出的 app.asar 头部带前导反斜杠（\package.json），
+# 导致 Electron 运行时无法解析 main 字段 → 主进程静默退出、窗口打不开、/api/health 无响应。
+# 改用 asar:false，应用以普通目录形式落在 resources/app，Electron 可直接加载，彻底规避 asar 损坏问题。
+# main.js 已兼容 asar:false（appRoot 回退到 resources/app，node_modules 走标准解析路径）。
+asar: false
+files:
+  - "package.json"
+  - "next.config.*"
+  - "src-electron/**/*"
+  - "src/generated/**/*"
+  - "public/**/*"
+  - "prisma/**/*"
+  - "assets/**/*"
+  - ".next/**/*"
+  # 显式放行 .next 内的嵌套 node_modules（Turbopack 把 @prisma 解引用后的真实目录放这里）。
+  # 不写这一条，electron-builder 默认规则可能把整层 .next/node_modules 剥离 → 运行时找不到 @prisma/client-<hash> → DB 路由 500。
+  - ".next/node_modules/**/*"
+  - "node_modules/**/*"
+electronDownload:
+  # 注意：本机 .npmrc 指向 npmmirror electron 镜像；实测其提供的 37.10.3 即为真实 Electron（process.versions.electron=37.10.3），可正常打包。
+  # 如需强制官方源，可设置环境变量 ELECTRON_OVERRIDE_DIST_PATH 指向已下载的官方解压目录。
+  mirror: https://github.com/electron/electron/releases/download
+win:
+  target: [nsis, portable, zip]
+  icon: assets/icon.ico
+  # 文件名用无空格 slug，保证 latest.yml 记录的更新地址与实际文件一致（否则自动更新会下载 404）
+  artifactName: NovelSmith-${version}.${ext}
+  # 三种形态全给：① nsis 安装包（需代理下 NSIS 工具链，见 electronDownload）② portable 自解压单文件（双击即跑）③ zip 解压版
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  artifactName: NovelSmith-${version}-setup.${ext}
+portable:
+  artifactName: NovelSmith-${version}-portable.${ext}
+mac:
+  target: [dmg]
+  category: public.app-category.writing
+linux:
+  target: [AppImage, deb]
+  category: Utility
