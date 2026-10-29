@@ -81,7 +81,7 @@ export function AIChatHeader({ loading, readonlyMode }: AIChatHeaderProps) {
       {showHelp && (
         <div className="px-3 pb-3 space-y-1">
           <p className="text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">
-            墨灵是会使用项目工具的写作 Agent——直接说需求即可，例如：「把樊斯瑞的性格改成更外放」「列出本章与角色卡不一致的地方」。
+            墨灵是会使用项目工具的写作 Agent——直接说需求即可，例如：「把huanweide的性格改成更外放」「列出本章与角色卡不一致的地方」。
           </p>
           <div className="grid grid-cols-2 gap-1">
             {CAPABILITIES.map((c) => (

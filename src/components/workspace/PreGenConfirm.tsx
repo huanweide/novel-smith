@@ -152,7 +152,7 @@ export function PreGenConfirm({
                 id="pregen-characters"
                 value={charInput}
                 onChange={(e) => setCharInput(e.target.value)}
-                placeholder="例如：樊斯瑞、欧阳佩（留空则自动调度）"
+                placeholder="例如：huanweide、欧阳佩（留空则自动调度）"
                 className="input-glass w-full rounded-lg px-3 py-2 text-xs"
               />
               <p className="text-[10px] text-[var(--nv-text-tertiary)] mt-1">

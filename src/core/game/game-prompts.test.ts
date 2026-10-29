@@ -4,9 +4,9 @@ import type { GameSessionContext } from "./types";
 
 // 验证游戏模式「背包物品归属」解析：CI| 格式带归属者字段。
 describe("parseGameOutput —— 背包物品归属", () => {
-  const raw = `樊斯瑞握紧龙髓石，目光扫过潮痕尽头。
+  const raw = `huanweide握紧龙髓石，目光扫过潮痕尽头。
 ===角色物品变动===
-CI|获得|龙髓石|1|樊斯瑞
+CI|获得|龙髓石|1|huanweide
 CI|获得|黑金怀表|2
 CI|消耗|破损的地图|1
 ===新实体===
@@ -26,7 +26,7 @@ NE|周远征|公安局长|追寻龙陨真相
     expect(dragon).toBeDefined();
     expect(dragon?.operation).toBe("gain");
     expect(dragon?.quantity).toBe(1);
-    expect(dragon?.owner).toBe("樊斯瑞");
+    expect(dragon?.owner).toBe("huanweide");
   });
 
   it("未填归属者时 owner 为 undefined（UI 默认显示「主角」）", () => {

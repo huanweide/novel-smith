@@ -46,8 +46,8 @@ describe("buildHtmlDocStream（v1.6.39 html 导出流式化）", () => {
   });
 
   it("作者署名正确注入标题区与页脚", async () => {
-    const full = (await collect(buildHtmlDocStream("测试书", chapters, 100, 3, "樊斯瑞"))).join("");
-    expect(full).toContain('<p class="author">作者：樊斯瑞</p>');
-    expect(full).toContain("作者：樊斯瑞 · 共 3 个章节");
+    const full = (await collect(buildHtmlDocStream("测试书", chapters, 100, 3, "huanweide"))).join("");
+    expect(full).toContain('<p class="author">作者：huanweide</p>');
+    expect(full).toContain("作者：huanweide · 共 3 个章节");
   });
 });

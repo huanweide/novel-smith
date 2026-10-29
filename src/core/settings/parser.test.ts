@@ -35,7 +35,7 @@ describe("parseSettings —— 三卡解析入口", () => {
     const json = JSON.stringify({
       characters: [
         {
-          name: "樊斯瑞",
+          name: "huanweide",
           aliases: ["瑞宝宝"],
           age: "20",
           gender: "男",
@@ -73,7 +73,7 @@ describe("parseSettings —— 三卡解析入口", () => {
     const parsed = await parseSettings(`\`\`\`json\n${json}\n\`\`\``, mockClient(`\`\`\`json\n${json}\n\`\`\``));
 
     expect(parsed.characters).toHaveLength(1);
-    expect(parsed.characters[0].name).toBe("樊斯瑞");
+    expect(parsed.characters[0].name).toBe("huanweide");
     expect(parsed.characters[0].role).toBe("protagonist");
     expect(parsed.characters[0].appearance.hair).toBe("黑短发");
     expect(parsed.loreEntries[0].title).toBe("龙陨之地");
@@ -261,7 +261,7 @@ describe("parseStyleOnly —— 仅风格卡", () => {
 
 describe("to*CreateParams —— DB 创建参数映射", () => {
   const char = {
-    name: "樊斯瑞",
+    name: "huanweide",
     aliases: ["瑞"],
     age: "20",
     gender: "男",
@@ -294,7 +294,7 @@ describe("to*CreateParams —— DB 创建参数映射", () => {
   it("toCharacterCreateParams：关系 target→targetName、带导入标签、默认存活", () => {
     const p = toCharacterCreateParams(char, "pid");
     expect(p.projectId).toBe("pid");
-    expect(p.name).toBe("樊斯瑞");
+    expect(p.name).toBe("huanweide");
     expect(p.relationships[0]).toEqual({ targetName: "千惠", relation: "网友", dynamic: "", notes: "" });
     expect(p.tags).toContain("📥导入");
     expect(p.currentStatus).toBe("alive");

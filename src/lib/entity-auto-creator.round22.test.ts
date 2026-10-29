@@ -12,7 +12,7 @@ describe("round-22 normalizeDiscoveryName（入库即清洗发现标记）", () 
     });
   });
   it("keeps a clean name untouched", () => {
-    expect(normalizeDiscoveryName("樊斯瑞")).toEqual({ name: "樊斯瑞", hadMarker: false });
+    expect(normalizeDiscoveryName("huanweide")).toEqual({ name: "huanweide", hadMarker: false });
   });
   it("returns empty + hadMarker when only markers remain", () => {
     expect(normalizeDiscoveryName("🆕 自动发现")).toEqual({ name: "", hadMarker: true });
@@ -33,8 +33,8 @@ describe("round-22 resolveDiscoveryMergeTarget（自动发现阶段实时别名�
     expect(resolveDiscoveryMergeTarget(["迭戈·美第奇"], "迭戈")).toBeNull();
     expect(resolveDiscoveryMergeTarget(["迭戈"], "迭戈·美第奇")).toBeNull();
   });
-  it("merges single-char abbreviation when a unique same-surname plain exists：樊 + 樊斯瑞", () => {
-    expect(resolveDiscoveryMergeTarget(["樊斯瑞"], "樊")).toBe("樊斯瑞");
+  it("merges single-char abbreviation when a unique same-surname plain exists：樊 + huanweide", () => {
+    expect(resolveDiscoveryMergeTarget(["huanweide"], "樊")).toBe("huanweide");
   });
   it("does NOT merge single-char when no same-surname candidate（避免误建变体主卡）", () => {
     expect(resolveDiscoveryMergeTarget([], "樊")).toBeNull();

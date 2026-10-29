@@ -136,7 +136,7 @@ model CharacterCardRevision {
   confidence   String  @default("low")  // high | low
   source       String  @default("llm")  // llm | rule
   status       String  @default("pending") // pending | applied | rolled_back | ignored
-  summary      String  @default("")     // UI 摘要，如「樊斯瑞 ← 樊 / 樊弟」
+  summary      String  @default("")     // UI 摘要，如「huanweide ← 樊 / 樊弟」
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
