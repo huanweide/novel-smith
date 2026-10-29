@@ -25,7 +25,6 @@
 
 > **中文**：聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、帮你写长篇网文的 AI 写作工坊——从一句话灵感到成书，AI 起草、你拍板。
 
-> **English**: A local-first AI workshop for writing long-form web novels — from a one-line idea to worldbuilding, characters, outlines, chapters, and a finished book, with AI doing the drafting and you in the director's chair.
 
 
 `AI 写作` · `长篇网文` · `创意工坊` · `分层记忆引擎` · `Local-First` · `数据不出本机 · 隐私零上传` · `本地过审自检（可选）`
@@ -880,5 +879,4 @@ MIT License — 详见 [LICENSE](LICENSE)
 > Novel Smith · AI 小说工坊 · 本地优先 · 数据自有
 
 
-[English README →](README_EN.md)
 
