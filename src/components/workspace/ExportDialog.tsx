@@ -301,7 +301,7 @@ export function ExportDialog({
             <input
               value={author}
               onChange={(e) => setAuthor(e.target.value)}
-              placeholder="如：樊斯瑞"
+              placeholder="如：huanweide"
               className="input-glass w-full rounded-lg px-3 py-2 text-sm"
             />
           </div>

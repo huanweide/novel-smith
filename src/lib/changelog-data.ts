@@ -3021,7 +3021,7 @@ export const VERSIONS: VersionEntry[] = [
   {
     version: "v3.1.58",
     date: "2026-08-31",
-    title: "品牌改名 Novel Smith + 微信收款码上线（REBRAND-SPONSOR）",
+    title: "品牌改名 Novel Smith（REBRAND）",
     sections: [
       {
         label: "🏷️ 品牌改名（REBRAND）",
@@ -3032,30 +3032,6 @@ export const VERSIONS: VersionEntry[] = [
           "界面同步：首页标题、设置页文案、changelog 页、导出 DOCX/EPUB 水印与元信息全部改为 Novel Smith",
           "README 首屏补辨识标签（TypeScript · Local-First · 分层记忆引擎 · 中文长篇 · 数据不出本机），一眼区分于那个 Python 卡片式项目",
           "兼容性：GitHub 旧链接自动 301 跳转不失效；本地目录名与内部存储键保持不变，已有数据不受影响",
-        ],
-      },
-      {
-        label: "🎁 赞助收款码上线（SPONSOR-ON）",
-        items: [
-          "微信收款码已放入 public/sponsor/wechat-qr.png，设置页「8. 赞助支持」区块显示真码，替换原「作者待配置收款码」占位",
-          "GitHub 仓库主页 Sponsor 按钮（.github/FUNDING.yml）同步指向新地址，站内站外两条路都能扫",
-          "收款码为纯静态图片、不含任何密钥或凭据，不做后端金额/留言收集，符合本地优先与隐私原则",
-        ],
-      },
-    ],
-  },
-  {
-    version: "v3.1.57",
-    date: "2026-08-30",
-    title: "赞助支持（设置页 + GitHub FUNDING 双入口）",
-    sections: [
-      {
-        label: "🎁 赞助支持（SPONSOR）",
-        items: [
-          "设置页新增「8. 赞助支持」区块：展示微信收款码（/sponsor/wechat-qr.png），加载失败 onError 容错显示占位说明，纯前端、不碰后端、不收集记录",
-          "GitHub FUNDING：.github/FUNDING.yml 配 custom 指向收款码 raw 链接，仓库主页显示 Sponsor 按钮",
-          "两条腿复用同一张图：APP 内与 GitHub 仓库主页都能扫",
-          "安全：收款码仅转账入口二维码、不含密钥、纯静态入库，不做后端金额/留言收集",
         ],
       },
     ],
@@ -6249,7 +6225,7 @@ export const VERSIONS: VersionEntry[] = [
       {
         label: "单字缩写误判修复（质量）",
         items: [
-          "computeConfidence 此前对单字缩写（如「樊」=樊斯瑞）误判 low：resolveHonorificTarget 仅认 isHonorificVariant，不覆盖单字缩写（isSurnameAbbrevOrDescriptor 命中）。新增 resolveVariantTarget 按 coreSurname 在同姓非变体正主中找唯一匹配，歧义则保持 low；明确缩写现可高置信度自动合并。",
+          "computeConfidence 此前对单字缩写（如「樊」=huanweide）误判 low：resolveHonorificTarget 仅认 isHonorificVariant，不覆盖单字缩写（isSurnameAbbrevOrDescriptor 命中）。新增 resolveVariantTarget 按 coreSurname 在同姓非变体正主中找唯一匹配，歧义则保持 low；明确缩写现可高置信度自动合并。",
         ],
       },
       {
@@ -6303,7 +6279,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "角色界面与去重重构（#295/#297/#298/#299）",
         items: [
           "#295 角色列表按钮尺寸统一：主角 / 配角分组保留，但分类按钮与操作按钮统一尺寸、圆角与间距，视觉一致不再参差。",
-          "#297 角色去重合并改 LLM 驱动 + 默认开启：新增 llmDetectSamePersonGroups（temperature 0.2，识别「樊 = 樊斯瑞」「韩先生 = 韩立」等昵称缩写 / 尊称 / 错别字变体）；LLM 不可用时回退 ruleBasedGroups（仅处理尊称缩写变体）；龙套判定改用 DB 侧 storyNode.count 统计出现次数（不再加载全部正文上下文，杜绝「加载全部上下文太离谱」）；合并时 AI 接管别名与关系，被并卡软删标记「🗂 已合并」；批量写作完成后默认自动跑一次（batch-write 路由接入 dedupeCharacters），外显「去重」按钮保留以备异常。",
+          "#297 角色去重合并改 LLM 驱动 + 默认开启：新增 llmDetectSamePersonGroups（temperature 0.2，识别「樊 = huanweide」「韩先生 = 韩立」等昵称缩写 / 尊称 / 错别字变体）；LLM 不可用时回退 ruleBasedGroups（仅处理尊称缩写变体）；龙套判定改用 DB 侧 storyNode.count 统计出现次数（不再加载全部正文上下文，杜绝「加载全部上下文太离谱」）；合并时 AI 接管别名与关系，被并卡软删标记「🗂 已合并」；批量写作完成后默认自动跑一次（batch-write 路由接入 dedupeCharacters），外显「去重」按钮保留以备异常。",
           "#298 移除自动分类 + 用户自建标签：删除 ClassifyPanel 组件与 /api/characters/classify 路由（死代码）；角色列表改为「玩家自建标签 + 勾选角色打标」语义，输入标签名即时落到所选角色卡 tags。",
           "#299 移除死板自动发现、改 LLM 发现：去掉角色卡「🆕 自动发现 / 自动拆分」存储标签（entity-auto-creator / expand / entity-sync 源头不再打标）；新增 isSurnameAbbrevOrDescriptor，在自动建卡时就把「单字姓昵称缩写」「老韩 / 小韩」等姓氏缩写 + 描述词并入正主别名，从源头杜绝脏卡；进度日志去符号。",
         ],
@@ -7120,7 +7096,7 @@ export const VERSIONS: VersionEntry[] = [
           "零 schema 迁移：复用 source 字段标记手动事实，avoid 新增迁移（线上 Neon 额度限制，靠本地 PG17 验证）",
           "双门禁：tsc 0 错误 + vitest 357 测试全绿（含 parseFactsFromLLM / parseConflictsFromLLM / parseSuggestionFromLLM / validateFactInput / dedupeFacts 等多组纯函数单测）",
           "LLM 实际抽取 / 建议效果待可联网时端到端校验（逻辑与契约已对齐，不谎报已跑通真模型）",
-          "IP 永远归瑞宝宝（樊斯瑞），仅迭代 novel-forge",
+          "IP 永远归瑞宝宝（huanweide），仅迭代 novel-forge",
         ],
       },
     ],
@@ -7149,7 +7125,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "闸门只跳过重抽、不跳冲突检测（detect 仍每次跑，比对新内容 vs 现有基线，成本低且有用）",
-          "v1.8.0 印章 = Next-1 + Next-2 完成且全绿（v1.6.51.6 已满足）；本版为发布前打磨，随后 mint v1.8.0；IP 归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "v1.8.0 印章 = Next-1 + Next-2 完成且全绿（v1.6.51.6 已满足）；本版为发布前打磨，随后 mint v1.8.0；IP 归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7179,7 +7155,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "编辑/删除/新增走真实 API 落库；删除带 window.confirm 二次确认，防误删",
-          "v1.8.0 印章 = 本项（Next-2）完成且全绿；Next-3（成本/频率护栏）为发布前可选打磨；IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "v1.8.0 印章 = 本项（Next-2）完成且全绿；Next-3（成本/频率护栏）为发布前可选打磨；IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7209,7 +7185,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "建议为按需生成、不持久化，未点按钮不消耗 token；真实 LLM 建议效果留待可联网时端到端校验（逻辑与契约已对齐）",
-          "v1.8.0 印章 = 本项 + Next-2（基线人工纠错/编辑）完成且全绿；IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "v1.8.0 印章 = 本项 + Next-2（基线人工纠错/编辑）完成且全绿；IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7238,7 +7214,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "UI 仅展示与状态流转，不编辑基线事实本身；真实 LLM 检测效果留待可联网时端到端校验（逻辑与契约已对齐）",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7266,7 +7242,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "面板锁定只读优先：仅展示与重抽，不编辑/删除事实（编辑与主动矛盾检测标红留 B 任务，作为 v1.8 卖点）",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7294,7 +7270,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "基线内容仍是「确认后自动抽取」而非实时；未确认章节不触发，首次使用前需至少确认一章才会非空",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7322,7 +7298,7 @@ export const VERSIONS: VersionEntry[] = [
         label: "诚实边界",
         items: [
           "基线内容需先对目标项目 POST /api/projects/[id]/consistency 触发抽取才会非空；未抽取时生成提示词不含基线块（符合预期，非缺陷）",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7352,7 +7328,7 @@ export const VERSIONS: VersionEntry[] = [
         items: [
           "双门禁实证：tsc 0 错误 + vitest 37 文件 336/336 全绿（新增 consistency 模块 7 例 parseFactsFromLLM 容错分支全过）",
           "诚实边界：生成客户端 src/generated/prisma 已含 ConsistencyFact 类型（prisma generate 已落，故 tsc 通过）；prisma db push 已对本地 PG17（127.0.0.1:5432）执行、ConsistencyFact 表已创建，GET/POST 路由在本地 PG 可达时功能正常；prompt 注入（getConsistencyBaselineText 已就绪）留 v1.6.51.1 下一轮接进 buildPromptContext",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7383,7 +7359,7 @@ export const VERSIONS: VersionEntry[] = [
         items: [
           "双门禁实证：tsc 0 错误 + vitest 36 文件 329/329 全绿（本轮无业务代码改动，targeted-fix 模块已在 v1.6.48 落库）",
           "推送阻塞：本地代理 127.0.0.1:7897 TLS 不可达，v1.6.48 后所有推送实为失败（此前「远程 HEAD 确认」为同错误下假成功）；待代理恢复后一次性补推",
-          "IP 仍归瑞宝宝（樊斯瑞），只迭代 novel-forge",
+          "IP 仍归瑞宝宝（huanweide），只迭代 novel-forge",
         ],
       },
     ],
@@ -7415,7 +7391,7 @@ export const VERSIONS: VersionEntry[] = [
         items: [
           "删除 VERSIONS 中 v1.6.49/50/51 三个虚假复检幽灵条目 + 错标重复 v1.6.48（dissect 复检），仅保留真实 v1.6.48（长章精准修复）为最新，其后严格倒序 v1.6.47 及以下",
           "LATEST_VERSION 升 v1.6.49 与 VERSIONS 首条一致；根 CHANGELOG.md 头条本就干净，仅本文件治理",
-          "个人 IP 仍归瑞宝宝（樊斯瑞），严禁另立 IP/品牌/项目，只做 novel-forge 工程迭代",
+          "个人 IP 仍归瑞宝宝（huanweide），严禁另立 IP/品牌/项目，只做 novel-forge 工程迭代",
         ],
       },
       {
@@ -8783,7 +8759,7 @@ export const VERSIONS: VersionEntry[] = [
           "移除 v1.4.0 的「标题为空时用正文首段前 20 字兜底」错误逻辑（post-processor.ts），该逻辑导致章名变成正文开头碎片段",
           "改为在摘要环节用 summarizeChapter 对整章生成的 summary 作章名，前缀「第N章：」（N=order+1）；仅当标题为空或仍是「第N章」占位、且正文非空时才回填，绝不覆盖用户自定义标题，也避免模型空返回时写垃圾标题",
           "同步回填刚创建的 ChapterSummary.chapterTitle，保持上下文摘要一致",
-          "真实生成验证：第7章标题正确生成「第7章：樊斯瑞深夜赴悬崖别墅见迭戈·美第奇，得知父亲留下的地图是临摹、探测仪数据曾被第三……」",
+          "真实生成验证：第7章标题正确生成「第7章：huanweide深夜赴悬崖别墅见迭戈·美第奇，得知父亲留下的地图是临摹、探测仪数据曾被第三……」",
         ],
       },
       {
@@ -8819,7 +8795,7 @@ export const VERSIONS: VersionEntry[] = [
         items: [
           "entity-sync LLM 抽取协议新增 relationships（对方名/关系/动态，1-4 条，只记正文明确体现的关系，禁止脑补）",
           "新角色建卡即带 relationships；已存在角色卡按名称匹配补关系（同名关系不覆盖、封顶 8 条，失败不影响表格）",
-          "实测「新城 · 龙陨之地」第四章：已存在卡「韩姓男子」自动补上「迭戈·美第奇：主仆」「樊斯瑞：对手」两条关系，「龙渊」补 2 条",
+          "实测「新城 · 龙陨之地」第四章：已存在卡「韩姓男子」自动补上「迭戈·美第奇：主仆」「huanweide：对手」两条关系，「龙渊」补 2 条",
         ],
       },
       {
@@ -10707,8 +10683,8 @@ export const VERSIONS: VersionEntry[] = [
       {
         label: "数据修正（导入脚本字段错误）",
         items: [
-          "16 位角色 relationships 字段格式：target/type → targetName/relation（sync-global-prompt 编译关系显示 ?(?) 的根因）；樊斯瑞错误别名「高千惠」清除（导入脚本 alias 参数传错）",
-          "验证：globalPrompt 重新编译后关系正确显示（樊斯瑞→高千惠(守护/执念)、叶凌云→沈凌波(夫妻/搭档)+龙卫(统帅)、KID→顾望舒(保护/越界)+迭戈(雇佣/欠命)）",
+          "16 位角色 relationships 字段格式：target/type → targetName/relation（sync-global-prompt 编译关系显示 ?(?) 的根因）；huanweide错误别名「高千惠」清除（导入脚本 alias 参数传错）",
+          "验证：globalPrompt 重新编译后关系正确显示（huanweide→高千惠(守护/执念)、叶凌云→沈凌波(夫妻/搭档)+龙卫(统帅)、KID→顾望舒(保护/越界)+迭戈(雇佣/欠命)）",
         ],
       },
       {
@@ -12175,7 +12151,7 @@ export const VERSIONS: VersionEntry[] = [
       {
         label: "创意工坊 / 本地分发",
         items: [
-          "内置预设品牌化：16 个系统示范预设（宫斗表、分阶段人设、古风/快节奏/暗黑文笔、仙侠/现代/西幻世界观、苏苏角色卡、删除思维链、世界书、API 参数、舞台剧风格等）作者统一归为 trirui、标签追加 trirui推荐——这是我们（樊斯瑞项目）设立的创意工坊体系，随仓库 clone 即带、人人可用",
+          "内置预设品牌化：16 个系统示范预设（宫斗表、分阶段人设、古风/快节奏/暗黑文笔、仙侠/现代/西幻世界观、苏苏角色卡、删除思维链、世界书、API 参数、舞台剧风格等）作者统一归为 trirui、标签追加 trirui推荐——这是我们（huanweide项目）设立的创意工坊体系，随仓库 clone 即带、人人可用",
           "新增导入/导出预设文件（酒馆式分发）：创意工坊每张预设卡片加「导出」按钮，生成含 schema 版本与完整内容的 .preset.json 下载；顶部新增「导入文件」按钮，从本机或 GitHub 下载的分享文件一键导入本地库（新后端 POST /api/presets/import，落库为 isBuiltin=false、author=导入，仅本机不共享）",
           "产品方向纠偏并写入计划表与记忆：明确 novel-forge 是本地运行工具（类比 SillyTavern 酒馆），非云端 SaaS；分发靠 git clone 仓库（内置预设随仓库）+ 导入/导出文件分享社区预设，线上演示站 novel-forge-nu.vercel.app 仅是历史展示、非产品必需、额度耗尽无需修",
           "导入与内置清晰隔离：导入路由按 {type,title,isBuiltin:false} 去重防重复；用户上传/导入的预设永不影响系统内置 16 项。端到端验证：导入落库→公开列表可见→清理成功。tsc 零错误",

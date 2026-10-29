@@ -24,7 +24,7 @@ describe("buildGlobalPrompt 预算裁剪 (v2.52.0)", () => {
 
   it("角色背景超 bgCap 截断并带省略号", () => {
     const chars = [{
-      name: "樊斯瑞", role: "protagonist", currentStatus: "存活", age: "20", gender: "男",
+      name: "huanweide", role: "protagonist", currentStatus: "存活", age: "20", gender: "男",
       background: "背".repeat(500), aliases: [], personality: {}, appearance: {},
       abilities: [], hiddenMotives: [], relationships: [], timeline: [], tags: [], dialogueStyle: {},
     }];

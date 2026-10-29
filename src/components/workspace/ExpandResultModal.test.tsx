@@ -17,7 +17,7 @@ describe("ExpandResultModal（扩展结果弹窗，v2.0.4）", () => {
     const onClose = vi.fn();
     render(
       <ExpandResultModal
-        result={{ okList: ["樊斯瑞", "叶凌云"], failList: [{ name: "沈凌波", reason: "超时" }], total: 3 }}
+        result={{ okList: ["huanweide", "叶凌云"], failList: [{ name: "沈凌波", reason: "超时" }], total: 3 }}
         onClose={onClose}
         progress={[]}
         done={0}
@@ -36,7 +36,7 @@ describe("ExpandResultModal（扩展结果弹窗，v2.0.4）", () => {
   it("全部成功时显示「全部扩展成功」标题", () => {
     render(
       <ExpandResultModal
-        result={{ okList: ["樊斯瑞"], failList: [], total: 1 }}
+        result={{ okList: ["huanweide"], failList: [], total: 1 }}
         onClose={noop}
         progress={[]}
         done={0}
@@ -52,7 +52,7 @@ describe("ExpandResultModal（扩展结果弹窗，v2.0.4）", () => {
       <ExpandResultModal
         result={null}
         onClose={noop}
-        progress={[{ name: "樊斯瑞", status: "ok" }]}
+        progress={[{ name: "huanweide", status: "ok" }]}
         done={1}
         total={4}
         expanding

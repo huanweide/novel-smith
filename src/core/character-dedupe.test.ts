@@ -35,8 +35,8 @@ describe("computeConfidence（v2.0.5 置信度分级 + 单字缩写修复）", (
   it("单字缩写（昵称缩写）并入唯一同姓正主 → high（修复点：此前误判 low）", () => {
     // 旧实现 resolveHonorificTarget 对非 isHonorificVariant 的单字返回 null，
     // 导致「樊」这类明确缩写落到 low/pending；修复后按 coreSurname 找唯一正主 → high。
-    const members = [c("1", "樊斯瑞"), c("2", "樊")];
-    expect(computeConfidence(members, ["樊斯瑞", "樊"])).toBe("high");
+    const members = [c("1", "huanweide"), c("2", "樊")];
+    expect(computeConfidence(members, ["huanweide", "樊"])).toBe("high");
   });
 
   it("纯语义相似的普通姓名（无变体证据） → low（等用户确认）", () => {
@@ -49,9 +49,9 @@ describe("computeConfidence（v2.0.5 置信度分级 + 单字缩写修复）", (
     expect(computeConfidence(members, ["韩立", "韩先生", "韩雪"])).toBe("low");
   });
 
-  it("单字缩写但同姓多正主 → low（樊斯瑞/樊 核心名「樊斯瑞」≠「樊」，歧义闸门防错并）", () => {
-    const members = [c("1", "樊斯瑞"), c("2", "樊")];
-    expect(computeConfidence(members, ["樊斯瑞", "樊", "樊无解"])).toBe("low");
+  it("单字缩写但同姓多正主 → low（huanweide/樊 核心名「huanweide」≠「樊」，歧义闸门防错并）", () => {
+    const members = [c("1", "huanweide"), c("2", "樊")];
+    expect(computeConfidence(members, ["huanweide", "樊", "樊无解"])).toBe("low");
   });
 
   it("单成员（无被并者） → high", () => {

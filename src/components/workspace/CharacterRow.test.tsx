@@ -6,7 +6,7 @@ import type { CharacterData } from "./types";
 
 const base: CharacterData = {
   id: "c1",
-  name: "樊斯瑞",
+  name: "huanweide",
   role: "protagonist",
   age: "",
   gender: "",
@@ -34,7 +34,7 @@ const renderRow = (over: Partial<CharacterData> = {}, confirm?: (id: string) => 
 describe("CharacterRow（v1.6.24 待审审批闭环 + v2.17 统一标签）", () => {
   it("渲染角色名", () => {
     renderRow();
-    expect(screen.getByText("樊斯瑞")).toBeInTheDocument();
+    expect(screen.getByText("huanweide")).toBeInTheDocument();
   });
 
   it("reviewStatus 非 pending 时不显示待审徽章与确认按钮", () => {

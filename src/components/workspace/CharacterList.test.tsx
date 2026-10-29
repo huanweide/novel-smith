@@ -115,7 +115,7 @@ describe("CharacterList（出口组件状态机 + 网络层，v2.24.0）", () =>
   });
 
   it("有角色时按 role 分组传给 CharacterGroupList", () => {
-    setup({ characters: [mkChar("c1", "樊斯瑞", "protagonist"), mkChar("c2", "叶凌云", "supporting")] });
+    setup({ characters: [mkChar("c1", "huanweide", "protagonist"), mkChar("c2", "叶凌云", "supporting")] });
     expect(screen.getByTestId("groups")).toHaveTextContent("2");
     expect(screen.getByText("Filters")).toBeInTheDocument();
   });
