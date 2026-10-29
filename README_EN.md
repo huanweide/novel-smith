@@ -126,6 +126,19 @@ Chapter generation, book dissection, and character/lore management write into a 
 
 ---
 
+## Desktop Build: Download & Run (no Node / no terminal)
+
+> Don't want to install Node or touch the terminal? Grab the desktop build and double-click to launch.
+
+- **Download**: [GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156)
+- Pick one of three packages:
+  - `NovelSmith-3.1.156-setup.exe` (recommended) — NSIS installer; double-click to install, creates desktop / Start Menu shortcuts.
+  - `NovelSmith-3.1.156-portable.exe` — single self-extracting file; runs from a USB drive or by double-click, no registry writes.
+  - `NovelSmith-3.1.156.zip` — extract and run.
+- **Blocked by Windows SmartScreen on first run?** That's the normal "unsigned" prompt, not a virus — click "Run anyway".
+- **Seeing an "AI not configured" banner on first open?** Fill in your LLM Key in Settings (⚙️), or set `LLM_API_KEY` in `.env`. It doesn't block opening, nor local writing / book-dissection features that don't need AI.
+- Data lives in a single local SQLite file; back it up by copying that file.
+
 ## Quick Start
 
 ### The one-liner
