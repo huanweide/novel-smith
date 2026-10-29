@@ -19,7 +19,15 @@
 
 **One-line idea → explore the setting → auto-fill the tables → batch writing → local review → export the book**
 
-[30-Second Demo](#30-second-demo) · [Screenshots](#screenshots) · [What It Does](#what-it-does) · [Features](#features) · [Quick Start](#quick-start) · [Command Reference](#command-reference) · [Architecture](#architecture) · [Add Your Own Rule](#add-your-own-rule) · [Roadmap](#roadmap) · [Contributing](#contributing) · [⭐ Star](#-star)
+[30-Second Demo](#30-second-demo) · [Screenshots](#screenshots) · [What It Does](#what-it-does) · [Features](#features) · [Desktop Build](#desktop-build) · [Quick Start](#quick-start) · [Command Reference](#command-reference) · [Architecture](#architecture) · [Add Your Own Rule](#add-your-own-rule) · [Roadmap](#roadmap) · [Contributing](#contributing) · [⭐ Star](#-star)
+
+<p align="center">
+  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.156"><b>💻 Download Desktop Build</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://huanweide.github.io/novel-smith/"><b>▶ Live Demo</b></a>
+</p>
+
+> ⚡ **Don't want to install Node or touch the terminal?** Grab the desktop build and double-click to launch → [GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156) (unsigned — if Windows SmartScreen blocks it, click "Run anyway").
 
 **Current Version: v3.1.156** · Local SQLite, zero-config · 2163 tests · 140 API routes · 17 built-in presets · MIT License
 
@@ -126,6 +134,8 @@ Chapter generation, book dissection, and character/lore management write into a 
 
 ---
 
+<a id="desktop-build"></a>
+
 ## Desktop Build: Download & Run (no Node / no terminal)
 
 > Don't want to install Node or touch the terminal? Grab the desktop build and double-click to launch.
@@ -138,6 +148,10 @@ Chapter generation, book dissection, and character/lore management write into a 
 - **Blocked by Windows SmartScreen on first run?** That's the normal "unsigned" prompt, not a virus — click "Run anyway".
 - **Seeing an "AI not configured" banner on first open?** Fill in your LLM Key in Settings (⚙️), or set `LLM_API_KEY` in `.env`. It doesn't block opening, nor local writing / book-dissection features that don't need AI.
 - Data lives in a single local SQLite file; back it up by copying that file.
+
+![Real desktop app home screen](docs/screenshots/desktop-app-home.png)
+
+> The screenshot above is the real desktop home screen (rendered from the packaged Next server). The "AI not configured" banner only appears when no LLM key is set; fill it in Settings and it disappears. Local writing / book-dissection features that don't need AI work regardless.
 
 ## Quick Start
 
