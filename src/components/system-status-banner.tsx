@@ -18,7 +18,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface Health {
   version: string;
-  db: { ok: boolean; error: string; hint: string };
+  db: { ok: boolean; error: string; hint: string; fixCommand?: string };
   llm: { ok: boolean; error: string; hint: string };
 }
 
@@ -28,9 +28,8 @@ interface Problem {
   error: string;
   hint: string;
   kind: "db" | "llm";
+  fixCommand?: string;
 }
-
-const DB_FIX_CMD = "npm run dev:db";
 
 export function SystemStatusBanner() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -67,6 +66,7 @@ export function SystemStatusBanner() {
       error: health.db.error,
       hint: health.db.hint,
       kind: "db",
+      fixCommand: health.db.fixCommand || "",
     });
   }
   if (!health.llm.ok && !isDetector) {
@@ -82,8 +82,10 @@ export function SystemStatusBanner() {
   if (problems.length === 0) return null;
 
   const copyCmd = () => {
+    const cmd = health?.db.fixCommand;
+    if (!cmd) return;
     navigator.clipboard
-      ?.writeText(DB_FIX_CMD)
+      ?.writeText(cmd)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -108,10 +110,10 @@ export function SystemStatusBanner() {
                 <span className="font-medium text-warning">{p.label}：</span>
                 <span>{p.error}</span>
                 {p.hint ? <span className="text-warning/70">— {p.hint}</span> : null}
-                {p.kind === "db" ? (
+                {p.kind === "db" && p.fixCommand ? (
                   <>
                     <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-warning">
-                      {DB_FIX_CMD}
+                      {p.fixCommand}
                     </code>
                     <button
                       onClick={copyCmd}
@@ -120,14 +122,15 @@ export function SystemStatusBanner() {
                       {copied ? "已复制" : "复制命令"}
                     </button>
                   </>
-                ) : (
+                ) : null}
+                {p.kind === "llm" ? (
                   <Link
                     href="/settings"
                     className="text-warning hover:text-[var(--nv-text-primary)] underline underline-offset-2"
                   >
                     去设置页填 Key <Icon name="arrowRight" size={13} className="inline-block align-middle" />
                   </Link>
-                )}
+                ) : null}
               </li>
             ))}
           </ul>

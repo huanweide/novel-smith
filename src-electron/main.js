@@ -41,6 +41,8 @@ catch (e) { logf("require next FAIL: " + (e && e.stack ? e.stack : e)); throw e;
 // 避免硬编码端口冲突导致“启动即退出”。
 const PORT = parseInt(process.env.NS_PORT || "3001", 10);
 const isDev = !app.isPackaged;
+// 向进程内 Next 服务暴露打包态，供 /api/health 区分桌面端/Web 文案（避免给桌面用户推 npm 命令）
+process.env.NS_IS_PACKAGED = String(app.isPackaged);
 // 打包态：asar 开启后，asarUnpack 的解包内容落在 resources/app.asar.unpacked（而非 resources/app）。
 // 故 appRoot 优先指 app.asar.unpacked；兼容旧打包回退到 resources/app。
 const appRoot = (() => {
@@ -113,25 +115,43 @@ function resolveDataDir() {
 
 // 用 Electron 自身（与打包运行时同 ABI）跑 prisma db push，确保本地 SQLite 表结构就位。
 // 幂等：全新库建表、已有库补列，失败不阻塞启动（后续仍可用模板/手动修复）。
+// 关键修复（P1）：① 注入 ELECTRON_RUN_AS_NODE，让 prisma CLI 以 node 语义执行，
+// 避免 Electron 二进制按 GUI 进程初始化导致 db push 行为异常（A4 不确定项）；
+// ② 捕获 stdout/stderr 写入 ns-app.log，失败不再静默；③ 返回值被主流程消费，用于置
+// NS_SCHEMA_INIT_FAILED 供 /api/health 反向告警（双保险，杜绝假绿灯）。
 function ensureSchema(userDbPath) {
   return new Promise((resolve) => {
     const prismaCli = path.join(appRoot, "node_modules", "prisma", "build", "index.js");
     if (!fs.existsSync(prismaCli)) {
       console.warn("[ns] 未找到 prisma CLI，跳过自动建表（请确认随包分发）");
+      logf("ensureSchema FAIL: prismaCli 不存在 -> " + prismaCli);
       return resolve(false);
     }
-    const env = { ...process.env, DATABASE_URL: "file:" + userDbPath };
+    const env = { ...process.env, DATABASE_URL: "file:" + userDbPath, ELECTRON_RUN_AS_NODE: "1" };
+    let buf = "";
     const cp = spawn(process.execPath, [prismaCli, "db", "push", "--accept-data-loss"], {
       cwd: appRoot,
       env,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
-    const done = (ok) => resolve(ok);
-    cp.on("error", (e) => { console.warn("[ns] db push 启动失败：", e.message); done(false); });
-    cp.on("close", (code) => done(code === 0));
-    // 最多等 60s，超时当作失败继续，不卡住启动
-    setTimeout(() => { try { cp.kill(); } catch { /* noop */ } done(false); }, 60000);
+    if (cp.stdout) cp.stdout.on("data", (d) => (buf += d.toString()));
+    if (cp.stderr) cp.stderr.on("data", (d) => (buf += d.toString()));
+    let settled = false;
+    const done = (ok, note) => {
+      if (settled) return;
+      settled = true;
+      if (ok) logf("ensureSchema OK");
+      else {
+        logf("ensureSchema FAIL" + (note ? " (" + note + ")" : "") + ": " + buf.slice(0, 1000));
+        console.warn("[ns] 数据库自动建表失败，详见 ns-app.log" + (note ? "（" + note + "）" : ""));
+      }
+      resolve(ok);
+    };
+    cp.on("error", (e) => done(false, "spawn error: " + e.message));
+    cp.on("close", (code) => done(code === 0, "exit code " + code));
+    // 最多等 90s，超时当作失败继续，不卡住启动
+    setTimeout(() => { try { cp.kill(); } catch { /* noop */ } done(false, "timeout 90s"); }, 90000);
   });
 }
 
@@ -271,7 +291,12 @@ app.whenReady().then(async () => {
   const userDbPath = path.join(dataDir, "novelforge.db");
 
   // 1) 先确保表结构（用 Electron 自身跑 prisma db push，幂等）
-  await ensureSchema(userDbPath);
+  const schemaOk = await ensureSchema(userDbPath);
+  if (!schemaOk) {
+    // 建表失败：置标记供 /api/health 反向告警，避免自检假绿灯误导用户
+    process.env.NS_SCHEMA_INIT_FAILED = "1";
+    logf("WARN: ensureSchema 返回 false，数据库可能缺表，将继续启动但部分功能可能受限");
+  }
 
   // 2) 数据库路径指向用户目录；工作目录切到用户目录，避免相对路径写进只读安装目录
   process.env.DATABASE_URL = "file:" + userDbPath;
