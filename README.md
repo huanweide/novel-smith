@@ -11,7 +11,6 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 
 <!-- /badges -->
-**English** · [README_EN.md](./README_EN.md)
 
 
 <p align="center">

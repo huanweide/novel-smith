@@ -7,7 +7,7 @@
 检查范围：
     - docs/**/*.md 全部 Markdown 链接 [text](path) 与行内代码 `path`
     - 根目录门面文件：AGENTS.md / CLAUDE.md / CONTRIBUTING.md / README.md /
-      README_EN.md / SECURITY.md / ROADMAP.md
+      SECURITY.md / ROADMAP.md
 
 解析规则（按序尝试，命中即算有效）：
     1. 相对文档所在目录
@@ -29,7 +29,7 @@ import glob
 
 FACADE_FILES = [
     'AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md',
-    'README.md', 'README_EN.md', 'SECURITY.md', 'ROADMAP.md',
+    'README.md', 'SECURITY.md', 'ROADMAP.md',
 ]
 
 PATH_EXT_RE = re.compile(
