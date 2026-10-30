@@ -857,7 +857,7 @@ MIT License — 详见 [LICENSE](LICENSE)
 ---
 
 
-## ⭐ Star
+## Star
 
 
 🔨 如果这个工坊帮你把故事写了出来，**点个 Star** 让更多写长篇的人看见它。
