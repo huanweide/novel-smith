@@ -38,9 +38,10 @@ files:
   - ".next/node_modules/**/*"
   - "node_modules/**/*"
 electronDownload:
-  # 注意：本机 .npmrc 指向 npmmirror electron 镜像；实测其提供的 37.10.3 即为真实 Electron（process.versions.electron=37.10.3），可正常打包。
-  # 如需强制官方源，可设置环境变量 ELECTRON_OVERRIDE_DIST_PATH 指向已下载的官方解压目录。
-  mirror: https://github.com/electron/electron/releases/download
+  # 关键修复：mirror 必须以 / 结尾，否则 electron-builder 拼出的下载地址会丢失斜杠
+  # （例如 downloadv37.10.3 而非 download/v37.10.3），导致 404。
+  # 改用 npmmirror 二进制镜像，国内拉取更稳；末尾 / 不可省。
+  mirror: https://registry.npmmirror.com/-/binary/electron/
 win:
   target: [nsis, portable, zip]
   icon: assets/icon.ico
