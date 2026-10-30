@@ -19,6 +19,8 @@
 
 </p>
 
+**English** · [README_EN.md](./README_EN.md)
+
 
 # 🔨 Novel Smith — AI 长篇网文写作工坊
 
