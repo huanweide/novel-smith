@@ -11,6 +11,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 
 <!-- /badges -->
+**English** · [README_EN.md](./README_EN.md)
 
 
 <p align="center">
@@ -18,8 +19,6 @@
   <img src="assets/banner.svg" alt="novel-smith">
 
 </p>
-
-**English** · [README_EN.md](./README_EN.md)
 
 
 # 🔨 Novel Smith — AI 长篇网文写作工坊
