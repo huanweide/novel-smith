@@ -48,12 +48,12 @@
 
   &nbsp;·&nbsp;
 
-  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.156"><b>💻 桌面版下载即用（双击开）</b></a>
+  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.157"><b>💻 桌面版下载即用（双击开）</b></a>
 
 </p>
 
 
-> ⚡ **不想装 Node / 不想敲命令？** 直接下桌面版，双击就开 → [GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156)（无代码签名，首次被 Windows SmartScreen 拦，点「仍要运行」即可）
+> ⚡ **不想装 Node / 不想敲命令？** 直接下桌面版，双击就开 → [GitHub Releases · v3.1.157](https://github.com/huanweide/novel-smith/releases/tag/v3.1.157)（无代码签名，首次被 Windows SmartScreen 拦，点「仍要运行」即可）
 
 
 ## ✨ 核心能力（一句话说清它能干嘛）
@@ -339,7 +339,7 @@ Novel Smith 把这些「记不住的活」交给工程台自动管，你只管�
 
 > 不想装 Node、不想敲命令？直接下桌面版，双击就开。
 
-- **下载地址**：[GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156)
+- **下载地址**：[GitHub Releases · v3.1.157](https://github.com/huanweide/novel-smith/releases/tag/v3.1.157)
 - 三个包，按习惯挑一个：
   - `NovelSmith-3.1.156-setup.exe`（推荐）— NSIS 安装包，双击安装、可建桌面/开始菜单快捷方式。
   - `NovelSmith-3.1.156-portable.exe` — 单文件自解压，U 盘 / 直接双击即跑，不写注册表。
