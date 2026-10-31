@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.157 — 2026-10-31
+
+### 桌面版可用性修复收口
+
+- 修复：裁剪首页装饰光晕（`.nf-spark` 加 `overflow:hidden`），消除整页横向滚动（违反无横向滚动要求）
+- 修复：`dist` 脚本接入版本一致性断言（`scripts/check-dist-version.mjs`），产物文件名须含 `package.json.version` 且生成 `latest.yml`
+- 修复：移除英文 README 并修正 electron 镜像地址（补结尾斜杠），打通桌面版安装包构建
+- 桌面版全功能验证通过：首启自愈建库 / 核心 CRUD 链路 / AI 真实生成（硅基流动便宜模型）/ 项目自检 / 全 GUI 走查 / epub·docx 导出可打开
+
 ## v3.1.153 — 2026-10-17
 
 ### 「旁边的苏长老沉声道」不再整段漏检
