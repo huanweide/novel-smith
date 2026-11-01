@@ -25,7 +25,6 @@
 
 > **中文**：聊天窗口是健谈的陌生人，Novel Smith 是住在你电脑里、帮你写长篇网文的 AI 写作工坊——从一句话灵感到成书，AI 起草、你拍板。
 
-> **English**: A local-first AI workshop for writing long-form web novels — from a one-line idea to worldbuilding, characters, outlines, chapters, and a finished book, with AI doing the drafting and you in the director's chair.
 
 
 `AI 写作` · `长篇网文` · `创意工坊` · `分层记忆引擎` · `Local-First` · `数据不出本机 · 隐私零上传` · `本地过审自检（可选）`
@@ -93,7 +92,7 @@
 - 你只写短篇文案、社媒推文等一次性文本。
 
 
-[30 秒看懂](#30-秒看懂) · [核心能力](#核心能力一句话说清它能干嘛) · [界面一览](#界面一览) · [它能做什么](#它能做什么) · [特性](#特性) · [桌面版下载](#desktop) · [快速开始](#快速开始) · [命令速查](#命令速查) · [架构](#架构) · [加一条你自己的规则](#加一条你自己的规则) · [路线图](#路线图) · [贡献](#贡献) · [⭐ Star](#-star)
+[30 秒看懂](#30-秒看懂) · [核心能力](#核心能力一句话说清它能干嘛) · [界面一览](#界面一览) · [它能做什么](#它能做什么) · [特性](#特性) · [桌面版下载](#desktop) · [快速开始](#快速开始) · [命令速查](#命令速查) · [架构](#架构) · [加一条你自己的规则](#加一条你自己的规则) · [路线图](#路线图) · [贡献](#贡献) · [⭐ Star](#star)
 
 
 **当前版本：v3.1.159** · 本地 SQLite 零配置 · 2163 个测试用例 · 140 个 API 路由 · 17 个内置示范预设 · MIT 开源
@@ -346,6 +345,10 @@ Novel Smith 把这些「记不住的活」交给工程台自动管，你只管�
   - `NovelSmith-3.1.159-portable.exe` — 单文件自解压，U 盘 / 直接双击即跑，不写注册表。
   - `NovelSmith-3.1.159.zip` — 解压即用。
 - **首次运行被 Windows SmartScreen 拦？** 这是正常的「未代码签名」提示，不是病毒，点「仍要运行」即可。
+- **便携版（portable.exe）双击没反应 / 打不开？** 多数情况是上一次没真正退出，进程还占着单实例锁：
+  1. 打开任务管理器 → 结束所有 `Novel Smith` / `NovelSmith` 进程，再双击；
+  2. 若仍不行，**优先用 `NovelSmith-3.1.158.zip`**：解压一次、直接双击里面的 `Novel Smith.exe` 即可，最稳（不依赖每次自解压到临时目录）；
+  3. 真有问题看日志：`%TEMP%\ns-app.log`（v3.1.158 起日志已写到这个路径，旧版写死在 `C:\Users\Administrator\` 在多数人机器上根本写不出）。
 - **首次打开顶部提示「AI 未配置」？** 去设置页（⚙️）填 LLM Key，或在 `.env` 设 `LLM_API_KEY`。不影响打开，也不影响本地写作 / 拆书等不依赖 AI 的功能。
 - 数据落在本地单一 SQLite 文件，备份 = 复制那个文件。
 
@@ -849,17 +852,6 @@ npx prisma studio      # 数据库面板 (localhost:5555)
 
 ---
 
-
-## 🧰 同一作者的其他工具
-
-> 作者在做一系列开源效率工具，欢迎顺手点 Star 支持：
-
-- 🎓 网课助手 — 智慧树自动播放/续播/AI 答题：[点此访问](https://github.com/huanweide/zhihuishu-helper)
-- 🎬 字幕/视频 — B站字幕一键提取（零 Key 取官方字幕）：[点此访问](https://github.com/huanweide/bili-subtitle-universal)
-- 📺 实时字幕 — 直播/会议实时字幕：[点此访问](https://github.com/huanweide/live-subtitle)
-- ✂️ 视频摘要 — 长视频一键总结：[点此访问](https://github.com/huanweide/video-brief)
-- 🖥️ 总览 — 作者全部开源项目集散：[点此访问](https://github.com/huanweide/family-showcase)
-- 🩺 代码健康 — 零依赖多轴静态体检：[点此访问](https://github.com/huanweide/doctors)
 ## License
 
 
@@ -869,7 +861,7 @@ MIT License — 详见 [LICENSE](LICENSE)
 ---
 
 
-## ⭐ Star
+## Star
 
 
 🔨 如果这个工坊帮你把故事写了出来，**点个 Star** 让更多写长篇的人看见它。
@@ -880,5 +872,4 @@ MIT License — 详见 [LICENSE](LICENSE)
 > Novel Smith · AI 小说工坊 · 本地优先 · 数据自有
 
 
-[English README →](README_EN.md)
 
