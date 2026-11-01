@@ -81,6 +81,24 @@ export function classifyError(e: unknown): ApiErrorInfo {
     return { status: h.status, code, error: h.error, hint: h.hint };
   }
 
+  // 1.5) 原生模块加载失败（NODE_MODULE_VERSION / dlopen 不匹配）：
+  // 典型场景——better-sqlite3 按系统 Node 编译，但桌面端 Electron 运行时 ABI 不同，
+  // require 时抛 ERR_DLOPEN_FAILED，导致所有 DB 查询失败。这「不是」schema 不匹配，
+  // 之前误归到 2.1 会误导用户去重启 dev server / 重新 generate（对桌面端无效）。
+  // 准确修复是重装/重编对应 Electron ABI 的原生模块（或下载官方预编译包）。
+  if (
+    /ERR_DLOPEN_FAILED|NODE_MODULE_VERSION|compiled against a different|Could not locate the bindings|The specified procedure could not be found|bindings file/i.test(
+      err.message + " " + (err.stack || "")
+    )
+  ) {
+    return {
+      status: 503,
+      code: "NATIVE_MODULE_MISMATCH",
+      error: "原生模块（better-sqlite3）与运行时不兼容",
+      hint: "数据库原生模块与当前 Electron 运行时 ABI 不匹配（常见于打包时未按 Electron 重编原生模块）。请重新安装/更新到官方最新版，或执行 `npm rebuild better-sqlite3 --electron` 重新编译。",
+    };
+  }
+
   // 2) 其它 Prisma 错误（未知 code 但以 Prisma 开头）
   if (code?.startsWith("P") || /PrismaClient/i.test(err.name) || /Prisma/i.test(err.message)) {
     // 2.1) schema 不匹配（stale client）：数据库连通，但本地 Prisma 客户端版本

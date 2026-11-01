@@ -22,14 +22,14 @@
 [30-Second Demo](#30-second-demo) · [Screenshots](#screenshots) · [What It Does](#what-it-does) · [Features](#features) · [Desktop Build](#desktop-build) · [Quick Start](#quick-start) · [Command Reference](#command-reference) · [Architecture](#architecture) · [Add Your Own Rule](#add-your-own-rule) · [Roadmap](#roadmap) · [Contributing](#contributing) · [⭐ Star](#-star)
 
 <p align="center">
-  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.156"><b>💻 Download Desktop Build</b></a>
+  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.159"><b>💻 Download Desktop Build</b></a>
   &nbsp;·&nbsp;
   <a href="https://huanweide.github.io/novel-smith/"><b>▶ Live Demo</b></a>
 </p>
 
-> ⚡ **Don't want to install Node or touch the terminal?** Grab the desktop build and double-click to launch → [GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156) (unsigned — if Windows SmartScreen blocks it, click "Run anyway").
+> ⚡ **Don't want to install Node or touch the terminal?** Grab the desktop build and double-click to launch → [GitHub Releases · v3.1.159](https://github.com/huanweide/novel-smith/releases/tag/v3.1.159) (unsigned — if Windows SmartScreen blocks it, click "Run anyway").
 
-**Current Version: v3.1.156** · Local SQLite, zero-config · 2163 tests · 140 API routes · 17 built-in presets · MIT License
+**Current Version: v3.1.159** · Local SQLite, zero-config · 2163 tests · 140 API routes · 17 built-in presets · MIT License
 
 ---
 
@@ -140,11 +140,11 @@ Chapter generation, book dissection, and character/lore management write into a 
 
 > Don't want to install Node or touch the terminal? Grab the desktop build and double-click to launch.
 
-- **Download**: [GitHub Releases · v3.1.156](https://github.com/huanweide/novel-smith/releases/tag/v3.1.156)
+- **Download**: [GitHub Releases · v3.1.159](https://github.com/huanweide/novel-smith/releases/tag/v3.1.159)
 - Pick one of three packages:
-  - `NovelSmith-3.1.156-setup.exe` (recommended) — NSIS installer; double-click to install, creates desktop / Start Menu shortcuts.
-  - `NovelSmith-3.1.156-portable.exe` — single self-extracting file; runs from a USB drive or by double-click, no registry writes.
-  - `NovelSmith-3.1.156.zip` — extract and run.
+  - `NovelSmith-3.1.159-setup.exe` (recommended) — NSIS installer; double-click to install, creates desktop / Start Menu shortcuts.
+  - `NovelSmith-3.1.159-portable.exe` — single self-extracting file; runs from a USB drive or by double-click, no registry writes.
+  - `NovelSmith-3.1.159.zip` — extract and run.
 - **Blocked by Windows SmartScreen on first run?** That's the normal "unsigned" prompt, not a virus — click "Run anyway".
 - **Seeing an "AI not configured" banner on first open?** Fill in your LLM Key in Settings (⚙️), or set `LLM_API_KEY` in `.env`. It doesn't block opening, nor local writing / book-dissection features that don't need AI.
 - Data lives in a single local SQLite file; back it up by copying that file.
