@@ -148,3 +148,6 @@ e2e-check.mjs               # 手工端到端验证脚本（依赖本机已存�
 e2e-dice.mjs                # 同上
 e2e-auto-table.mjs          # 同上
 node_modules/
+
+# 赞助清理临时备份（勿入库）
+*.sponsorbak
