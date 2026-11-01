@@ -181,9 +181,10 @@ function seedPresets() {
 // —— 自动更新（electron-updater）——
 // 设计要点：
 //  - 模块缺失 / feed 未配置 / 检查失败 都只记 warning，绝不阻塞启动或打开窗口。
-//  - 启动后静默检查（不打断用户）；托盘提供"检查更新"手动入口。
-//  - 发现新版本弹窗询问，确认后才下载；下载完成再提示重启安装。
-//  - feed 默认走 GitHub Releases（依据 appId 推断）；可用环境变量 NS_UPDATE_FEED 覆盖为自托管地址。
+//  - 启动后静默检查（不打断用户）；托盘 + 设置页「检查更新」双入口。
+//  - 后台自动下载（autoDownload=true），退出/重启时自动安装（autoInstallOnAppQuit=true）→ 零点击同步。
+//  - 弹窗一律用无父窗口 dialog，确保任何时序（含窗口未就绪）都能弹出，不再被 `if(!win) return` 吞掉。
+//  - feed 默认走 GitHub Releases（依据 app-update.yml / publish 配置）；可用 NS_UPDATE_FEED 覆盖为自托管地址。
 function setupAutoUpdater() {
   let autoUpdater;
   try {
@@ -200,38 +201,42 @@ function setupAutoUpdater() {
       console.warn("[ns] setFeedURL 失败：", e.message);
     }
   }
-  autoUpdater.autoDownload = false;
+  // 后台自动下载 + 退出时自动安装（零点击同步）
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowDowngrade = false;
 
   autoUpdater.on("update-available", (info) => {
     console.log("[ns] 发现新版本：", info && info.version);
-    if (!win) return;
-    dialog
-      .showMessageBox(win, {
-        type: "info",
-        title: "发现新版本",
-        message: `检测到新版本 v${info && info.version ? info.version : "?"}，是否立即下载并更新？`,
-        buttons: ["现在更新", "稍后"],
-        cancelId: 1,
-      })
-      .then(({ response }) => {
-        if (response === 0) autoUpdater.downloadUpdate();
-      });
+    try {
+      dialog
+        .showMessageBox({
+          type: "info",
+          title: "发现新版本",
+          message: `检测到新版本 v${info && info.version ? info.version : "?"}，正在后台下载，将在你退出或重启应用时自动安装。`,
+          buttons: ["稍后提醒"],
+          cancelId: 0,
+        })
+        .catch(() => {});
+    } catch {}
   });
 
   autoUpdater.on("update-downloaded", () => {
-    if (!win) return;
-    dialog
-      .showMessageBox(win, {
-        type: "info",
-        title: "更新已就绪",
-        message: "新版本已下载完成，重启以应用更新？",
-        buttons: ["重启更新", "稍后"],
-        cancelId: 1,
-      })
-      .then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall();
-      });
+    console.log("[ns] 更新已下载完成，等待重启安装");
+    try {
+      dialog
+        .showMessageBox({
+          type: "info",
+          title: "更新已就绪",
+          message: "新版本已下载完成，重启以应用更新？",
+          buttons: ["重启更新", "稍后"],
+          cancelId: 1,
+        })
+        .then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        })
+        .catch(() => {});
+    } catch {}
   });
 
   autoUpdater.on("update-not-available", () => console.log("[ns] 当前已是最新版本"));
@@ -240,6 +245,34 @@ function setupAutoUpdater() {
   // 启动后静默检查（失败静默忽略）
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
   global.__nsUpdater = autoUpdater;
+  globalThis.__nsUpdater = autoUpdater;
+
+  // 供前端 /api/system/check-update 调用：返回检查结果的 Promise（不阻塞主进程弹窗）
+  globalThis.__nsCheckUpdate = () =>
+    new Promise((resolve) => {
+      let done = false;
+      const cleanup = () => {
+        autoUpdater.removeListener("update-available", onAvail);
+        autoUpdater.removeListener("update-not-available", onNot);
+        autoUpdater.removeListener("error", onErr);
+      };
+      const finish = (r) => {
+        if (!done) {
+          done = true;
+          cleanup();
+          resolve(r);
+        }
+      };
+      const onAvail = (info) => finish({ status: "available", version: (info && info.version) || "?" });
+      const onNot = () => finish({ status: "not-available" });
+      const onErr = (e) => finish({ status: "error", message: (e && e.message) || String(e) });
+      autoUpdater.on("update-available", onAvail);
+      autoUpdater.on("update-not-available", onNot);
+      autoUpdater.on("error", onErr);
+      autoUpdater.checkForUpdates().catch(onErr);
+      // 超时兜底，避免前端一直转圈
+      setTimeout(() => finish({ status: "timeout" }), 15000);
+    });
 }
 
 function createWindow() {

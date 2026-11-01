@@ -1,5 +1,13 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.160 — 2026-11-01
+
+### 自动更新：后台零点击同步 + 设置页「检查更新」按钮
+
+- **后台自动更新（零点击同步）**：`src-electron/main.js` 的 `setupAutoUpdater()` 开启 `autoDownload=true` + `autoInstallOnAppQuit=true`。发现新版本后后台静默下载，在你退出或重启应用时自动安装，无需手动操作。
+- **设置页新增「检查更新」按钮**：`src/app/settings` 增加「系统 · 检查更新」区块，点击即触发检查并回显状态（发现新版本 / 已是最新 / 失败）；后端新增 `src/app/api/system/check-update/route.ts`，通过 `globalThis.__nsCheckUpdate` 调用主进程 electron-updater（Next 服务与主进程同进程，无需 IPC/preload）。
+- **修复更新弹窗被吞**：原 `update-available` / `update-downloaded` 弹窗以 `win` 为父窗口且 `if(!win) return`，在特定时序下不弹出。现改为无父窗口 `dialog.showMessageBox(...)`，任何时序都必弹。
+
 ## v3.1.159 — 2026-11-01
 
 ### 桌面端 DB 查询 503 根因修复（better-sqlite3 ABI 不匹配）
