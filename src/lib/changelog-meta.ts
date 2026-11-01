@@ -32,11 +32,9 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.157";
+export const LATEST_VERSION = "v3.1.158";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "🔧 改动: 桌面版可用性修复收口",
-  "🔧 改动: 修复:裁剪首页装饰光晕横向溢出",
-  "🔧 改动: 修复:dist产物版本一致性断言兜底",
+  "🔧 改动: 修复桌面端首次启动数据库无法自动建表（Prisma 7 需显式 --url）、单实例锁失败静默退出改为弹窗提示、日志路径写死导致无法诊断三类问题",
 ];
