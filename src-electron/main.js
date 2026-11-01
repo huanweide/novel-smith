@@ -10,12 +10,14 @@
 //  7. 优雅退出：先关 HTTP 服务再 quit，避免端口/进程残留。
 // —— 启动日志（最先执行，先于任何 require，确认主进程是否加载）——
 const fs = require("fs");
-const LOG_PATH = "C:\\Users\\Administrator\\ns-app.log";
+const os = require("os");
+const path = require("path");
+// 日志写用户临时目录（%TEMP%），保证在任何机器上都能落地，便于诊断“打不开”
+const LOG_PATH = path.join(os.tmpdir(), "ns-app.log");
 function logf(m) { try { fs.appendFileSync(LOG_PATH, new Date().toISOString() + " " + m + "\n"); } catch {} }
 logf("main.js TOP before requires");
 
 const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog } = require("electron");
-const path = require("path");
 const http = require("http");
 const { spawn } = require("child_process");
 logf("requires (electron/path/http/spawn) ok");
@@ -87,6 +89,13 @@ if (process.env.NS_DIAG) {
 
 // —— 单实例锁 ——
 if (!app.requestSingleInstanceLock()) {
+  // 失败不再静默退出：弹出明确提示，避免用户“双击没反应”却不知原因
+  try {
+    dialog.showErrorBox(
+      "Novel Smith 已在运行",
+      "检测到另一个实例已在运行。\n若界面未显示，请查看系统托盘（右下角）或任务管理器结束“Novel Smith”进程后再启动。"
+    );
+  } catch {}
   app.quit();
   process.exit(0);
 }
@@ -129,7 +138,10 @@ function ensureSchema(userDbPath) {
     }
     const env = { ...process.env, DATABASE_URL: "file:" + userDbPath, ELECTRON_RUN_AS_NODE: "1" };
     let buf = "";
-    const cp = spawn(process.execPath, [prismaCli, "db", "push", "--accept-data-loss"], {
+    // P7 关键修复：Prisma 7 的 `db push` 不再自动读取 DATABASE_URL 环境变量，
+    // 必须在 config 文件声明或显式传 --url，否则首次启动建表必然失败（数据库/表缺失 → 应用开了也读不了数据）。
+    // 这里直接把目标库路径作为 --url 传入，绕过 Prisma 7 的 config-url 解析坑。
+    const cp = spawn(process.execPath, [prismaCli, "db", "push", "--accept-data-loss", "--url=file:" + userDbPath], {
       cwd: appRoot,
       env,
       stdio: ["ignore", "pipe", "pipe"],

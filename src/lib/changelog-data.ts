@@ -27,6 +27,19 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.158",
+    date: "2026-11-01",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "修复桌面端首次启动数据库无法自动建表（Prisma 7 需显式 --url）、单实例锁失败静默退出改为弹窗提示、日志路径写死导致无法诊断三类问题",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.157",
     date: "2026-10-31",
     title: "🔧 改动",
