@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.162 — 2026-11-01
+
+### 紧急修复：安装版「数据库未连接：原生模块与运行时不兼容」报错（打包 ABI 真故障）
+
+- **根因（真故障，非误判）**：v3.1.159 起启用的 `npmRebuild:true` 在 `buildFromSource=false` 下，electron-rebuild 会尝试拉取 Electron-v136 预编译包；在代理/网络环境下下载失败或无可匹配包时，**静默 fallback 到系统 Node-ABI(127) 并谎报 finished**。导致 v3.1.159 / 3.1.160 / 3.1.161 三个版本的打包产物里 `better-sqlite3` 实际都是 Node-ABI(127)，在 Electron37（ABI 136）运行时 `require` 抛 `ERR_DLOPEN_FAILED` → 所有 DB 查询失败 → 系统自检横幅误报「原生模块（better-sqlite3）与运行时不兼容 / ABI 不匹配」，即用户看到的「点了没反应」。
+- **修复**：`electron-builder.yml` 改为 `npmRebuild:false`，打包时直接拷贝**已预编译好**的 electron-v136 二进制（新增 `npm run rebuild:electron` 前置脚本，用 `prebuild-install --runtime=electron --target=37.10.3` 拉取 ABI-136 预编译）；新增 `npm run rebuild:node` 用于开发环境（系统 Node22/ABI127）回编。打包产物 ABI 已实测为 Electron-ABI(136)，在 Electron37 内可加载并查询真实库。
+- **验证**：解包产物 `release/win-unpacked/resources/app/node_modules/better-sqlite3` 在本机 Node22 下**拒绝加载**（错误含 `NODE_MODULE_VERSION`/136），证明其为 Electron-ABI；用户在已安装版本打开后将不再出现该自检报错。
+- **同步**：`package.json` / `README.md` 版本号对齐至 3.1.162；`safe-build` 版本守卫、`check-dist-version` 门禁均已通过。
+
 ## v3.1.161 — 2026-11-01
 
 ### E2E 端到端审计收口：错误分类与 LLM Key 健壮性
