@@ -65,6 +65,23 @@ let cachedSettings: LLMSettings | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 60_000; // 60 秒
 
+/**
+ * 校验 LLM API Key 是否为合法 ASCII（Latin-1）。
+ *
+ * 否则一旦把它塞进 `Authorization: Bearer <key>` 头，undici 会抛
+ * "Cannot convert argument to a ByteString ... value > 255" 这种天书错误，
+ * 用户完全看不懂。这里提前拦截，给出人话提示。
+ * 典型触发：复制 Key 时多带了中文 / 全角字符 / 不可见字符。
+ */
+export function assertValidApiKey(key: string | undefined | null, source = "设置"): void {
+  if (!key) return;
+  if (!/^[\x00-\xFF]*$/.test(key)) {
+    throw new Error(
+      `LLM API Key 含非法字符（仅支持英文 / 数字，不能含中文或全角符号）——请检查${source}页面填入的 Key 是否多了空格或中文。`,
+    );
+  }
+}
+
 export async function getSettings(): Promise<LLMSettings> {
   const now = Date.now();
   if (cachedSettings && (now - cacheTimestamp) < CACHE_TTL) {
@@ -105,6 +122,8 @@ export async function getSettings(): Promise<LLMSettings> {
         model,
         baseUrl,
       };
+      // key 含中文 / 全角字符会在 fetch 头里炸出天书 ByteString 错误，提前拦截
+      assertValidApiKey(db.llmApiKey, "设置");
       cacheTimestamp = now;
       return cachedSettings;
     }
@@ -127,6 +146,7 @@ export async function getSettings(): Promise<LLMSettings> {
     model: envModel,
     baseUrl: process.env.LLM_BASE_URL || PROVIDER_BASE_URLS[envProvider] || "",
   };
+  assertValidApiKey(envKey, "环境变量 (.env)");
   cacheTimestamp = now;
   return cachedSettings;
 }
