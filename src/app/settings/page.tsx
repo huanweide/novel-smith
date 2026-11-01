@@ -56,6 +56,42 @@ export default function SettingsPage() {
   const [bannedSaved, setBannedSaved] = useState(false);
   const { openHelp: openShortcutHelp, list: listShortcuts } = useShortcutHelp();
 
+  // 检查更新（委托主进程 electron-updater）
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updateType, setUpdateType] = useState<"success" | "error" | "info" | null>(null);
+
+  async function handleCheckUpdate() {
+    setCheckingUpdate(true);
+    setUpdateMsg("正在检查更新…");
+    setUpdateType("info");
+    try {
+      const res = await fetch("/api/system/check-update", { method: "POST" });
+      const data = await res.json();
+      if (data.status === "available") {
+        setUpdateMsg(`发现新版本 v${data.version}，正在后台下载，将在你退出或重启应用时自动安装。`);
+        setUpdateType("info");
+      } else if (data.status === "not-available") {
+        setUpdateMsg("当前已是最新版本。");
+        setUpdateType("success");
+      } else if (data.status === "unavailable") {
+        setUpdateMsg("当前版本未启用自动更新模块，请前往官网下载最新版。");
+        setUpdateType("error");
+      } else if (data.status === "timeout") {
+        setUpdateMsg("检查更新超时，请稍后重试。");
+        setUpdateType("error");
+      } else {
+        setUpdateMsg("检查更新失败：" + (data.message || "未知错误"));
+        setUpdateType("error");
+      }
+    } catch (e: any) {
+      setUpdateMsg("检查更新请求失败：" + (e?.message || e));
+      setUpdateType("error");
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
   useEffect(() => {
     loadSettings();
   }, []);
@@ -274,6 +310,46 @@ export default function SettingsPage() {
               </p>
             </div>
             <ThemeToggle />
+          </div>
+        </section>
+
+        {/* 检查更新 */}
+        <section>
+          <SectionHeader icon="refresh">
+            系统 · 检查更新
+          </SectionHeader>
+          <div className="flex items-center justify-between gap-4 p-4 rounded-2xl surface-elevated">
+            <div>
+              <p className="text-sm text-[var(--nv-text-primary)] font-medium">自动更新</p>
+              <p className="text-xs text-[var(--nv-text-muted)] mt-1">
+                发现新版本后会后台自动下载，在你退出或重启应用时静默安装，无需手动操作。
+              </p>
+              {updateMsg && (
+                <p
+                  className={`text-xs mt-2 ${
+                    updateType === "success"
+                      ? "text-success"
+                      : updateType === "error"
+                      ? "text-danger"
+                      : "text-[var(--nv-text-secondary)]"
+                  }`}
+                >
+                  {updateMsg}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => handleCheckUpdate()}
+              disabled={checkingUpdate}
+              className="shrink-0 px-4 py-2.5 rounded-xl bg-[var(--nv-primary)] text-white text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {checkingUpdate ? (
+                <Icon name="loader" size={14} className="animate-spin" />
+              ) : (
+                <Icon name="refresh" size={14} />
+              )}
+              {checkingUpdate ? "检查中…" : "检查更新"}
+            </button>
           </div>
         </section>
 
