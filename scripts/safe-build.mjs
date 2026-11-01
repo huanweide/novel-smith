@@ -116,7 +116,6 @@ function checkReadmeVersion() {
 
   const checks = [
     { file: "README.md", re: /当前版本：v(\d+\.\d+\.\d+)/ },
-    { file: "README_EN.md", re: /Current Version: v(\d+\.\d+\.\d+)/ },
   ];
 
   let ok = true;

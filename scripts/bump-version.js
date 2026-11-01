@@ -17,7 +17,7 @@
  *   4. 更新 changelog-meta.ts 的 LATEST_VERSION
  *   5. 更新 changelog-meta.ts 的 CHANGELOG_BRIEF
  *   6. 写入文件
- *   7. 同步 README.md / README_EN.md 顶部的「当前版本」行（防版本漂移）
+ *   7. 同步 README.md 顶部的「当前版本」行（防版本漂移）
  *
  * 注意：package.json 的 version 与 CHANGELOG.md 条目仍需手动同步（本脚本不碰）。
  */
@@ -188,10 +188,11 @@ function generateBrief(sections) {
 
 // ─── 同步 README 版本行（根治版本漂移）──────────────────────
 //
-// 背景：此前 bump 只改 changelog-data.ts，README.md / README_EN.md 的版本号
-// 长期停在旧版本（实测 README 停在 v3.1.60、英文停在 v3.1.57，而实际已 v3.1.92），
+// 背景：此前 bump 只改 changelog-data.ts，README.md 的版本号
+// 长期停在旧版本（实测 README 停在 v3.1.60，而实际已 v3.1.92），
 // 访客第一眼看到"落后几十个版本"直接损害可信度与 Star 意愿。
 // 现在把 README 版本行同步纳入 bump 流程，从流程上杜绝复发。
+// 注：项目受众为中文用户，仅保留中文 README，不再维护英文版（避免双份同步漂移）。
 
 function syncReadmeVersion(newVersion) {
   const targets = [
@@ -199,11 +200,6 @@ function syncReadmeVersion(newVersion) {
       file: path.join(__dirname, "..", "README.md"),
       re: /\*\*当前版本：v[\d.]+\*\*/,
       replace: `**当前版本：${newVersion}**`,
-    },
-    {
-      file: path.join(__dirname, "..", "README_EN.md"),
-      re: /\*\*Current Version: v[\d.]+\*\*/,
-      replace: `**Current Version: ${newVersion}**`,
     },
   ];
 
@@ -282,7 +278,7 @@ const newData = insertVersionsEntry(dataContent, newEntry);
 fs.writeFileSync(META_PATH, newMeta, "utf-8");
 fs.writeFileSync(DATA_PATH, newData, "utf-8");
 
-// 同步 README / README_EN 顶部的「当前版本」行（防版本漂移复发）
+// 同步 README 顶部的「当前版本」行（防版本漂移复发）
 const { synced, skipped } = syncReadmeVersion(newVersion);
 
 // ─── 输出 ─────────────────────────────────────────────────────

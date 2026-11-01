@@ -1,5 +1,30 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.159 — 2026-11-01
+
+### 桌面端 DB 查询 503 根因修复（better-sqlite3 ABI 不匹配）
+
+- **修复（根因）：原生模块 better-sqlite3 的 ABI 与 Electron 运行时不匹配**。`electron-builder.yml` 此前 `npmRebuild:false`，打包时直接复制了按系统 Node 22（NODE_MODULE_VERSION=127）编译的 `better_sqlite3.node`；而桌面端 Electron 37.10.3 的 NODE_MODULE_VERSION=136，ABI 不匹配 → `require` 抛 `ERR_DLOPEN_FAILED` → `@prisma/adapter-better-sqlite3` 崩 → **所有 DB 查询 503**。现开启 `npmRebuild:true`，让 electron-rebuild 拉取/重编 ABI-136 原生模块（已实测 Electron 37 内可加载并查询真实库）。
+- **修复：错误分类误导**。之前 `api-error.ts` 把 `ERR_DLOPEN_FAILED` 统一误归类为「Prisma 客户端与数据库结构不匹配」，提示用户去重启 dev server / 重新 `prisma generate`（对桌面端无效）。现新增「原生模块加载失败（NATIVE_MODULE_MISMATCH）」精准识别，如实提示「原生模块与运行时不兼容，请更新到官方最新版」。
+- 数据库本身正常：31 张表完整、查询可用，此前「结构不匹配」系原生模块加载失败的误报。
+
+## v3.1.158 — 2026-11-01
+
+### 桌面端「打不开 / 开了用不了」根因修复
+
+- **修复（根因）：首次启动数据库无法自动建表**。Prisma 7 的 `db push` 不再自动读取 `DATABASE_URL` 环境变量，必须在 config 声明或显式传 `--url`；旧代码只设了环境变量，导致 `ensureSchema` 每次都失败、库表从未创建，应用虽能起服务但读不到任何数据（表现为打不开 / 空白 / 报错）。现 `main.js` 的 `ensureSchema` 显式传入 `--url=file:<用户库路径>`，实测 422ms 自建表成功。
+- **修复：单实例锁失败静默退出**。旧逻辑在 `requestSingleInstanceLock()` 失败时直接 `app.quit()`，用户双击无反应却无任何提示。现改为弹窗提示「已在运行 / 检查托盘或结束进程」，便于排查。
+- **修复：日志路径写死 `C:\Users\Administrator\ns-app.log`**。在用户机器上该路径通常不存在、日志无法落地，出问题无法诊断。现改写到用户临时目录 `%TEMP%\ns-app.log`。
+
+## v3.1.157 — 2026-10-31
+
+### 桌面版可用性修复收口
+
+- 修复：裁剪首页装饰光晕（`.nf-spark` 加 `overflow:hidden`），消除整页横向滚动（违反无横向滚动要求）
+- 修复：`dist` 脚本接入版本一致性断言（`scripts/check-dist-version.mjs`），产物文件名须含 `package.json.version` 且生成 `latest.yml`
+- 修复：移除英文 README 并修正 electron 镜像地址（补结尾斜杠），打通桌面版安装包构建
+- 桌面版全功能验证通过：首启自愈建库 / 核心 CRUD 链路 / AI 真实生成（硅基流动便宜模型）/ 项目自检 / 全 GUI 走查 / epub·docx 导出可打开
+
 ## v3.1.153 — 2026-10-17
 
 ### 「旁边的苏长老沉声道」不再整段漏检

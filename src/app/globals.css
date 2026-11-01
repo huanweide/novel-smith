@@ -1373,6 +1373,9 @@
 /* 玻璃卡 + 题材色光晕，复用 genrewall 的 elevation / 光晕语言，回应「不要滤纸、靠 elevation 出层次」 */
 .nf-spark {
   position: relative;
+  /* R3 修复：装饰光晕 .nf-spark-aura 用 right:-8% 溢出右边界导致整页横向滚动，
+     在此裁剪装饰层（不影响卡片内容与交互），消除横向溢出 */
+  overflow: hidden;
   border-radius: 24px;
   padding: 1px;
   background: linear-gradient(155deg, color-mix(in oklch, var(--spine, var(--nv-primary)) 24%, transparent), transparent 60%);

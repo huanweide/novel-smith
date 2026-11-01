@@ -27,6 +27,50 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.158",
+    date: "2026-11-01",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "修复桌面端首次启动数据库无法自动建表（Prisma 7 需显式 --url）、单实例锁失败静默退出改为弹窗提示、日志路径写死导致无法诊断三类问题",
+        ],
+      },
+    ],
+  },
+  {
+    version: "v3.1.157",
+    date: "2026-10-31",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "桌面版可用性修复收口",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:裁剪首页装饰光晕横向溢出",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:dist产物版本一致性断言兜底",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:移除英文README并修正electron镜像打通打包",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.153",
     date: "2026-10-17",
     title: "「旁边的苏长老沉声道」不再整段漏检",
