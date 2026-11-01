@@ -2,16 +2,16 @@ appId: com.novelsmith.app
 productName: Novel Smith
 # electron-builder 要求精确版本（不能用 ^37.0.0 范围），否则无法下载对应运行时
 electronVersion: 37.10.3
-# 关键修复（v3.1.159）：原生模块 better-sqlite3 必须为 Electron 重编。
-# 根因：之前 npmRebuild:false，打包时直接复制了 npm install 按系统 Node 22（NODE_MODULE_VERSION=127）
-# 编出的 better_sqlite3.node；而 Electron 37.10.3 的 NODE_MODULE_VERSION=136（已用 exe -e 确认），
-# ABI 不匹配 → 运行时 require 抛 ERR_DLOPEN_FAILED → @prisma/adapter-better-sqlite3 崩 → 所有 DB 查询 503，
-# 被 api-error.ts 误归类为「Prisma 客户端与数据库结构不匹配」（实为原生模块加载失败，与 schema 无关）。
-# 修复：开启 npmRebuild，让 electron-rebuild 用 Electron 37 头文件重编/拉取 ABI-136 的 better-sqlite3。
-# 注意：Electron 37 = NODE_MODULE_VERSION 136，与系统 Node 22 的 127 不通用，切勿回退为 false。
-# 不设 buildDependenciesFromSource（保持默认 false）：本机无 Python<3.12，源码编译会失败；
-# 保持 false 时 electron-rebuild 直接拉取 GitHub 上现成的 electron-v136 预编译包（已验证可加载并查询成功）。
-npmRebuild: true
+# 关键修复（v3.1.162）：原生模块 better-sqlite3 必须为 Electron-ABI(136)。
+# ⚠️ 实测教训（v3.1.159/160/161 三版都踩坑）：npmRebuild:true 在 buildFromSource=false 下，
+#   electron-rebuild 会去拉 electron 预编译，下载失败/无匹配包时**静默 fallback 到系统 Node-ABI(127)**
+#   并谎报 finished，导致打包产物在 Electron37 里 ERR_DLOPEN_FAILED → 所有 DB 查询 503 →
+#   系统自检横幅误报「原生模块与运行时不兼容」。这是真故障，不是误判。
+# 修复：改为 npmRebuild:false，打包时直接拷贝**已预编好**的 electron-v136 二进制。
+# 前置步骤（必须）：打包前执行 `npm run rebuild:electron`（prebuild-install --runtime=electron --target=37.10.3），
+#   把源 node_modules/better-sqlite3 预编为 electron-v136。否则打包会带入 Node-ABI(127) 的坏二进制。
+# 开发环境（npm run dev / next start）跑在系统 Node22(127)，需另用 `npm rebuild better-sqlite3` 编回 127。
+npmRebuild: false
 directories:
   output: release
   buildResources: assets

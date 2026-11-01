@@ -1,6 +1,6 @@
 {
   "name": "novel-smith",
-  "version": "3.1.161",
+  "version": "3.1.162",
   "private": true,
   "main": "src-electron/main.js",
   "scripts": {
@@ -19,7 +19,9 @@
     "import:corpus": "tsx scripts/import-corpus.ts",
     "test:coverage": "vitest run --coverage",
     "db:migrate-json": "node scripts/migrate-json-fields.mjs",
-    "dist": "npm run build && node scripts/deref-prisma-symlinks.mjs && electron-builder --win && node scripts/check-dist-version.mjs"
+    "dist": "npm run build && node scripts/deref-prisma-symlinks.mjs && electron-builder --win && node scripts/check-dist-version.mjs",
+    "rebuild:electron": "npx prebuild-install --runtime=electron --target=37.10.3 --arch=x64 --platform=win32",
+    "rebuild:node": "npx electron-rebuild -f -w better-sqlite3"
   },
   "engines": {
     "node": ">=20"
