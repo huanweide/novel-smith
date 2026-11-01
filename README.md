@@ -48,12 +48,12 @@
 
   &nbsp;·&nbsp;
 
-  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.157"><b>💻 桌面版下载即用（双击开）</b></a>
+  <a href="https://github.com/huanweide/novel-smith/releases/tag/v3.1.158"><b>💻 桌面版下载即用（双击开）</b></a>
 
 </p>
 
 
-> ⚡ **不想装 Node / 不想敲命令？** 直接下桌面版，双击就开 → [GitHub Releases · v3.1.157](https://github.com/huanweide/novel-smith/releases/tag/v3.1.157)（无代码签名，首次被 Windows SmartScreen 拦，点「仍要运行」即可）
+> ⚡ **不想装 Node / 不想敲命令？** 直接下桌面版，双击就开 → [GitHub Releases · v3.1.158](https://github.com/huanweide/novel-smith/releases/tag/v3.1.158)（无代码签名，首次被 Windows SmartScreen 拦，点「仍要运行」即可）
 
 
 ## ✨ 核心能力（一句话说清它能干嘛）
@@ -339,12 +339,16 @@ Novel Smith 把这些「记不住的活」交给工程台自动管，你只管�
 
 > 不想装 Node、不想敲命令？直接下桌面版，双击就开。
 
-- **下载地址**：[GitHub Releases · v3.1.157](https://github.com/huanweide/novel-smith/releases/tag/v3.1.157)
+- **下载地址**：[GitHub Releases · v3.1.158](https://github.com/huanweide/novel-smith/releases/tag/v3.1.158)
 - 三个包，按习惯挑一个：
-  - `NovelSmith-3.1.156-setup.exe`（推荐）— NSIS 安装包，双击安装、可建桌面/开始菜单快捷方式。
-  - `NovelSmith-3.1.156-portable.exe` — 单文件自解压，U 盘 / 直接双击即跑，不写注册表。
-  - `NovelSmith-3.1.156.zip` — 解压即用。
+  - `NovelSmith-3.1.158-setup.exe`（推荐）— NSIS 安装包，双击安装、可建桌面/开始菜单快捷方式。
+  - `NovelSmith-3.1.158-portable.exe` — 单文件自解压，U 盘 / 直接双击即跑，不写注册表。
+  - `NovelSmith-3.1.158.zip` — 解压即用。
 - **首次运行被 Windows SmartScreen 拦？** 这是正常的「未代码签名」提示，不是病毒，点「仍要运行」即可。
+- **便携版（portable.exe）双击没反应 / 打不开？** 多数情况是上一次没真正退出，进程还占着单实例锁：
+  1. 打开任务管理器 → 结束所有 `Novel Smith` / `NovelSmith` 进程，再双击；
+  2. 若仍不行，**优先用 `NovelSmith-3.1.158.zip`**：解压一次、直接双击里面的 `Novel Smith.exe` 即可，最稳（不依赖每次自解压到临时目录）；
+  3. 真有问题看日志：`%TEMP%\ns-app.log`（v3.1.158 起日志已写到这个路径，旧版写死在 `C:\Users\Administrator\` 在多数人机器上根本写不出）。
 - **首次打开顶部提示「AI 未配置」？** 去设置页（⚙️）填 LLM Key，或在 `.env` 设 `LLM_API_KEY`。不影响打开，也不影响本地写作 / 拆书等不依赖 AI 的功能。
 - 数据落在本地单一 SQLite 文件，备份 = 复制那个文件。
 
