@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { safeJoin } from "@/lib/utils";
 import { getActiveRules, injectRules } from "@/core/rules";
-import { getSettings, recordLlmCall } from "@/lib/llm";
+import { getSettings, recordLlmCall, assertValidApiKey } from "@/lib/llm";
 import { buildProjectOverrides } from "@/core/llm/client";
 import { safeParseAIJson } from "@/lib/json-parser";
 
@@ -127,6 +127,8 @@ export async function POST(request: Request) {
     const projOverride = buildProjectOverrides(llmConfig);
     const baseURL = projOverride.baseURL || settings.baseUrl;
     const apiKey = projOverride.apiKey || settings.apiKey;
+    // key 含中文 / 全角字符会在 fetch 头里炸出天书 ByteString 错误，提前拦截
+    assertValidApiKey(apiKey, "设置");
     const model = typeof llmConfig.model === "string" && llmConfig.model.trim() ? llmConfig.model : settings.model;
     const hasCustomPrompt = customPrompt && customPrompt.trim().length > 0;
 

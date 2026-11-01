@@ -8,7 +8,7 @@
  *    用户设置页改什么模型，所有 API 调用即时生效。
  */
 
-import { getSettings, mapLLMError, recordLlmCall } from "@/lib/llm";
+import { getSettings, mapLLMError, recordLlmCall, assertValidApiKey } from "@/lib/llm";
 import type { LLMConfig, FallbackModel } from "@/core/types";
 
 // ─── LLM 请求超时（BE-8：统一散落的三档为单常量）────────────
@@ -632,7 +632,11 @@ export function buildProjectOverrides(
   const baseURL = projectLlmConfig.baseUrl;
   if (typeof baseURL === "string" && baseURL.trim()) o.baseURL = baseURL.trim();
   const apiKey = projectLlmConfig.apiKey;
-  if (typeof apiKey === "string" && apiKey.trim()) o.apiKey = apiKey.trim();
+  if (typeof apiKey === "string" && apiKey.trim()) {
+    // key 含中文 / 全角字符会在 fetch 头里炸出天书 ByteString 错误，提前拦截
+    assertValidApiKey(apiKey.trim(), "项目设置");
+    o.apiKey = apiKey.trim();
+  }
   if (typeof projectLlmConfig.temperature === "number") o.defaultTemperature = projectLlmConfig.temperature;
   if (typeof projectLlmConfig.topP === "number") o.defaultTopP = projectLlmConfig.topP;
   return o;

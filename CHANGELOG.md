@@ -1,5 +1,13 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.161 — 2026-11-01
+
+### E2E 端到端审计收口：错误分类与 LLM Key 健壮性
+
+- **修复：业务错误被误报为「服务器内部错误」(500)**。`api-error.ts` 的 `classifyError` 此前把路由显式抛出的中文业务提示（如 `jsonError("项目不存在")`、`jsonError("缺少项目ID")`，全代码库 17 处）一律归入默认分支，返回 500「服务器内部错误，请查看日志」并吞掉原消息。现新增业务消息分支：含「不存在/未找到/无权访问」→ 404，其余→400，并原样透传文案。E2E 实测 `PATCH /api/projects/[id]/build-config`（项目不存在）现已正确返回 404「项目不存在」。
+- **修复：LLM API Key 含中文/全角字符时炸出天书错误**。`generate/outline` 等接口把 Key 直接塞进 `Authorization` 头，若 Key 含非 ASCII 字符（如复制时多带中文），undici 会抛 `Cannot convert argument to a ByteString ... value > 255`，用户完全看不懂。现新增 `assertValidApiKey` 校验，Key 非法时提前返回清晰提示「LLM API Key 含非法字符（仅支持英文/数字）……请检查设置页填入的 Key 是否多了空格或中文」。已在 `getSettings`（DB/环境变量两路）、`buildProjectOverrides`（项目级覆盖）、`generate/outline` 直连 fetch 三处统一拦截。
+- **端到端审计**：180 个路由探针 + 8 个页面冒烟全绿。所有 DB 读接口（项目/角色/故事线/统计监控等）与页面在真实项目数据下均返回 200；无真实功能故障。此前阻塞全站 DB 查询的 `better-sqlite3` ABI 问题（v3.1.159 已修复）在本环境因 `npmRebuild` 原地改写遗留为 Electron-ABI，已重编回本地 Node-ABI 使 dev/standalone server 恢复可用（不影响正式 Electron app 的打包重编）。
+
 ## v3.1.160 — 2026-11-01
 
 ### 自动更新：后台零点击同步 + 设置页「检查更新」按钮

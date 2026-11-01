@@ -70,9 +70,38 @@ const PRISMA_HINTS: Record<string, { status: number; error: string; hint: string
   },
 };
 
+/**
+ * 业务可读错误（路由显式抛出的中文提示，如「项目不存在」「缺少项目ID」）。
+ * 这些不是服务器内部故障，却因过去落入默认分支被误报成「服务器内部错误」+ 500，
+ * 既误导用户、又吞掉真实的「不存在 / 缺少」含义。这里显式归为 4xx 并原样透传文案。
+ */
+function businessError(msg: string): ApiErrorInfo {
+  // 「不存在 / 无权访问」→ 404；「缺少 / 非法 / 须为 / 频率 / 格式 / 必填…」→ 400
+  if (/(不存在|未找到|无权访问|not found)/i.test(msg)) {
+    return { status: 404, code: "BUSINESS", error: msg, hint: "请检查请求参数或目标记录是否存在。" };
+  }
+  return { status: 400, code: "BUSINESS", error: msg, hint: "请检查请求参数是否正确。" };
+}
+
+/**
+ * 判断一条错误消息是否「看起来像业务提示」而非内部堆栈 / SQL / 框架异常。
+ * 仅当它不是内部实现痕迹时才允许透传，避免泄露 SQL / 路径 / 堆栈。
+ */
+function looksLikeBusinessMessage(msg: string): boolean {
+  return !/(stack|at .*\(.*:\d+:\d+\)|select |insert |update |delete |prisma|undefined is not|cannot read|is not a function|ECONN|ENOTFOUND|ETIMEDOUT|TypeError|ReferenceError|RangeError)/i.test(
+    msg,
+  );
+}
+
 /** 把任意异常收敛为可读的错误信息 */
 export function classifyError(e: unknown): ApiErrorInfo {
-  const err = e instanceof Error ? e : new Error(typeof e === "string" ? e : "未知错误");
+  // 0) 路由直接传了业务字符串（如 jsonError("项目不存在")）：优先按业务错误处理，
+  // 不让它落到默认 500 分支被吞成「服务器内部错误」。
+  if (typeof e === "string") {
+    return businessError(e);
+  }
+
+  const err = e instanceof Error ? e : new Error("未知错误");
 
   // 1) Prisma 已知错误码
   const code = (err as { code?: string }).code;
@@ -172,7 +201,14 @@ export function classifyError(e: unknown): ApiErrorInfo {
     };
   }
 
-  // 4) 默认：泛化文案（L2-003 修复）
+  // 4) 业务可读错误兜底：若异常消息本身是业务提示（中文、无堆栈/SQL/框架痕迹），
+  // 说明是路由显式抛出的「项目不存在 / 缺少参数」之类，应归为 4xx 而非 500。
+  // 放在默认分支之前，确保这类「可预期错误」不会被误报成服务器内部故障。
+  if (looksLikeBusinessMessage(err.message)) {
+    return businessError(err.message);
+  }
+
+  // 5) 默认：泛化文案（L2-003 修复）
   // 不再把原始 err.message 透传给客户端，避免泄露内部路径/SQL 片段/实现细节；
   // 明细仅留存服务端日志（保留堆栈）供排查。
   console.error("[api-error] 未分类异常:", err);
