@@ -33,12 +33,12 @@ describe("round-22 resolveDiscoveryMergeTarget（自动发现阶段实时别名�
     expect(resolveDiscoveryMergeTarget(["迭戈·美第奇"], "迭戈")).toBeNull();
     expect(resolveDiscoveryMergeTarget(["迭戈"], "迭戈·美第奇")).toBeNull();
   });
-  it("merges single-char abbreviation when a unique same-surname plain exists：樊 + huanweide", () => {
-    expect(resolveDiscoveryMergeTarget(["huanweide"], "樊")).toBe("huanweide");
+  it("merges single-char abbreviation when a unique same-surname plain exists：韩 + 韩立", () => {
+    expect(resolveDiscoveryMergeTarget(["韩立"], "韩")).toBe("韩立");
   });
   it("does NOT merge single-char when no same-surname candidate（避免误建变体主卡）", () => {
-    expect(resolveDiscoveryMergeTarget([], "樊")).toBeNull();
-    expect(resolveDiscoveryMergeTarget(["叶凌云"], "樊")).toBeNull();
+    expect(resolveDiscoveryMergeTarget([], "韩")).toBeNull();
+    expect(resolveDiscoveryMergeTarget(["叶凌云"], "韩")).toBeNull();
   });
   it("plain names do not route through this function", () => {
     expect(resolveDiscoveryMergeTarget(["韩立"], "韩雪")).toBeNull();
