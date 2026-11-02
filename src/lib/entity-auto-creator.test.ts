@@ -59,8 +59,8 @@ describe("resolveVariantTarget（合并重复判定分支的规范入口，v2.0.
   it("尊称变体并入唯一同姓正主（韩先生→韩立）", () => {
     expect(resolveVariantTarget(["韩立"], "韩先生")).toBe("韩立");
   });
-  it("单字缩写并入唯一同姓正主（樊→huanweide）——覆盖 resolveHonorificTarget 不处理单字缩写的旧缺口", () => {
-    expect(resolveVariantTarget(["huanweide"], "樊")).toBe("huanweide");
+  it("单字缩写并入唯一同姓正主（韩→韩立）——覆盖 resolveHonorificTarget 不处理单字缩写的旧缺口", () => {
+    expect(resolveVariantTarget(["韩立"], "韩")).toBe("韩立");
   });
   it("姓+描述词并入唯一同姓正主（韩姓男子→韩立）", () => {
     expect(resolveVariantTarget(["韩立"], "韩姓男子")).toBe("韩立");
@@ -68,8 +68,8 @@ describe("resolveVariantTarget（合并重复判定分支的规范入口，v2.0.
   it("同姓正主不唯一：拒绝合并（韩先生 遇 韩立+韩雪 → null）", () => {
     expect(resolveVariantTarget(["韩立", "韩雪"], "韩先生")).toBeNull();
   });
-  it("单字缩写同姓正主不唯一：拒绝合并（樊 遇 huanweide+樊雪 → null）", () => {
-    expect(resolveVariantTarget(["huanweide", "樊雪"], "樊")).toBeNull();
+  it("单字缩写同姓正主不唯一：拒绝合并（韩 遇 韩立+韩雪 → null）", () => {
+    expect(resolveVariantTarget(["韩立", "韩雪"], "韩")).toBeNull();
   });
   it("自身已是正主则无目标（huanweide 非变体）", () => {
     expect(resolveVariantTarget(["huanweide"], "huanweide")).toBeNull();

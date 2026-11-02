@@ -84,23 +84,21 @@ function businessError(msg: string): ApiErrorInfo {
 }
 
 /**
- * 判断一条错误消息是否「看起来像业务提示」而非内部堆栈 / SQL / 框架异常。
- * 仅当它不是内部实现痕迹时才允许透传，避免泄露 SQL / 路径 / 堆栈。
+ * 判断一条错误消息是否为「业务可读错误」——即路由显式抛出的、用户可操作的中文
+ * 校验/存在性提示（如「项目不存在」「缺少项目ID」「参数非法」）。
+ *
+ * 必须用【正向关键词】匹配，而绝不能用「排除内部痕迹」的负向匹配：负向匹配会把
+ * 任何不含堆栈/SQL 的普通英文异常（如 "something failed"、"no such table"）也误判成
+ * 业务错误 → 400，从而击穿默认 500 分支、吞掉内部错误的正确归类（见 L2-003 修复）。
  */
-function looksLikeBusinessMessage(msg: string): boolean {
-  return !/(stack|at .*\(.*:\d+:\d+\)|select |insert |update |delete |prisma|undefined is not|cannot read|is not a function|ECONN|ENOTFOUND|ETIMEDOUT|TypeError|ReferenceError|RangeError)/i.test(
+function isBusinessMessage(msg: string): boolean {
+  return /(不存在|未找到|没有找到|缺少|缺失|未提供|未填写|必填|非法|无效|不合法|格式(错误|不符|不对)|须为|不得|不允许|已存在|重复|冲突|超出|已达|上限|已满|权限不足|无权(访问|操作)|拒绝访问|已过期|不匹配|不正确|参数(错误|缺失|不对))/i.test(
     msg,
   );
 }
 
 /** 把任意异常收敛为可读的错误信息 */
 export function classifyError(e: unknown): ApiErrorInfo {
-  // 0) 路由直接传了业务字符串（如 jsonError("项目不存在")）：优先按业务错误处理，
-  // 不让它落到默认 500 分支被吞成「服务器内部错误」。
-  if (typeof e === "string") {
-    return businessError(e);
-  }
-
   const err = e instanceof Error ? e : new Error("未知错误");
 
   // 1) Prisma 已知错误码
@@ -201,10 +199,11 @@ export function classifyError(e: unknown): ApiErrorInfo {
     };
   }
 
-  // 4) 业务可读错误兜底：若异常消息本身是业务提示（中文、无堆栈/SQL/框架痕迹），
-  // 说明是路由显式抛出的「项目不存在 / 缺少参数」之类，应归为 4xx 而非 500。
-  // 放在默认分支之前，确保这类「可预期错误」不会被误报成服务器内部故障。
-  if (looksLikeBusinessMessage(err.message)) {
+  // 4) 业务可读错误兜底：仅当消息明确为业务/校验提示（含中文业务关键词）时才归 4xx，
+  // 其余一律走默认 500（L2-003 不泄露内部信息）。
+  // 必须用正向关键词匹配，否则「排除内部痕迹」的负向判定会把普通英文异常也误判成 400，
+  // 击穿默认 500 分支（这是 3.1.161 回归的根因）。
+  if (isBusinessMessage(err.message)) {
     return businessError(err.message);
   }
 
