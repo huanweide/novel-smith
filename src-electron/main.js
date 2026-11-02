@@ -17,7 +17,7 @@ const LOG_PATH = path.join(os.tmpdir(), "ns-app.log");
 function logf(m) { try { fs.appendFileSync(LOG_PATH, new Date().toISOString() + " " + m + "\n"); } catch {} }
 logf("main.js TOP before requires");
 
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog } = require("electron");
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, clipboard } = require("electron");
 const http = require("http");
 const { spawn } = require("child_process");
 logf("requires (electron/path/http/spawn) ok");
@@ -294,6 +294,33 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // 桌面端右键上下文菜单（P7 · round-8）：剪切/复制/粘贴/全选/复制链接/复制图片
+  win.webContents.on("context-menu", (event, params) => {
+    const { selectionText, isEditable, linkURL, mediaType, x, y } = params;
+    const hasSelection = !!selectionText && selectionText.length > 0;
+    // 守卫：无任何可操作内容则不弹菜单，避免与 ThemeToggle 右击循环主题等内建行为冲突
+    if (!hasSelection && !isEditable && !linkURL && mediaType === "none") return;
+    const items = [];
+    const sep = () => { if (items.length && items[items.length - 1].type !== "separator") items.push({ type: "separator" }); };
+    if (isEditable) {
+      items.push({ label: "剪切", role: "cut" }, { label: "复制", role: "copy" }, { label: "粘贴", role: "paste" });
+      sep();
+    } else if (hasSelection) {
+      items.push({ label: "复制", role: "copy" });
+      sep();
+    }
+    if (linkURL) {
+      items.push({ label: "复制链接地址", click: () => clipboard.writeText(linkURL) });
+      sep();
+    }
+    if (mediaType === "image") {
+      items.push({ label: "复制图片", click: () => win.webContents.copyImageAt(x, y) });
+      sep();
+    }
+    items.push({ label: "全选", role: "selectAll" });
+    Menu.buildFromTemplate(items).popup({ window: win, x, y });
   });
 
   win.loadURL(`http://127.0.0.1:${PORT}`);

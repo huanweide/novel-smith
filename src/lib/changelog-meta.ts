@@ -32,9 +32,11 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.158";
+export const LATEST_VERSION = "v3.1.163";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "🔧 改动: 修复桌面端首次启动数据库无法自动建表（Prisma 7 需显式 --url）、单实例锁失败静默退出改为弹窗提示、日志路径写死导致无法诊断三类问题",
+  "🔧 改动: 桌面端右键上下文菜单",
+  "🔧 改动: 修复:补全桌面端右键原生上下文菜单(可编辑区剪切复制粘贴、选中复制、链接复制地址、图片复制、全选)",
+  "🔧 改动: 修复:链接/图片项改用显式click处理器规避非法role死项",
 ];

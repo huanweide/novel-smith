@@ -27,6 +27,31 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.163",
+    date: "2026-11-02",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "桌面端右键上下文菜单",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:补全桌面端右键原生上下文菜单(可编辑区剪切复制粘贴、选中复制、链接复制地址、图片复制、全选)",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:链接/图片项改用显式click处理器规避非法role死项",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.158",
     date: "2026-11-01",
     title: "🔧 改动",
