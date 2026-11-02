@@ -1,5 +1,13 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.163 — 2026-11-02
+
+### 桌面端右键上下文菜单（P7 · round-8 修复）
+
+- **新增**：桌面端右键原生上下文菜单，覆盖可编辑区（剪切/复制/粘贴）、选中文本（复制）、链接（复制链接地址）、图片（复制图片）、全选；无内容时不弹菜单避免误触。
+- **修复**：链接/图片项改用显式 `click` 处理器（`clipboard.writeText` / `webContents.copyImageAt`），规避 `copyLink`/`copyImage` 非合法 `role` 导致的死项（菜单项显示但点击无反应）。
+- 改动限定 `src-electron/main.js` 一处，未引入新依赖；`electron-builder.yml` 维持 `npmRebuild:false`（better-sqlite3 12.x 为 N-API 模块，ABI 稳定直拷）。
+
 ## v3.1.162 — 2026-11-01
 
 ### 紧急修复：安装版「数据库未连接：原生模块与运行时不兼容」报错（打包 ABI 真故障）
