@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.164",
+    date: "2026-11-03",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "设置页优化(round 9)",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:切换LLM提供商时Base URL闭包残留导致模型列表检索打错地址(P1)",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "修复:切换提供商时清理不匹配的脏模型ID",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "优化:Agent助手模式toggle补role=switch/aria-checked/a11y(P2-a)",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.163",
     date: "2026-11-02",
     title: "🔧 改动",
