@@ -161,16 +161,28 @@ export default function SettingsPage() {
   function handleProviderChange(key: string) {
     setProvider(key);
     const def = PROVIDERS.find((p) => p.key === key);
-    if (def?.defaultModel && !model) setModel(def.defaultModel);
+    // 切换 provider 时，若用户尚未手动填写模型则填入该 provider 默认模型；
+    // 若已填（来自上一 provider 的模型 ID），清空避免把不匹配的模型保存到库里污染新 provider。
+    if (def?.defaultModel && !model) {
+      setModel(def.defaultModel);
+    } else if (model && model !== def?.defaultModel) {
+      setModel("");
+    }
     // 预设 provider（非 custom/local）不显示 Base URL 框，强制使用代码默认值：
-    // 切换时清空残留 baseUrl，避免从 custom 模式残留的错误 URL 被保存进库污染预设 provider。
+    // 同步计算 nextBaseUrl（不依赖异步 setState 后的闭包），切到预设时传空，
+    // 避免从 custom 模式残留的错误 URL 泄漏给 /api/settings/models 拼错地址。
+    let nextBaseUrl = "";
     if (key === "custom" || key === "local") {
       if (def?.defaultBaseUrl && !baseUrl) setBaseUrl(def.defaultBaseUrl);
+      nextBaseUrl = baseUrl || def?.defaultBaseUrl || "";
     } else {
       setBaseUrl("");
+      nextBaseUrl = "";
     }
     setTestResult(null);
-    if (key !== "local" && (apiKey.trim() || hasExistingKey)) fetchModels({ provider: key });
+    if (key !== "local" && (apiKey.trim() || hasExistingKey)) {
+      fetchModels({ provider: key, baseUrl: nextBaseUrl });
+    }
   }
 
   async function handleTest(keyArg?: string) {
@@ -613,6 +625,10 @@ export default function SettingsPage() {
               开启「可操作」时墨灵可修改项目数据；改为「只读」后仅查信息、不写任何数据，速度更快。
             </p>
             <button
+              type="button"
+              role="switch"
+              aria-checked={agentOperate}
+              aria-label={agentOperate ? "墨灵 Agent 当前为可操作模式，点击切换为只读" : "墨灵 Agent 当前为只读模式，点击切换为可操作"}
               onClick={() => {
                 const next = agentOperate ? "readonly" : "operate";
                 try { localStorage.setItem("nf-agent-mode", next); } catch { /* ignore */ }

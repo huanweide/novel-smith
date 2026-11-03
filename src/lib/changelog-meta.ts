@@ -32,11 +32,11 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.163";
+export const LATEST_VERSION = "v3.1.164";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "🔧 改动: 桌面端右键上下文菜单",
-  "🔧 改动: 修复:补全桌面端右键原生上下文菜单(可编辑区剪切复制粘贴、选中复制、链接复制地址、图片复制、全选)",
-  "🔧 改动: 修复:链接/图片项改用显式click处理器规避非法role死项",
+  "🔧 改动: 设置页优化(round 9)",
+  "🔧 改动: 修复:切换LLM提供商时Base URL闭包残留导致模型列表检索打错地址(P1)",
+  "🔧 改动: 修复:切换提供商时清理不匹配的脏模型ID",
 ];

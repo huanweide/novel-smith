@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.164 — 2026-11-03
+
+### 设置页体验优化（round-9 验证修复）
+
+- **修复（P1）**：切换 LLM 提供商时 `setBaseUrl` 为异步，旧 Base URL 闭包残留导致模型列表检索请求打错地址；改为同步计算 `nextBaseUrl` 显式传参，从 custom 切回预设不再带残留 URL。
+- **修复**：切换提供商时若已填模型不匹配新提供商，自动清空避免脏模型 ID 落库。
+- **优化（P2-a）**：Agent 助手模式（墨灵）开关补 `role="switch"` + `aria-checked` + `aria-label`，成为语义正确的无障碍开关。
+- 改动限定 `src/app/settings/page.tsx`，未引入新依赖；自动更新通道（GitHub Releases）保持强制开启。
+
 ## v3.1.163 — 2026-11-02
 
 ### 桌面端右键上下文菜单（P7 · round-8 修复）
