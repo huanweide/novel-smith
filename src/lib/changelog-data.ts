@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.165",
+    date: "2026-11-04",
+    title: "🔧 改动",
+    sections: [
+      {
+        label: "🔧 改动",
+        items: [
+          "依赖大版本升级:TypeScript 5→7 / ESLint 9→10 / jest-dom 6→7",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "8 个依赖升级 PR 全部通过 CI 门禁(tsc+vitest+build)后合入",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "GitHub Actions 全套 major 升级(deploy-pages/upload-pages-artifact/configure-pages)",
+        ],
+      },
+      {
+        label: "🔧 改动",
+        items: [
+          "功能零变化,工程基座现代化,为后续迭代提速",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.164",
     date: "2026-11-03",
     title: "🔧 改动",
