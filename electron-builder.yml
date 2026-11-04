@@ -47,11 +47,13 @@ electronDownload:
   # 改用 npmmirror 二进制镜像，国内拉取更稳；末尾 / 不可省。
   mirror: https://registry.npmmirror.com/-/binary/electron/
 win:
-  target: [nsis, portable, zip]
+  # 只出 nsis 安装包。electron-updater 的 latest.yml 只记录 setup.exe，
+  # portable / zip 没有固定安装目录，下载后无法自动更新（官方 Target 表把 portable 标为 Manual）。
+  # Release 不再上传便携版，保证用户从 GitHub 拿到的版本一定具备自动更新能力。
+  target: [nsis]
   icon: assets/icon.ico
   # 文件名用无空格 slug，保证 latest.yml 记录的更新地址与实际文件一致（否则自动更新会下载 404）
   artifactName: NovelSmith-${version}.${ext}
-  # 三种形态全给：① nsis 安装包（需代理下 NSIS 工具链，见 electronDownload）② portable 自解压单文件（双击即跑）③ zip 解压版
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
