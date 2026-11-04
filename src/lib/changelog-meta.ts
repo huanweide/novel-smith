@@ -32,11 +32,11 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.164";
+export const LATEST_VERSION = "v3.1.165";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "🔧 改动: 设置页优化(round 9)",
-  "🔧 改动: 修复:切换LLM提供商时Base URL闭包残留导致模型列表检索打错地址(P1)",
-  "🔧 改动: 修复:切换提供商时清理不匹配的脏模型ID",
+  "🔧 改动: 依赖大版本升级:TypeScript 5→7 / ESLint 9→10 / jest-dom 6→7",
+  "🔧 改动: 8 个依赖升级 PR 全部通过 CI 门禁(tsc+vitest+build)后合入",
+  "🔧 改动: 功能零变化,工程基座现代化,为后续迭代提速",
 ];

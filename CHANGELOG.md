@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.165 — 2026-11-04
+
+### 依赖大版本升级（门禁全绿验证）
+
+- **TypeScript 5.9 → 7.0**：编译器跨两个大版本，本地与 CI 双向验证 `tsc` 零错误、2153 个测试全绿后合入。
+- **ESLint 9 → 10**、**@testing-library/jest-dom 6 → 7**：lint 与测试基座同步现代化。
+- **GitHub Actions 全套 major 升级**（deploy-pages 4→5、upload-pages-artifact 3→5、configure-pages 5→6、setup-python 5→7、action-gh-release 2→3）：CI/发布链路保持最新。
+- 功能零变化，纯工程基座维护版本；自动更新通道（GitHub Releases）保持强制开启。
+
 ## v3.1.164 — 2026-11-03
 
 ### 设置页体验优化（round-9 验证修复）
