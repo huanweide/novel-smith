@@ -6,7 +6,8 @@
  * 发布出一个文件名版本与实际不符的包，在 dist 末尾加一道外部判据门禁。
  *
  * 判据（Oracle Gate，纯文件检查，不靠自判）：
- *   1) release/ 下必须存在至少 1 个安装包（portable/setup/zip 其一即可）
+ *   1) release/ 下必须存在 nsis 安装包（-setup.exe）；只出安装版，
+ *      因为 electron-updater 的 latest.yml 只服务安装版，便携版无法自动更新。
  *   2) 每个安装包文件名必须包含 package.json.version
  *   3) 必须存在 latest.yml（electron-updater 的版本清单）
  */
@@ -29,13 +30,15 @@ if (!existsSync(releaseDir)) {
 }
 
 const files = readdirSync(releaseDir);
-// 安装包：三种形态的产物文件名（不含 blockmap / yml / 符号链接）
-const installers = files.filter((f) => /^NovelSmith-.*\.(exe|zip)$/i.test(f));
+// 只认 nsis 安装包：portable / zip 没有固定安装目录，无法被 electron-updater 更新，
+// 发布到 GitHub Releases 会让用户下到一份永远收不到自动更新的版本。
+const installers = files.filter((f) => /^NovelSmith-.*-setup\.exe$/i.test(f));
+const portableLeftovers = files.filter((f) => /^NovelSmith-.*(-portable\.exe|\.zip)$/i.test(f));
 const latestYml = files.filter((f) => /^latest.*\.yml$/i.test(f));
 
 const errors = [];
 if (installers.length === 0) {
-  errors.push(`未找到任何安装包（期望 NovelSmith-*.exe / NovelSmith-*.zip），release 内容：${files.join(", ")}`);
+  errors.push(`未找到 nsis 安装包（期望 NovelSmith-<version>-setup.exe），release 内容：${files.join(", ")}`);
 }
 for (const f of installers) {
   if (!f.includes(version)) {
@@ -56,4 +59,8 @@ console.log(
   `[check-dist-version] OK：version=v${version}，安装包 ${installers.length} 个均含版本号，latest.yml 已生成`,
 );
 console.log("  安装包：" + installers.join(", "));
+if (portableLeftovers.length > 0) {
+  console.warn("[check-dist-version] 注意：release/ 里仍有便携版残留产物，禁止上传到 GitHub Releases：");
+  console.warn("  " + portableLeftovers.join(", "));
+}
 process.exit(0);
