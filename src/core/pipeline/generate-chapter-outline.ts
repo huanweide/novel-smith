@@ -46,6 +46,9 @@ export class OutlineError extends Error {
   constructor(
     public code: "notFound" | "recycled" | "empty" | "llm",
     message: string,
+    /** 原始异常。L2-003 要求不向客户端回显 LLM 原文，但路由层需要它来判定
+     *  「配置错误（Key 未配/非法）」这类用户可操作的错误，故保留在服务端侧。 */
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "OutlineError";
@@ -276,8 +279,11 @@ ${charBriefs}
     outlineText = await completeText(outlineSystem, outlinePrompt, { maxTokens: 4096, temperature: 0.3, json: true });
   } catch (err) {
     // L2-003：章纲生成失败不向客户端回显原始 err.message
+    // 但保留 cause 供路由层分类：配置类错误（Key 未配/非法）必须返回 400 CONFIG，
+    // 否则用户第一次用 AI 写章纲、Key 填错时只会看到「服务器内部错误，请查看日志」，
+    // 误以为服务挂了，而真实动作是去设置页改 Key。
     console.error("[generate/chapter-outline] 章纲生成失败:", err);
-    throw new OutlineError("llm", "服务器内部错误，请查看日志");
+    throw new OutlineError("llm", "服务器内部错误，请查看日志", err);
   }
 
   if (!outlineText || outlineText.length < 10) {

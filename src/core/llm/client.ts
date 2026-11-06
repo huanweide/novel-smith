@@ -237,6 +237,12 @@ async function attemptChat(
       signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
+    // 原始异常必须留痕：TypeError 可能是 fetch failed(带 cause)、JSON 序列化失败、
+    // header 非法等，一律翻译成「网络不可达」会掩盖真因。真机实测：写章 97s 后报错，
+    // 服务端日志一个字都没有，完全无法定位。用户文案保持泛化，明细只进服务端日志。
+    console.error("[llm/client] 非流式 fetch 抛出原始异常:", e instanceof Error
+      ? { name: e.name, message: e.message, cause: (e as { cause?: unknown }).cause }
+      : e);
     if (e instanceof TypeError) {
       return { ok: false, fatal: false, error: new Error(`无法连接 AI 服务：请检查 Base URL（${target.baseURL}）与网络是否可达。`) };
     }
@@ -346,6 +352,10 @@ async function establishStream(
       signal: fetchSignal,
     });
   } catch (e) {
+    // 同非流式：原始异常留痕，避免「网络不可达」掩盖真因（真机写章 97s 失败时零日志）。
+    console.error("[llm/client] 流式 fetch 抛出原始异常:", e instanceof Error
+      ? { name: e.name, message: e.message, cause: (e as { cause?: unknown }).cause }
+      : e);
     if (e instanceof TypeError) {
       return { ok: false, fatal: false, error: new Error(`无法连接 AI 服务：请检查 Base URL（${target.baseURL}）与网络是否可达。`) };
     }

@@ -167,10 +167,20 @@ export const VolumeGroup = memo(function VolumeGroup({
         aria-expanded={!collapsed}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
-        className="flex items-center gap-1.5 py-1.5 px-2 rounded cursor-pointer text-xs bg-[var(--nv-accent-soft)] border border-[var(--nv-accent)]/20 hover:border-[var(--nv-accent)]/40 transition-colors">
+        className="group flex items-center gap-1.5 py-1.5 px-2 rounded cursor-pointer text-xs bg-[var(--nv-accent-soft)] border border-[var(--nv-accent)]/20 hover:border-[var(--nv-accent)]/40 transition-colors">
         <Icon name={collapsed ? "arrowRight" : "arrowDown"} size={11} className="text-[var(--nv-accent)]" />
         <Icon name="bookmarked" size={12} className="text-[var(--nv-accent)]" />
         <span className="text-[var(--nv-accent)] font-medium flex-1">{volume.title}</span>
+        {onDeleteNode && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDeleteNode(volume.id); }}
+            disabled={deletingId === volume.id}
+            className="opacity-0 group-hover:opacity-100 text-[var(--nv-danger)]/60 hover:text-[var(--nv-danger)] text-[12px] px-0.5 transition-opacity disabled:opacity-40"
+            title="删除此分卷（含其下全部章节，可经回收站恢复）"
+          >
+            <Icon name="x" size={12} />
+          </button>
+        )}
         <span className="text-[var(--nv-text-tertiary)] text-[10px]">{children.length}章 · {totalWords}字</span>
       </div>
       {!collapsed && (
@@ -195,7 +205,7 @@ export const VolumeGroup = memo(function VolumeGroup({
 export function OutlineTree({
   nodes, selectedNode, onSelectNode, onAddSection, viewMode,
   batchMode, selectedChapterIds, onToggleChapterSelect, onDeleteNode, deletingId,
-  projectId, onLoadSample,
+  projectId, onLoadSample, onAddVolume,
 }: {
   nodes: StoryNodeData[]; selectedNode: StoryNodeData | null;
   onSelectNode: (n: StoryNodeData) => void; onAddSection: (parentId: string | null) => void;
@@ -204,6 +214,7 @@ export function OutlineTree({
   deletingId?: string | null;
   projectId: string;
   onLoadSample?: () => void;
+  onAddVolume?: () => void;
 }) {
   // 性能：`childrenMap`（取子节点 O(1)）+ `volumeIds`（平铺视图去 O(n²) 嵌套 find）。
   // 仅依赖于 nodes，nodes 引用不变则不重建，配合 memo 避免整树无谓重渲。
@@ -288,6 +299,9 @@ export function OutlineTree({
           <div>
             <button onClick={() => onAddSection(null)} className="text-xs text-[var(--nv-primary)] hover:underline">+ 手动添加章节</button>
           </div>
+          <div>
+            <button onClick={() => onAddVolume?.()} className="text-xs text-[var(--nv-accent)] hover:underline">+ 添加分卷</button>
+          </div>
           <div className="mt-2">
             <button onClick={() => { if (typeof window !== "undefined") window.location.href = "/"; }} className="text-[10px] text-[var(--nv-text-muted)] hover:text-[var(--nv-text-secondary)]">或去首页「按题材开局」</button>
           </div>
@@ -332,8 +346,10 @@ export function OutlineTree({
               onToggleChapterSelect={onToggleChapterSelect} onDeleteNode={onDeleteNode} deletingId={deletingId}
               projectId={projectId} />
           ))}
-          <button onClick={() => onAddSection(null)}
-            className="w-full text-left text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] py-1 px-2 mt-2">+ 添加章节/分卷</button>
+          <div className="flex gap-3 mt-2 px-2">
+            <button onClick={() => onAddSection(null)} className="text-left text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] py-1">+ 添加章节</button>
+            <button onClick={() => onAddVolume?.()} className="text-left text-xs text-[var(--nv-accent)]/80 hover:text-[var(--nv-accent)] py-1">+ 添加分卷</button>
+          </div>
         </div>
       </>
     );
@@ -367,8 +383,10 @@ export function OutlineTree({
             onToggleChapterSelect={onToggleChapterSelect} onDeleteNode={onDeleteNode} deletingId={deletingId}
             projectId={projectId} />
         ))}
-        <button onClick={() => onAddSection(null)}
-          className="w-full text-left text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] py-1 px-2 mt-2">+ 添加章节</button>
+        <div className="flex gap-3 mt-2 px-2">
+          <button onClick={() => onAddSection(null)} className="text-left text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)] py-1">+ 添加章节</button>
+          <button onClick={() => onAddVolume?.()} className="text-left text-xs text-[var(--nv-accent)]/80 hover:text-[var(--nv-accent)] py-1">+ 添加分卷</button>
+        </div>
       </div>
     </>
   );

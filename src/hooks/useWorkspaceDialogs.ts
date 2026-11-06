@@ -17,6 +17,8 @@ export interface BatchWriteState {
   elapsedSec: number;
   confirming: boolean;
   capsuleHidden: boolean;
+  /** 批量写作归属的卷（分卷后新卷从第一章重新计数）；null 表示顶层 */
+  parentId: string | null;
 }
 
 export interface UseWorkspaceDialogsOptions {
@@ -76,6 +78,7 @@ export function useWorkspaceDialogs(opts: UseWorkspaceDialogsOptions = {}) {
     elapsedSec: 0,
     confirming: false,
     capsuleHidden: false,
+    parentId: null,
   });
 
   // 章纲任务轮询：完成 → 自动重开弹窗展示章纲（review）；失败 → 回到 input

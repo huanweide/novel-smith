@@ -15,7 +15,7 @@ import React, { useState, useCallback, useEffect, useId, useRef, type ReactNode 
 import { Icon, type IconName } from "./icons";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 
-type ToastType = "success" | "error" | "info" | "warning";
+type ToastType = "success" | "error" | "info" | "warning" | "subtle";
 
 interface ToastOptions {
   type?: ToastType;
@@ -79,6 +79,14 @@ export function toastInfo(description: string, title?: string): void {
 }
 
 /**
+ * 低调提示（不醒目）：用于页面跳转后的轻量指引、操作已生效的非阻断通知等。
+ * 视觉上弱化为灰阶 + 细描边，不抢主操作注意力，符合「提示信息保持低调不醒目」的诉求。
+ */
+export function toastSubtle(description: string, title?: string): void {
+  toast({ type: "subtle", description, title, duration: 2600 });
+}
+
+/**
  * 命名式"已添加"成功弹窗 —— 对应需求「添加世界观A 时弹出『世界观A 已添加』」。
  * 用 success 类型 + 固定标题「已添加」，description 为「{name} 已添加」，
  * 视觉上强化为带强调标题的美化弹窗（绿色辉光 + 勾选动画）。
@@ -120,6 +128,8 @@ const TYPE_STYLES: Record<ToastType, { icon: IconName; accent: string; text: str
   error: { icon: "alert", accent: "border-l-danger", text: "text-danger", soft: "bg-danger/10" },
   warning: { icon: "alert", accent: "border-l-warning", text: "text-warning", soft: "bg-warning/10" },
   info: { icon: "sparkles", accent: "border-l-[var(--nv-primary)]", text: "text-[var(--nv-primary)]", soft: "bg-[var(--nv-primary)]/10" },
+  // 低调提示：灰阶弱化，不抢注意力
+  subtle: { icon: "info", accent: "border-l-[var(--nv-border-3)]", text: "text-[var(--nv-text-tertiary)]", soft: "bg-[var(--nv-surface-2)]/60" },
 };
 
 // ─── Provider ───────────────────────────────────────────────

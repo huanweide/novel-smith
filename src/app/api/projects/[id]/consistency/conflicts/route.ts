@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { jsonError } from "@/lib/api";
+import { classifyError } from "@/lib/api-error";
 
 // v1.6.51.4 B 任务：一致性冲突读写端点（与事实基线同属 /api/projects/[id]/consistency 子树）。
 // GET  ?status=open|resolved|ignored  → 列出项目冲突（默认全部，按时间倒序）
@@ -24,7 +25,8 @@ export async function GET(
     });
     return NextResponse.json({ conflicts });
   } catch (e) {
-    return jsonError((e as Error).message, 500);
+    const info = classifyError(e);
+    return jsonError(info.error, info.status, info.code);
   }
 }
 
@@ -50,6 +52,7 @@ export async function POST(
     });
     return NextResponse.json({ ok: true, conflict: updated });
   } catch (e) {
-    return jsonError((e as Error).message, 500);
+    const info = classifyError(e);
+    return jsonError(info.error, info.status, info.code);
   }
 }

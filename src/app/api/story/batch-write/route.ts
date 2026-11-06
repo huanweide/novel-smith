@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { dedupeCharacters } from "@/core/character-dedupe";
 import { generateChapterOutline } from "@/core/pipeline/generate-chapter-outline";
 import { runWriteGeneration, WriteSend } from "@/core/write-generation";
+import { renumberChapters } from "@/lib/story-node-ops";
 
 export const maxDuration = 300;
 
@@ -170,7 +171,9 @@ export async function POST(request: Request) {
     }
 
     // ── 模式 A（默认）：建章 + 生成章纲 ──
-    const { count, authorNote } = body;
+    const { count, authorNote, parentId } = body;
+    // parentId 指定卷：在该卷内批量建章（分卷后新卷从第一章重新计数）
+    const groupParentId = typeof parentId === "string" && parentId.length > 0 ? parentId : null;
     const n = Math.max(1, Math.min(10, Math.trunc(Number(count)) || 1));
 
     const running = await ensureNoRunning(projectId);
@@ -192,17 +195,23 @@ export async function POST(request: Request) {
         for (let i = 0; i < n; i++) {
           try {
             // 1) 建章（标题占位「第N章」，正文生成后由章名兜底逻辑自动命名）
+            //    parentId 指定卷时，序号/排序都在该卷内部计算，实现「分卷后新卷从第一章重新计数」
+            const groupWhere = { projectId, parentId: groupParentId, deletedAt: null };
+            const groupCount = await prisma.storyNode.count({
+              where: { ...groupWhere, type: { not: "volume" } },
+            });
+            const chapterIndex = groupCount + 1;
             const maxOrder = await prisma.storyNode.aggregate({
-              where: { projectId, deletedAt: null },
+              where: groupWhere,
               _max: { order: true },
             });
-            const order = (maxOrder._max.order ?? 0) + 1;
+            const order = (maxOrder._max.order ?? -1) + 1;
             const node = await prisma.storyNode.create({
               data: {
                 projectId,
-                parentId: null,
+                parentId: groupParentId,
                 type: "chapter",
-                title: `第${order}章`,
+                title: `第${chapterIndex}章`,
                 order,
               },
             });
@@ -234,6 +243,12 @@ export async function POST(request: Request) {
             where: { id: task.id },
             data: { done, failed, progress: Math.round(((done + failed) / n) * 100) },
           });
+        }
+        // 建章后统一重编号：顶层 + 各分卷内部各自从 第1章 起算
+        try {
+          await renumberChapters(projectId);
+        } catch {
+          /* 重编号失败不阻断建章结果 */
         }
         await prisma.fillTask.update({
           where: { id: task.id },

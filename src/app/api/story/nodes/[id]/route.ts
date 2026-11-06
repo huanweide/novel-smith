@@ -8,6 +8,8 @@ import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING, STATUS_PENDING_CON
 import { maybeAutoDeliver, triggerForeshadowDetect } from "@/core/confirm-guard";
 import { extractConsistencyFacts } from "@/core/consistency/extractFacts";
 import { revertBabyloreFill } from "@/core/babylore/fill";
+import { createSnapshot } from "@/lib/db-snapshot";
+import { renumberChapters, cascadeDeleteOrphans } from "@/lib/story-node-ops";
 
 // GET /api/story/nodes/[id]
 export async function GET(
@@ -312,22 +314,6 @@ async function collectSubtreeIds(projectId: string, rootId: string): Promise<str
   return ids;
 }
 
-// 顶层章节软删/彻底删后，对「存活」顶层节点重新编号（跳过已软删）
-async function renumberLiveTopChapters(projectId: string) {
-  const remaining = await prisma.storyNode.findMany({
-    where: { projectId, parentId: null, type: { not: "volume" }, deletedAt: null },
-    orderBy: { order: "asc" },
-  });
-  const cnDigits = ["零","一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十","二十一","二十二","二十三","二十四","二十五","二十六","二十七","二十八","二十九","三十"];
-  const toCn = (n: number) => cnDigits[n] || String(n);
-  for (let i = 0; i < remaining.length; i++) {
-    const ch = remaining[i];
-    const rawTitle = (ch.title || "").replace(/^第[一二三四五六七八九十百千\d]+章[：:]\s*/, "");
-    const newTitle = rawTitle ? `第${toCn(i + 1)}章：${rawTitle}` : `第${toCn(i + 1)}章`;
-    await prisma.storyNode.update({ where: { id: ch.id }, data: { title: newTitle, order: i } });
-  }
-}
-
 // DELETE /api/story/nodes/[id] —— #123 软删除：仅标记 deletedAt，不物理删（可经回收站恢复）
 export async function DELETE(
   _request: Request,
@@ -341,7 +327,14 @@ export async function DELETE(
       return NextResponse.json({ error: "节点不存在" }, { status: 404 });
     }
 
-    // #123：级联软删整棵子树（含自身），孤儿记录（摘要/节拍/待兑现）保留以便撤销后完整恢复
+    // 防丢：删前自动留一份快照（可经「快照管理」恢复）
+    try {
+      await createSnapshot("pre-delete");
+    } catch {
+      /* 快照失败不阻断删除 */
+    }
+
+    // #123：级联软删整棵子树（含自身）
     const subtreeIds = await collectSubtreeIds(node.projectId, id);
     const now = new Date();
     await prisma.storyNode.updateMany({
@@ -349,10 +342,11 @@ export async function DELETE(
       data: { deletedAt: now },
     });
 
-    // 软删顶层章节后，对存活顶层章节重新编号（被删节点已不在序列内）
-    if (node.parentId === null && (node.type === "chapter" || node.type === "section")) {
-      await renumberLiveTopChapters(node.projectId);
-    }
+    // 级联清掉关联孤儿记录（摘要/节拍/伏笔/待办），避免脏数据污染写作上下文
+    await cascadeDeleteOrphans(subtreeIds);
+
+    // 重编号：顶层 + 各分卷内部各自从 第1章 起算
+    await renumberChapters(node.projectId);
 
     return NextResponse.json({ success: true, softDeleted: true, renumbered: true, count: subtreeIds.length });
   } catch (err) {

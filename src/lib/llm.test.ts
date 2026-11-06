@@ -41,6 +41,11 @@ beforeEach(() => {
   delete process.env.LLM_PROVIDER;
   delete process.env.LLM_MODEL;
   delete process.env.LLM_BASE_URL;
+  // getSettings 会在通用 Key 缺失/占位时回退到服务商专属变量；
+  // 本机环境变量里可能真存着这些 Key，不清理会让「无 Key 应抛错」等用例被污染。
+  for (const k of ["SILICONFLOW_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY"]) {
+    delete process.env[k];
+  }
 });
 
 describe("mapLLMError", () => {
@@ -140,6 +145,49 @@ describe("getSettings - provider 选择与 baseUrl 强制", () => {
   it("数据库与环境变量均无 Key 时抛出明确错误", async () => {
     mockFindUnique.mockResolvedValue(null);
     delete process.env.LLM_API_KEY;
+    await expect(getSettings()).rejects.toThrow(/API Key 未配置/);
+  });
+});
+
+describe("getSettings - 服务商专属 Key 回退（真机实测：.env 占位挡路）", () => {
+  it("通用 Key 为占位(.env 里的 sk-你的key)时，吃到 SILICONFLOW_API_KEY 并同步整套配置", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    process.env.LLM_API_KEY = "sk-你的key";
+    process.env.LLM_PROVIDER = "deepseek"; // .env 里往往还写着别的 provider
+    process.env.LLM_MODEL = "deepseek-v4-flash";
+    process.env.LLM_BASE_URL = "https://api.deepseek.com";
+    process.env.SILICONFLOW_API_KEY = "sk-silicon-test-key-1234567890";
+    const s = await getSettings();
+    expect(s.provider).toBe("siliconflow");
+    expect(s.baseUrl).toBe(PROVIDER_BASE_URLS.siliconflow);
+    expect(s.model).toBe("deepseek-ai/DeepSeek-V4-Flash");
+    expect(s.apiKey).toBe("sk-silicon-test-key-1234567890");
+    // 关键：不能拿硅基流动的 Key 去打 deepseek 官方地址
+    expect(s.baseUrl).not.toContain("api.deepseek.com");
+  });
+
+  it("通用 Key 缺失但有 DEEPSEEK_API_KEY 时走 deepseek 全套默认", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    process.env.DEEPSEEK_API_KEY = "sk-deepseek-test-key-1234567890";
+    const s = await getSettings();
+    expect(s.provider).toBe("deepseek");
+    expect(s.baseUrl).toBe(PROVIDER_BASE_URLS.deepseek);
+    expect(s.model).toBe("deepseek-v4-flash");
+  });
+
+  it("通用 Key 合法时优先用通用 Key，不被专属变量抢走（回归守卫）", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    process.env.LLM_API_KEY = "sk-generic-test-key-1234567890";
+    process.env.LLM_PROVIDER = "siliconflow";
+    process.env.SILICONFLOW_API_KEY = "sk-should-not-be-used-1234567890";
+    const s = await getSettings();
+    expect(s.apiKey).toBe("sk-generic-test-key-1234567890");
+    expect(s.provider).toBe("siliconflow");
+  });
+
+  it("占位通用 Key 且无任何专属变量时，不让占位 Key 蒙混过关", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    process.env.LLM_API_KEY = "sk-你的key";
     await expect(getSettings()).rejects.toThrow(/API Key 未配置/);
   });
 });

@@ -21,6 +21,7 @@ export function LeftPanel({
   onEditCharacter, onEditLore, onNewCharacter, loadProject,
   viewMode, onSetViewMode, onDeleteNode, deletingNodeId, onLoadSample,
   onWriteChapter, onSummarizeCurrent, summarizing, onLocateEntity, onCollapse,
+  onAddVolume,
 }: {
   activeTab: string;
   onTabChange: (tab: "characters" | "world" | "outline" | "storylines" | "rules" | "digest") => void;
@@ -38,6 +39,7 @@ export function LeftPanel({
   onLocateEntity?: (id: string) => void;
   /** ROADMAP P1 #5：收起左栏——与右栏 onMinimize 对等（此前左栏只有 `[` 快捷键，没有可见入口） */
   onCollapse?: () => void;
+  onAddVolume?: () => void;
 }) {
   // FE-8：project 数据从 store 读取，不再由父组件逐层透传 project 大对象
   const project = useProjectStore((s) => s.project);
@@ -174,7 +176,7 @@ export function LeftPanel({
             <OutlineTree nodes={project.storyNodes ?? []} selectedNode={selectedNode} onSelectNode={onSelectNode}
               onAddSection={onAddSection} viewMode={viewMode}
               onDeleteNode={onDeleteNode} projectId={project.id} deletingId={deletingNodeId}
-              onLoadSample={onLoadSample} />
+              onLoadSample={onLoadSample} onAddVolume={onAddVolume} />
           </>
         )}
         {activeTab === "storylines" && (

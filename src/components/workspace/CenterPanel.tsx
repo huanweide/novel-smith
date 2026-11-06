@@ -15,6 +15,7 @@ import { computeNarrativeStage, type NarrativeStage } from "@/core/pipeline/narr
 import { useWriterStore } from "@/store";
 import { saveDraftLocal, getDraftLocal, clearDraftLocal, isDraftNewer } from "@/lib/auto-save";
 import { countMatches, hasNativeFind, jumpToMatch, replaceMatches } from "@/lib/in-text-search";
+import { computeSelToolbarPlacement } from "@/lib/sel-toolbar-placement";
 
 // 项目实体（名→颜色→id），用于章节实体彩色徽章与点击跳转
 type ProjectEntity = {
@@ -163,7 +164,7 @@ export function CenterPanel({
   authorNote, onAuthorNoteChange, targetWordCount, onTargetWordCountChange,
   onWrite, onStop, onEditOutline, onGenerateChapterOutline, onDrawChapterOutline,
   projectId,
-  refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine,
+  refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine, onSelectionRefine,
   chapterOutlinePrompt, onChapterOutlinePromptChange,
   genStep, genStepLabels, chapterOutlineStatus,
   onOpenGame,
@@ -189,6 +190,7 @@ export function CenterPanel({
   refineMode: boolean; onToggleRefineMode: () => void;
   refineInstruction: string; onRefineInstructionChange: (v: string) => void;
   onRefine: () => void;
+  onSelectionRefine?: (text: string, action: "polish" | "expand" | "continue" | "custom") => void;
   onOpenGame: () => void;
   onBatchWrite: () => void;
   genStep: string; genStepLabels: Record<string, { icon: React.ReactNode; label: string }>;
@@ -222,6 +224,26 @@ export function CenterPanel({
   const streamContent = useWriterStore((s) => s.generatedContent);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState("");
+  // 编辑器内「选中即改」悬浮工具条（D1：爱好者最高频的 AI 写作动作——选中片段→AI 润色/扩写/续写）
+  const [selToolbar, setSelToolbar] = useState<{ text: string; top: number; left: number; placeAbove: boolean } | null>(null);
+  const handleEditorSelection = useCallback(() => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) { setSelToolbar(null); return; }
+      const text = sel.toString().trim();
+      if (!text || text.length < 2) { setSelToolbar(null); return; }
+      const range = sel.getRangeAt(0);
+      if (contentRef.current && !contentRef.current.contains(range.commonAncestorContainer)) { setSelToolbar(null); return; }
+      const rect = range.getBoundingClientRect();
+      const placement = computeSelToolbarPlacement(
+        { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+        window.innerWidth,
+      );
+      setSelToolbar({ text, ...placement });
+    } catch {
+      setSelToolbar(null);
+    }
+  }, []);
   const [outlineExpanded, setOutlineExpanded] = useState(false);
   // ── AI 念书（语音朗读）：标题下方「朗读本章」入口的展开态 ──
   const [showTTS, setShowTTS] = useState(false);
@@ -974,7 +996,7 @@ export function CenterPanel({
           </div>
           )}
           {/* 正文显示区 */}
-          <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-4">
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-4" onMouseUp={handleEditorSelection} onScroll={() => setSelToolbar(null)}>
             {displayContent ? (
               <div className="max-w-[700px] mx-auto">
                 {!inlineEditing && (
@@ -1096,6 +1118,25 @@ export function CenterPanel({
               </div>
             )}
           </div>
+          {/* 选中即改悬浮工具条：低调金玻璃，选中正文片段即现，点按把片段交给现有 refine 弹窗（复用 SSE/落库，不擅自改） */}
+          {selToolbar && (
+            <div
+              className={`fixed z-50 -translate-x-1/2 ${selToolbar.placeAbove ? "-translate-y-full" : ""} flex items-center gap-0.5 px-1 py-1 rounded-xl surface-elevated border border-[var(--nv-gold)]/40 shadow-[0_4px_20px_rgba(228,184,99,0.18)] bg-[var(--nv-surface-1)]/95 backdrop-blur-sm`}
+              style={{ top: selToolbar.top, left: selToolbar.left }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {([["polish", "润色"], ["expand", "扩写"], ["continue", "续写"], ["custom", "自定义"]] as const).map(([action, label]) => (
+                <button
+                  key={action}
+                  type="button"
+                  onClick={() => { onSelectionRefine?.(selToolbar.text, action); setSelToolbar(null); }}
+                  className="px-2.5 py-1 text-xs rounded-lg text-[var(--nv-text-secondary)] hover:text-[var(--nv-gold)] hover:bg-[var(--nv-gold)]/10 transition-colors whitespace-nowrap"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* 底部状态栏：行 / 字 / 目标进度 / 编码 */}
           <div className="shrink-0 flex items-center justify-between border-t border-[var(--nv-border-2)] bg-[var(--nv-abyss)] px-4 py-1.5 text-[11px] text-[var(--nv-text-tertiary)]">
             <div className="flex items-center gap-4">

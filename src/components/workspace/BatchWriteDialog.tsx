@@ -37,6 +37,9 @@ export function BatchWriteDialog({
   onToggle,
   onEdit,
   onConfirm,
+  volumes,
+  parentId,
+  onParentChange,
 }: {
   open: boolean;
   phase: "input" | "running" | "review";
@@ -54,6 +57,9 @@ export function BatchWriteDialog({
   onToggle: (id: string) => void;
   onEdit: (id: string, text: string) => void;
   onConfirm: () => void;
+  volumes: { id: string; title: string }[];
+  parentId: string | null;
+  onParentChange: (id: string | null) => void;
 }) {
   if (!open) return null;
 
@@ -79,6 +85,21 @@ export function BatchWriteDialog({
               onChange={(e) => onCountChange(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
               className="input-glass w-24 rounded-lg px-3 py-2 text-sm"
             />
+            <label className="block text-sm text-[var(--nv-text-secondary)] mt-4 mb-1">归入分卷（可选）</label>
+            <select
+              aria-label="归入分卷"
+              value={parentId ?? ""}
+              onChange={(e) => onParentChange(e.target.value || null)}
+              className="input-glass w-full rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">不归卷（置于全书顶层）</option>
+              {volumes.map((v) => (
+                <option key={v.id} value={v.id}>{v.title}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-[var(--nv-text-muted)] mt-1">
+              选择分卷后，新章节会按该卷内部序号从「第1章」起算，不影响其他卷。
+            </p>
             <label className="block text-sm text-[var(--nv-text-secondary)] mt-4 mb-1">作者指令（可选，贯穿所有章）</label>
             <textarea
               value={note}

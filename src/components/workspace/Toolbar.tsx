@@ -11,7 +11,7 @@ export function Toolbar({
   projectName, onBack, onGenerateOutline, onImportChapters,
   onEditStyle, onOpenExport, onBackup, isGenerating, outlineGenerating,
   projectId, styleTemplateId,
-  onOpenAutomation,
+  onOpenAutomation, onOpenSnapshots,
 }: {
   projectName: string; onBack: () => void; onGenerateOutline: () => void;
   onImportChapters: () => void;
@@ -19,6 +19,7 @@ export function Toolbar({
   isGenerating: boolean; outlineGenerating?: boolean;
   projectId: string; styleTemplateId?: string;
   onOpenAutomation: () => void;
+  onOpenSnapshots: () => void;
 }) {
   const [copying, setCopying] = useState(false);
   const [copyTip, setCopyTip] = useState<string | null>(null);
@@ -163,6 +164,10 @@ export function Toolbar({
         {/* 备份包 */}
         <Button size="sm" variant="outline" onClick={onBackup} disabled={isGenerating}
           className="flex h-7 items-center gap-1 text-xs text-[var(--nv-accent)]" title="导出整本备份包 .nfproject（章节+角色+世界书+规则+文风，可导入还原）"><Icon name="package" size={12} /> 备份包</Button>
+
+        {/* 快照管理：防丢最后一道防线（可创建/恢复/下载/删除时间点快照） */}
+        <Button size="sm" variant="outline" onClick={onOpenSnapshots} disabled={isGenerating}
+          className="flex h-7 items-center gap-1 text-xs text-[var(--nv-primary)]" title="快照管理：把当前整库打一份时间点副本，误删/误改后可一键恢复"><Icon name="history" size={12} /> 快照</Button>
 
         {/* 自动填表：常用功能独立入口（v1.2.0：不再藏进「更多」，改叫「自动填表」） */}
         <Button size="sm" variant="outline" onClick={onOpenAutomation} disabled={isGenerating}

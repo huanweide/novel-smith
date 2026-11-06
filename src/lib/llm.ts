@@ -6,7 +6,13 @@
  * 配置读取（getSettings）、错误翻译（mapLLMError）、成本记录（recordLlmCall）与连通性测试（testLLMConnection）。
  *
  * 提供商默认 Base URL / 默认模型：供 getSettings 在数据库未配置时兜底。
- * 配置优先级：数据库 AppSettings > 环境变量 LLM_API_KEY；设置缓存 60 秒，避免每次调用查库。
+ * 配置优先级：数据库 AppSettings > 环境变量 LLM_API_KEY > 服务商专属 Key；设置缓存 60 秒，避免每次调用查库。
+ *
+ * 服务商专属 Key（真机实测场景）：系统环境变量常按服务商名存 Key
+ * （SILICONFLOW_API_KEY / DEEPSEEK_API_KEY / OPENAI_API_KEY / GROQ_API_KEY），
+ * 而仓库 .env 里可能留着占位 LLM_API_KEY=sk-你的key。此时 app 会拿占位 Key
+ * 去请求，报「含非法字符」400，明明系统里有真 Key 却用不上。故通用 Key 缺失/为占位时
+ * 按服务商专属变量回退，并同步 provider / model / baseUrl（否则 Key 与地址会错配）。
  */
 import { prisma } from "@/lib/prisma";
 
@@ -134,17 +140,55 @@ export async function getSettings(): Promise<LLMSettings> {
   }
 
   // 回退到环境变量（模型未配时按提供商兜底，避免「模型未配置」硬报错）
-  const envKey = process.env.LLM_API_KEY;
-  const envProvider = process.env.LLM_PROVIDER || "deepseek";
+  let envKey = process.env.LLM_API_KEY;
+  let envProvider = process.env.LLM_PROVIDER || "deepseek";
+  let envModel = process.env.LLM_MODEL;
+  let envBaseUrl = process.env.LLM_BASE_URL;
+
+  // 通用 Key 缺失或仍是 .env 占位（含非 ASCII / 明显占位串）时，尝试系统里按服务商名存的真 Key。
+  // 判定「可用」必须与 assertValidApiKey 一致（仅 Latin-1），否则占位 Key 会被拿去发请求，
+  // 在 fetch 头里炸出 ByteString 天书错误，用户完全看不懂。
+  const isUsableKey = (v: string | undefined): v is string =>
+    !!v && v.trim().length > 8 && /^[\x00-\xFF]+$/.test(v) && !/你的\s*key|placeholder|sk-xxx/i.test(v);
+
+  if (!isUsableKey(envKey)) {
+    // 占位/非法 Key 一律作废。若下面没找到专属变量，要让后面的「未配置」分支生效，
+    // 否则会把 sk-你的key 一路带到 assertValidApiKey，报成「含非法字符」——
+    // 用户会以为是 Key 格式错，真实情况却是根本没配 Key。
+    envKey = undefined;
+    // 顺序按「用户显式指定的 provider 优先」，再按常见度兜底；命中即锁定该 provider 的整套配置，
+    // 避免复现「硅基流动的 Key 送进 api.deepseek.com」这种错配。
+    const candidates: Array<{ provider: string; envVar: string }> = [
+      { provider: envProvider, envVar: `${envProvider.toUpperCase()}_API_KEY` },
+      { provider: "siliconflow", envVar: "SILICONFLOW_API_KEY" },
+      { provider: "deepseek", envVar: "DEEPSEEK_API_KEY" },
+      { provider: "openai", envVar: "OPENAI_API_KEY" },
+      { provider: "groq", envVar: "GROQ_API_KEY" },
+    ];
+    const seen = new Set<string>();
+    for (const c of candidates) {
+      if (seen.has(c.provider)) continue;
+      seen.add(c.provider);
+      const v = process.env[c.envVar];
+      if (!isUsableKey(v)) continue;
+      envKey = v;
+      envProvider = c.provider;
+      // 专属 Key 自带服务商语义，不能沿用 .env 里写给别的 provider 的 model / baseUrl
+      envModel = DEFAULT_MODELS[c.provider];
+      envBaseUrl = PROVIDER_BASE_URLS[c.provider];
+      break;
+    }
+  }
+
   if (!envKey) throw new Error("LLM API Key 未配置——请在设置页面填入 Key，或在 .env 中设置 LLM_API_KEY");
-  const envModel = process.env.LLM_MODEL || DEFAULT_MODELS[envProvider];
-  if (!envModel) throw new Error("LLM 模型未配置——请在 .env 中设置 LLM_MODEL（DeepSeek 可用 deepseek-v4-flash），或在设置页面选择模型");
+  const finalModel = envModel || DEFAULT_MODELS[envProvider];
+  if (!finalModel) throw new Error("LLM 模型未配置——请在 .env 中设置 LLM_MODEL（DeepSeek 可用 deepseek-v4-flash），或在设置页面选择模型");
 
   cachedSettings = {
     provider: envProvider,
     apiKey: envKey,
-    model: envModel,
-    baseUrl: process.env.LLM_BASE_URL || PROVIDER_BASE_URLS[envProvider] || "",
+    model: finalModel,
+    baseUrl: envBaseUrl || PROVIDER_BASE_URLS[envProvider] || "",
   };
   assertValidApiKey(envKey, "环境变量 (.env)");
   cacheTimestamp = now;

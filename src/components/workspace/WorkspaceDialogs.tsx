@@ -103,6 +103,9 @@ export function WorkspaceDialogs({
         })}
         onEdit={(id, text) => dialogs.setBatchWrite((s) => ({ ...s, outlines: s.outlines.map((i) => (i.nodeId === id ? { ...i, outline: text } : i)) }))}
         onConfirm={handlers.confirmBatchWrite}
+        volumes={(project.storyNodes ?? []).filter((n) => n.type === "volume").map((v) => ({ id: v.id, title: v.title }))}
+        parentId={dialogs.batchWrite.parentId}
+        onParentChange={(id) => dialogs.setBatchWrite((s) => ({ ...s, parentId: id }))}
       />
       {(dialogs.batchWrite.writeTaskId || (dialogs.batchWrite.taskId && !dialogs.batchWrite.open)) && !dialogs.batchWrite.capsuleHidden && (
         <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)]/95 backdrop-blur px-3 py-1.5 shadow-lg text-xs text-[var(--nv-text-secondary)]">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonError } from "@/lib/api";
+import { classifyError } from "@/lib/api-error";
 import { validateFactInput } from "@/core/consistency/factValidation";
 
 /**
@@ -44,6 +45,7 @@ export async function POST(
     });
     return NextResponse.json({ ok: true, fact });
   } catch (e) {
-    return jsonError((e as Error).message, 500);
+    const info = classifyError(e);
+    return jsonError(info.error, info.status, info.code);
   }
 }

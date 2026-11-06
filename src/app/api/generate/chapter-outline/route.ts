@@ -18,7 +18,7 @@
  */
 
 export const maxDuration = 120;
-import { jsonError } from "@/lib/api-error";
+import { jsonError, classifyError } from "@/lib/api-error";
 import { rateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 import { generateChapterOutline, OutlineError } from "@/core/pipeline/generate-chapter-outline";
@@ -47,6 +47,18 @@ export async function POST(request: Request) {
     } catch (e) {
       // v2.0.8：业务边界错误映射到 HTTP 状态，llm 类错误不向客户端回显原始文案（L2-003）
       if (e instanceof OutlineError) {
+        // 配置类错误（LLM API Key 未配 / 含非法字符等）是用户可操作的，不能伪装成
+        // 「服务器内部错误」+ 502。用统一分类判定，只有 CONFIG 才透传可读文案与 hint；
+        // 其余 llm 异常仍走泛化 502，不回显原始 message（L2-003 不变）。
+        if (e.code === "llm" && e.cause) {
+          const info = classifyError(e.cause);
+          if (info.code === "CONFIG") {
+            return NextResponse.json(
+              { error: info.error, code: info.code, hint: info.hint },
+              { status: info.status },
+            );
+          }
+        }
         const status = e.code === "notFound" ? 404 : e.code === "recycled" ? 410 : 502;
         const message = e.code === "llm" ? "服务器内部错误，请查看日志" : e.message;
         return NextResponse.json({ error: message }, { status });

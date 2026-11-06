@@ -90,12 +90,16 @@ export async function POST(request: Request) {
     // 旧逻辑用「兄弟数组下标 + 1」当全局 order，在嵌套/分卷结构下会与既有节点撞号，
     // 导致续写章 order 倒挂或重复，破坏「order 即序列位次」不变量与 isLatestChapter 判定。
     // 改为基于数据库当前最大 order + 1。
-    // F5 修复（Round-7 · 并发 TOCTOU 加固）：把「聚合 max → +1 → 插入」放进一个 DB 事务，
-    // 事务内先对当前 Project 行加 `FOR UPDATE` 行锁，使同一 projectId 的并发 continue 请求串行化——
-    // 后到的请求在获得锁后会重新读到前者已提交的 max(order)，从而得到 +1 后的新值，
-    // 杜绝并发下两条节点拿到相同 order（schema 尚未加 (projectId, order) 唯一约束前，软件层兜底）。
+    // F5 修复（Round-7 · 并发 TOCTOU 加固）：把「聚合 max → +1 → 插入」放进一个 DB 事务。
+    // 本项目的 datasource provider 是 sqlite，**SQLite 不支持 `FOR UPDATE` 行锁语法**
+    // （实跑报 `near "FOR": syntax error` / Prisma P2010），旧代码事务开头那句
+    // `SELECT 1 FROM "Project" WHERE id = ? FOR UPDATE` 会让续写在真实环境 100% 抛 503，
+    // 且被错误分类成「Prisma 客户端与数据库结构不匹配」，用户按提示 generate/重启也修不好。
+    // SQLite 的写事务本身就是库级串行的（同一时刻仅一个写者），事务内「读 max → create」
+    // 天然互斥，不需要也不支持行锁；这里保留事务内的 Project 行读取来锚定项目存在并开启写事务，
+    // 去掉方言不兼容的 FOR UPDATE，并发下后到的事务仍会读到前者已提交的 max(order) 再 +1。
     const nextNode = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT 1 FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT 1 FROM "Project" WHERE id = ${projectId}`;
       const orderAgg = await tx.storyNode.aggregate({
         where: { projectId },
         _max: { order: true },
