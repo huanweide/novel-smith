@@ -1,0 +1,51 @@
+name: 署名铁律检查（禁止 AI 署名尾注）
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check-no-ai-coauthor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 扫描 commit message 中的 AI 署名尾注
+        env:
+          PATTERN: 'Co-Authored-By:.*(Claude|Copilot|Cursor|Codex|Hunyuan|DeepSeek|WorkBuddy|OpenAI|Gemini|GPT|ChatGPT|Qwen|Kimi|通义|文心|混元)'
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            RANGE="${BASE}..HEAD"
+          else
+            # push 到 main：检查本次推送引入的提交（远端旧 main 之后）
+            RANGE="${{ github.event.before }}..HEAD"
+          fi
+          echo "扫描范围: ${RANGE}"
+          FOUND="$(git log ${RANGE} --pretty=format:%B | grep -iE "${PATTERN}" || true)"
+          if [ -n "${FOUND}" ]; then
+            echo "::error::发现 AI 署名尾注，违反项目署名铁律（AI 不算作者，不得添加 Co-Authored-By 等尾注）"
+            echo "${FOUND}"
+            exit 1
+          fi
+          echo "OK: 未发现 AI 署名尾注"
+
+      - name: 扫描 PR 描述的 AI 署名尾注
+        if: github.event_name == 'pull_request'
+        env:
+          PATTERN: 'Co-Authored-By:.*(Claude|Copilot|Cursor|Codex|Hunyuan|DeepSeek|WorkBuddy|OpenAI|Gemini|GPT|ChatGPT|Qwen|Kimi|通义|文心|混元)'
+        run: |
+          set -euo pipefail
+          BODY="${{ github.event.pull_request.body }}"
+          FOUND="$(printf '%s' "${BODY}" | grep -iE "${PATTERN}" || true)"
+          if [ -n "${FOUND}" ]; then
+            echo "::error::PR 描述中包含 AI 署名尾注，违反项目署名铁律"
+            echo "${FOUND}"
+            exit 1
+          fi
+          echo "OK: PR 描述未发现 AI 署名尾注"
