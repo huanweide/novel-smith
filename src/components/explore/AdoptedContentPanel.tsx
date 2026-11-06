@@ -142,10 +142,8 @@ export function AdoptedContentPanel({
             <button
               onClick={() => onCreateProject("ai_refine")}
               disabled={creating || adopted.length === 0}
-              className={`w-full py-2.5 rounded-xl text-xs font-medium active:scale-[0.98] ${
-                creating || adopted.length === 0
-                  ? "btn-ghost opacity-60 cursor-not-allowed"
-                  : "btn-creative"
+              className={`w-full py-2.5 rounded-xl text-xs font-medium active:scale-[0.98] btn-creative ${
+                creating || adopted.length === 0 ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
               {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 完善中...</span> : <span className="flex items-center gap-1"><Icon name="bot" size={13} /> AI补充缺失设定</span>}
@@ -159,10 +157,8 @@ export function AdoptedContentPanel({
             <button
               onClick={() => onCreateProject("direct")}
               disabled={creating || adopted.length === 0}
-              className={`w-full py-3 rounded-xl text-xs font-semibold active:scale-[0.98] ${
-                creating || adopted.length === 0
-                  ? "btn-ghost opacity-60 cursor-not-allowed"
-                  : "btn-primary"
+              className={`w-full py-3 rounded-xl text-xs font-semibold active:scale-[0.98] btn-primary ${
+                creating || adopted.length === 0 ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
               {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={13} /> 进入写作台 · 开始写小说</span>}

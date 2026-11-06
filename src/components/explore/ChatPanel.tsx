@@ -98,19 +98,19 @@ export function ChatPanel({
         </div>
       )}
 
-      {/* ── 自由讨论模式专属横幅（特别色 + 解释，放大自由讨论视觉权重）── */}
+      {/* ── 自由讨论模式专属横幅（低调、强调自由与抉择）── */}
       {mode === "chat" && (
-        <div className="px-4 py-2.5 flex items-center gap-2.5 border-b border-[var(--nv-creative)]/30 bg-gradient-to-r from-[var(--nv-creative)]/15 via-[var(--nv-creative)]/8 to-transparent">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--nv-creative)]/20 border border-[var(--nv-creative)]/40 shrink-0">
+        <div className="px-4 py-2.5 flex items-center gap-2.5 border-b border-[var(--nv-creative)]/20 bg-[var(--nv-creative)]/[0.06]">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--nv-creative)]/15 border border-[var(--nv-creative)]/30 shrink-0">
             <Icon name="sparkles" size={13} className="text-[var(--nv-creative)]" />
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[var(--nv-creative)]">自由讨论模式</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--nv-creative)]/20 text-[var(--nv-creative)] border border-[var(--nv-creative)]/30">什么都能聊</span>
+              <span className="text-xs font-bold text-[var(--nv-creative)]">自由讨论</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--nv-creative)]/15 text-[var(--nv-creative)] border border-[var(--nv-creative)]/25">不限字数 · 不卡步骤</span>
             </div>
             <p className="text-[11px] text-[var(--nv-text-tertiary)] leading-relaxed mt-0.5">
-              跟 AI 聊任何东西，AI 会从你聊的内容里自动抓取可采纳的设定（&lt;ADOPT&gt; 块）。聊出啥就采纳啥，不用先选步骤。
+              没有固定流程，想到哪聊到哪。聊出的设定点会自动变成可采纳卡片，随手点一下就能收下；关键处 AI 会给你几个方向让你选。
             </p>
           </div>
         </div>
@@ -246,7 +246,7 @@ export function ChatPanel({
                   <span className="w-1.5 h-1.5 bg-[var(--nv-creative)] rounded-full animate-pulse delay-150" />
                   <span className="w-1.5 h-1.5 bg-[var(--nv-creative)] rounded-full animate-pulse delay-300" />
                 </span>
-                <span className="text-[11px]">AI 正在思考「{STEP_LABELS[currentStep]}」…</span>
+                <span className="text-[11px]">AI 正在思考{mode === "chat" ? "" : `「${STEP_LABELS[currentStep]}」`}…</span>
               </span>
             </div>
           </div>
@@ -305,7 +305,9 @@ export function ChatPanel({
                 ? "AI 未配置，去设置页填 Key 后开始对话..."
                 : mode === "cards"
                   ? "输入需求，AI给出候选方案..."
-                  : `说说你的想法（当前：${STEP_LABELS[currentStep]}）...`
+                  : mode === "outline"
+                    ? "粘贴你的大纲，AI 帮你抽取设定..."
+                    : "随便聊聊你的想法，或让 AI 给你几个方向…"
             }
             disabled={loading || aiConfigured === false}
             className="flex-1 bg-[var(--nv-surface-2)] border border-[var(--nv-border-2)] rounded-xl px-4 py-2.5 text-sm text-[var(--nv-text-secondary)] placeholder:text-[var(--nv-text-muted)] focus:outline-none focus:border-[var(--nv-primary)]/40 focus:ring-2 focus:ring-[var(--nv-primary)]/10 disabled:opacity-40 transition-all duration-200"

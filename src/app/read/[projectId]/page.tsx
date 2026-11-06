@@ -205,7 +205,7 @@ export default function ReadPage() {
               onClick={() => selectChapter(t.id)}
               className={`w-full text-left px-4 py-2.5 text-sm border-b border-[var(--nv-border-2)]/60 transition-colors ${
                 t.id === currentId
-                  ? "bg-[var(--nv-primary-soft)] text-[var(--nv-primary)] font-medium"
+                  ? "bg-[var(--nv-gold)]/10 text-[var(--nv-gold)] font-medium"
                   : "text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)]"
               }`}
             >
@@ -225,7 +225,7 @@ export default function ReadPage() {
       {/* 阅读进度条 */}
       <div className="h-0.5 w-full bg-[var(--nv-surface-2)] shrink-0">
         <div
-          className="h-full bg-[var(--nv-primary)] transition-[width] duration-150"
+          className="h-full bg-[var(--nv-gold)] transition-[width] duration-150"
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>

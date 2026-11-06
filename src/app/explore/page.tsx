@@ -253,9 +253,13 @@ export default function ExplorePage() {
           if (data.projectId && !createdProjectId) {
             setCreatedProjectId(data.projectId);
           }
-          const currentIdx = EXPLORE_STEPS.indexOf(currentStep);
-          if (currentIdx >= 0 && currentIdx < EXPLORE_STEPS.length - 1) {
-            setCurrentStep(EXPLORE_STEPS[currentIdx + 1]);
+          // 自由讨论（chat）模式：采纳设定不强制推进步骤，把节奏交还给用户；
+          // 其他结构化模式保留"采纳即进阶"的引导。
+          if (mode !== "chat") {
+            const currentIdx = EXPLORE_STEPS.indexOf(currentStep);
+            if (currentIdx >= 0 && currentIdx < EXPLORE_STEPS.length - 1) {
+              setCurrentStep(EXPLORE_STEPS[currentIdx + 1]);
+            }
           }
         } else {
           // 失败：保留卡片可重试，状态串结构化（"failed"），绝不提前置 adopted
@@ -265,7 +269,7 @@ export default function ExplorePage() {
         setAdoptStatus((prev) => ({ ...prev, [card.id]: "failed" }));
       }
     },
-    [adopted, config, createdProjectId, currentStep],
+    [adopted, config, createdProjectId, currentStep, mode],
   );
 
   // ─── 大纲模式 ──────────────────────────────────────

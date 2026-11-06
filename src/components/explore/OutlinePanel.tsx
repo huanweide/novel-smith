@@ -127,10 +127,8 @@ export function OutlinePanel({
         <button
           onClick={onSubmit}
           disabled={outlineLoading || !outlineText.trim()}
-          className={`w-full py-3 rounded-xl text-sm font-semibold active:scale-[0.98] ${
-            outlineLoading || !outlineText.trim()
-              ? "btn-ghost opacity-60 cursor-not-allowed"
-              : "btn-primary"
+          className={`w-full py-3 rounded-xl text-sm font-semibold active:scale-[0.98] btn-primary ${
+            outlineLoading || !outlineText.trim() ? "opacity-60 cursor-not-allowed" : ""
           }`}
         >
           {outlineLoading ? (
@@ -155,10 +153,8 @@ export function OutlinePanel({
             <button
               onClick={onConfirm}
               disabled={creating}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold active:scale-95 ${
-                creating
-                  ? "btn-ghost opacity-60 cursor-not-allowed"
-                  : "btn-success"
+              className={`px-4 py-2 rounded-xl text-xs font-semibold active:scale-95 btn-success ${
+                creating ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
               {creating ? (
