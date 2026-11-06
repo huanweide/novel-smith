@@ -32,11 +32,12 @@ export interface VersionEntry {
   }>;
 }
 
-export const LATEST_VERSION = "v3.1.165";
+export const LATEST_VERSION = "v3.1.166";
 
 /** 首页公告弹窗摘要（只列最新版本的关键项） */
 export const CHANGELOG_BRIEF = [
-  "🔧 改动: 依赖大版本升级:TypeScript 5→7 / ESLint 9→10 / jest-dom 6→7",
-  "🔧 改动: 8 个依赖升级 PR 全部通过 CI 门禁(tsc+vitest+build)后合入",
-  "🔧 改动: 功能零变化,工程基座现代化,为后续迭代提速",
+  "🔧 修复: 多章连贯抽空清空历史设定基线导致后续章节 OOC(角色失忆),现保留基线不重建",
+  "🔧 修复: 写作篇幅改为以作者目标字数为最高优先级,贴近±10%",
+  "🔧 修复: 选中即改「续写」不再把内容追加到章末+重复选中段",
+  "🔧 修复: 大纲替换由硬删改为软删全部层级并保留分卷,旧章节进回收站可恢复",
 ];

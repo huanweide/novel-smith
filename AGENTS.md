@@ -157,4 +157,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | 23 | core-architecture-patterns | 核心架构模式 |
 
 **使用规则：** 规划新功能 → 先读整理版（A-J）对应功能域文件 → 定位到具体实现 → 如需细节再看原始分析（01-23）对应编号。不改架构，只加模块。
+
+## 🔴 提交署名铁律：AI 不算作者（2026-11-05 注入）
+
+- commit message 里**禁止**把 AI 工具或模型列为作者：`Co-Authored-By: Claude`、`Generated with [Claude Code]`、`Assisted-By: Cursor`、`Generated-By: Codex` 等尾注，一律不许写。
+- 提交作者统一用真人身份 `huanweide <3232553244@qq.com>`。AI 可以帮忙写代码，署名与责任归人。
+- 真人合作者的 `Co-authored-by:` 正常保留；`dependabot[bot]` 的依赖更新记录不要动。
+- 确需说明「本变更使用了 AI」，写在 PR 描述里，别写进 commit。
+- 本机已装全局 `commit-msg` 检查（git 全局 `core.hooksPath`），带 AI 署名的提交会被自动拦下。**不要用 `--no-verify` 绕过**——绕过等于把这条规矩废掉。
+- 依据：主流高 star 项目（rust-lang/rust、containers/libkrun、psf/requests、Docker/Moby）都不把 AI 列为 commit 作者；`Co-authored-by` 隐含著作权归属，AI 在版权意义上不构成作者。
 <!-- END:novel-forge-rules -->

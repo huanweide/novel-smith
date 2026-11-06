@@ -17,6 +17,7 @@ import { applyRegexRules } from "@/core/post-process/regex";
 import { countTokens } from "@/core/assembly/tokenizer";
 import { collectForbiddenPatterns } from "@/lib/forbidden-checker";
 import { applyTargetedFixReplacement } from "@/lib/targeted-fix";
+import { resolveRefineIntent } from "@/lib/refine-intent";
 import {
   loadGenerationContext,
   handleNewCharacters,
@@ -95,13 +96,15 @@ export async function POST(request: Request) {
     const refineInstruction = instruction && instruction.trim().length > 0
       ? instruction.trim()
       : "请在现有正文基础上自然续写，保持文风一致，推进剧情。";
-    const isTargetedFix = hasContent && refineInstruction.includes("精准修复");
-    // v1.6.47：续写意图识别——纯续写类指令（继续写/续写/接着写/补字/展开等）走「增量续写」模式：
-    // 只让模型生成续写增量、不重输出已有正文，路由层拼回原正文，彻底消除「重输出全文撞 max_tokens 截断」。
-    // 修改/精准修复类指令仍需模型看到全文并输出修改后全文，保持现有全文重输出契约不变。
-    const isContinuationIntent = hasContent && !isTargetedFix && /(继续写|续写|接着写|往下写|补\s*\d*\s*字|加\s*\d*\s*字|延长|展开|后续|推进剧情|往下)/.test(refineInstruction);
-    // v1.6.51：选中原文片段存在即启用「局部替换」模式（比指令含「精准修复」更通用、更可靠——锚点来自用户真实选中文本，避免模型幻觉；无选中时保持现有全文重输出契约不变）
-    const hasSelectedText = !!(selectedText && selectedText.trim());
+    // 意图判定抽到纯函数（refine-intent.ts），核心不变量：选中即改优先于增量续写。
+    // 旧版把 isContinuationIntent 排在 hasSelectedText 之前，工具条「续写」预设指令含「续写」
+    // → 增量追加把模型输出整段拼到章末；模型又在输出里复述了选中段 → 落库出现重复段。
+    // v1.6.47 增量续写、v1.6.51 局部替换两种模式的原有行为在不选中时完全不变。
+    const { isTargetedFix, isContinuationIntent, hasSelectedText } = resolveRefineIntent({
+      hasContent,
+      instruction: refineInstruction,
+      selectedText,
+    });
 
     const cardNotesText = cardNotes
       ? Object.entries(cardNotes as Record<string, string>)

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { PostGenPanel } from "@/components/workspace/PostGenPanel";
 import { Toolbar } from "@/components/workspace/Toolbar";
+import { SnapshotManager } from "@/components/workspace/SnapshotManager";
 import type { ToolboxItem } from "@/components/workspace/ToolboxDialog";
 import { SaveConflictModal } from "@/components/workspace/SaveConflictModal";
 import { LeftPanel } from "@/components/workspace/LeftPanel";
@@ -21,7 +22,7 @@ import { PreGenConfirm } from "@/components/workspace/PreGenConfirm";
 import { DrawCards } from "@/components/workspace/DrawCards";
 import { OnboardingModal } from "@/components/workspace/OnboardingModal";
 import type { ProjectData, CharacterData, LorebookData, StoryNodeData, ReviewIssue, SSEEvent } from "@/components/workspace/types";
-import { confirmDialog, promptDialog, toastError, toastSuccess, toastInfo, toastWarning } from "@/components/ui/toast";
+import { confirmDialog, promptDialog, toastError, toastSuccess, toastInfo, toastWarning, toastSubtle } from "@/components/ui/toast";
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useConfirmDelete } from "@/components/workspace/useConfirmDelete";
@@ -96,6 +97,7 @@ export default function WorkspacePage() {
   const allConfirmed = allConfirmedOf(chapterNodes);
   const projectConfirmedAt = project?.confirmedAt || null;
   const [loading, setLoading] = useState(true);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<StoryNodeData | null>(null);
   // v2.50.2：专注写作模式（Zen）——隐藏侧栏/工具栏，只留正文 + 打字机滚动
@@ -681,6 +683,18 @@ export default function WorkspacePage() {
 
   useEffect(() => { loadProject(); }, [loadProject]);
 
+  // 页面跳转后低调提示（不醒目）：进入写作台时给一次轻量指引，整段会话只提示一次，避免干扰
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const flag = "ns_workspace_tip_v1";
+    if (sessionStorage.getItem(flag)) return;
+    sessionStorage.setItem(flag, "1");
+    const t = window.setTimeout(() => {
+      toastSubtle("已进入写作台 · 左栏大纲可新建章节 / 分卷，顶部「批量写作」一次生成多章", "写作台");
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, []);
+
   // FE-9：任何会改变项目数据的保存/导入完成后，除刷新本页 store 外，同时让仪表盘项目列表 query 失效，回到新鲜
   const refreshAfterMutate = useCallback(() => {
     loadProject();
@@ -730,9 +744,13 @@ export default function WorkspacePage() {
     try {
       const putRes = await fetch("/api/generate/outline", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.id, chapters: outlinePreviewChapters, replaceAll: !outlineAppendMode }) });
       if (!putRes.ok) { const err = await putRes.json().catch(() => ({ error: "创建失败" })); toastError("创建章节节点失败: " + (err.error || putRes.status)); return; }
+      const putData = await putRes.json().catch(() => ({}));
       const createdCount = outlinePreviewChapters.length;
       setShowOutlineDialog(false); setOutlinePreviewChapters([]); setOutlineCustomPrompt("");
-      toastSuccess(`已创建 ${createdCount} 章`);
+      // 低调提示：替换大纲会把旧章节软删进回收站（可恢复），别让用户以为已写正文凭空消失
+      toastSuccess(putData.recycled > 0
+        ? `已创建 ${createdCount} 章，${putData.recycled} 个旧章节已移入回收站（可恢复）`
+        : `已创建 ${createdCount} 章`);
       await loadProject();
     } catch (err) { toastError("写入大纲出错: " + (err instanceof Error ? err.message : "网络错误")); }
     finally { setOutlineGenerating(false); }
@@ -748,6 +766,23 @@ export default function WorkspacePage() {
 
   const handleWrite = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("write"); setPreGenOpen(true); };
   const handleRefine = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("refine"); setPreGenOpen(true); };
+  // D1：编辑器内选中片段→AI 快改。复用既有 refine 弹窗与 SSE/落库管线，仅预填选中文本与默认指令，不擅自改。
+  const handleSelectionRefine = (text: string, action: "polish" | "expand" | "continue" | "custom") => {
+    if (!selectedNode || !project) return;
+    setSelectedText(text);
+    const presets: Record<"polish" | "expand" | "continue" | "custom", string> = {
+      polish: "润色选中的这段文字，提升文笔与流畅度，保持原意、人称与视角不变",
+      expand: "扩写选中的这段文字，补充细节、感官描写与张力，不偏离原意",
+      // 措辞必须避开后端「增量续写」正则（续写/接着写/往下/展开/后续/补X字…），
+      // 否则会落到「把模型输出整段拼到章末」分支，选中段被复述一遍且位置错乱（2026-11-06 真机实锤）。
+      // 局部替换契约：输出须原样以选中文字开头，其后才是新增内容。
+      continue: "以选中文字原样开头，紧接着它把情节顺势增添约300字，文风与前文一致；输出必须完整包含选中文字，不得只给新增部分",
+      custom: "",
+    };
+    setRefineInstruction(presets[action]);
+    setRefineMode(true);
+    setGenStep("confirming"); setPreGenMode("refine"); setPreGenOpen(true);
+  };
   const handleContinue = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("continue"); setPreGenOpen(true); };
 
   // MaxLoop R2 #34：故事线工作台「据此续写 / 去写一章」→ 复用既有写作流（PreGen 确认）
@@ -1044,6 +1079,28 @@ export default function WorkspacePage() {
     } catch (err) { console.error("创建节点失败:", err); toastError("新建节点失败（网络错误）：" + (err instanceof Error ? err.message : "请重试")); }
   };
 
+  // 新建分卷：type=volume，归入全书顶层；卷内章节由 renumberChapters 各自从「第1章」起算
+  const handleAddVolume = async () => {
+    if (!project) return;
+    const title = await promptDialog({
+      title: "新建分卷",
+      description: "分卷用于组织多卷小说；卷内章节各自从「第1章」起算，不影响其他卷。",
+      defaultValue: "",
+      placeholder: "例如：第一卷·龙庭初入",
+      confirmText: "创建",
+    });
+    if (!title) return;
+    try {
+      const res = await fetch("/api/story/nodes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, parentId: null, type: "volume", title, order: project.storyNodes.length }),
+      });
+      if (res.ok) { await loadProject(); toastSuccess(`已新建分卷「${title}」`); }
+      else { const d = await res.json().catch(() => ({ error: "未知错误" })); const _f = describeHttpError(res.status, d); toastError(`新建分卷失败：${_f.description}`); }
+    } catch (err) { console.error("创建分卷失败:", err); toastError("新建分卷失败（网络错误）：" + (err instanceof Error ? err.message : "请重试")); }
+  };
+
   const { deletingId, remove: deleteNode } = useConfirmDelete({
     title: "删除章节节点",
     description: (id) => {
@@ -1196,7 +1253,9 @@ export default function WorkspacePage() {
         onOpenAutomation={() => setShowAutomationSettings(true)}
         onOpenExport={() => setShowExportDialog(true)}
         onBackup={() => setShowBackupDialog(true)}
+        onOpenSnapshots={() => setSnapshotsOpen(true)}
       />
+      <SnapshotManager open={snapshotsOpen} onClose={() => setSnapshotsOpen(false)} />
       </div>
 
       <div className={`px-4 py-2 border-b border-[var(--nv-border-2)] flex items-center gap-2 ${zenMode ? "hidden" : ""}`} inert={leftDrawerOpen || rightDrawerOpen}>
@@ -1246,7 +1305,7 @@ export default function WorkspacePage() {
           onNewCharacter={() => setShowNewCharacter(true)}
           viewMode={viewMode} onSetViewMode={setViewMode} loadProject={loadProject}
           onDeleteNode={deleteNode} deletingNodeId={deletingId}
-          onLoadSample={loadSample} onWriteChapter={handleWriteFromStoryline}
+          onLoadSample={loadSample} onWriteChapter={handleWriteFromStoryline} onAddVolume={handleAddVolume}
           onSummarizeCurrent={handleSummarize} summarizing={summarizing}
           onLocateEntity={handleLocateEntity}
           onCollapse={() => setLeftCollapsed(true)} />
@@ -1314,6 +1373,7 @@ export default function WorkspacePage() {
             projectId={project.id}
             refineMode={refineMode} onToggleRefineMode={() => setRefineMode(!refineMode)}
             refineInstruction={refineInstruction} onRefineInstructionChange={handleRefineInstructionChange} onRefine={handleRefine}
+            onSelectionRefine={handleSelectionRefine}
             chapterOutlinePrompt={chapterOutlinePrompt} onChapterOutlinePromptChange={handleChapterOutlinePromptChange}
             genStep={genStep} genStepLabels={genStepLabels} chapterOutlineStatus={chapterOutlineStatus}
             onOpenGame={() => {

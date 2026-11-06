@@ -152,7 +152,7 @@ const EXTRACTION_SYSTEM = `你是一致性事实抽取器。从给定的小说�
 export async function extractConsistencyFacts(
   projectId: string,
   opts?: { model?: string },
-): Promise<{ count: number; facts: RawFact[] }> {
+): Promise<{ count: number; facts: RawFact[]; skipped?: boolean }> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
@@ -181,7 +181,15 @@ export async function extractConsistencyFacts(
   // 避免 LLM 在单次抽取里重复输出同一事实导致基线堆积重复行（详见 dedupeFacts）。
   const deduped = dedupeFacts(facts);
 
-  // 幂等：先清后插，重复抽取不堆积。
+  // 防御（多章连贯稳定性）：本次抽取产出为空，说明 LLM 超时/返回空/解析失败，
+  // 视为「抽取失败」。若仍按「先清后插」执行，会把前几章已累积的全部设定事实清零，
+  // 导致后续章节失去一致性约束（角色年龄/关系/地点集体失忆、大面积 OOC）。
+  // 故抽取为空时保留既有基线、不清空、不重建，仅返回 skipped 标记。
+  if (deduped.length === 0) {
+    return { count: 0, facts: [], skipped: true };
+  }
+
+  // 幂等：抽到了才「先清后插」，重复抽取不堆积。
   // 仅清除自动抽取的事实（source != "manual"），保留作者手动新增/编辑的事实，
   // 否则「手动重新抽取」会把作者在 Next-2 里手填的基线一并抹掉。
   await prisma.consistencyFact.deleteMany({ where: { projectId, source: { not: "manual" } } });

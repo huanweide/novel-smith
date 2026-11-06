@@ -319,15 +319,18 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "缺少参数" }, { status: 400 });
     }
 
+    let recycled = 0;
     if (replaceAll) {
-      const oldRootNodes = await prisma.storyNode.findMany({
-        where: { projectId, parentId: null, type: { not: "volume" }, deletedAt: null },
+      // #123：与节点删除统一走软删（标记 deletedAt），不物理删——已写正文的章节可经回收站恢复。
+      // 旧版只删 parentId:null 的顶层章节且用硬删，真机实锤两个问题：
+      //  ① 分卷项目卷内旧章删不掉，新章建在顶层 → 新旧混杂、目录错乱；
+      //  ② 已写正文的章节被永久删除，无法恢复。
+      // 这里覆盖全部章节（不限层级），保留用户手建的 volume 结构，不擅自删分卷。
+      const softDeleted = await prisma.storyNode.updateMany({
+        where: { projectId, type: { not: "volume" }, deletedAt: null },
+        data: { deletedAt: new Date() },
       });
-      if (oldRootNodes.length > 0) {
-        await prisma.storyNode.deleteMany({
-          where: { id: { in: oldRootNodes.map((n) => n.id) } },
-        });
-      }
+      recycled = softDeleted.count;
     }
 
     const lastNode = await prisma.storyNode.findFirst({
@@ -355,7 +358,7 @@ export async function PUT(request: Request) {
       nodes.push(node);
     }
 
-    return NextResponse.json({ nodes, count: nodes.length });
+    return NextResponse.json({ nodes, count: nodes.length, recycled });
   } catch (err) {
     return jsonError(err);
   }

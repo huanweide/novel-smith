@@ -27,6 +27,37 @@ import type { VersionEntry } from "./changelog-meta";
 /** 完整版本历史（最新在前） */
 export const VERSIONS: VersionEntry[] = [
   {
+    version: "v3.1.166",
+    date: "2026-11-06",
+    title: "🔧 修复",
+    sections: [
+      {
+        label: "🔧 修复",
+        items: [
+          "多章连贯抽空清空历史设定基线导致后续章节 OOC,现保留基线不重建",
+        ],
+      },
+      {
+        label: "🔧 修复",
+        items: [
+          "写作篇幅改为以作者目标字数为最高优先级,贴近±10%",
+        ],
+      },
+      {
+        label: "🔧 修复",
+        items: [
+          "选中即改「续写」不再把内容追加到章末+重复选中段",
+        ],
+      },
+      {
+        label: "🔧 修复",
+        items: [
+          "大纲替换由硬删改为软删全部层级并保留分卷,旧章节进回收站可恢复",
+        ],
+      },
+    ],
+  },
+  {
     version: "v3.1.165",
     date: "2026-11-04",
     title: "🔧 改动",

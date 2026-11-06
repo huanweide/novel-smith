@@ -21,6 +21,9 @@
 # production
 /build
 
+# electron-builder 构建产物（含 500MB+ 安装包，绝不入库）
+/release/
+
 # misc
 .DS_Store
 *.pem
