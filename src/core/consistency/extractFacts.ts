@@ -213,12 +213,38 @@ export async function getConsistencyFacts(projectId: string) {
 
 /**
  * 生成可注入提示词的一致性基线文本块（供 prompt 注入层调用）。
+ *
+ * 阶段2（上下文质量维护）：「被总结的内容就不放进去」——来源命中某章摘要标题的事实，
+ * 已随章节摘要注入上下文，此处剔除，避免同一信息在摘要与基线间重复占用 token。
+ * 作者手填（source=manual）与无来源事实保守保留，永不误删。
  */
 export async function getConsistencyBaselineText(projectId: string): Promise<string> {
-  const facts = await getConsistencyFacts(projectId);
+  const [facts, summaries] = await Promise.all([
+    getConsistencyFacts(projectId),
+    prisma.chapterSummary.findMany({ where: { projectId } }).catch(() => [] as any[]),
+  ]);
   if (facts.length === 0) return "";
-  const lines = facts.map(
+
+  // 摘要标题集合：来源命中即视为「已随摘要注入」，从基线剔除。
+  const summaryTitles = new Set(
+    (summaries as any[])
+      .map((s) => String((s as any).chapterTitle ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const kept = facts.filter((f) => {
+    if (f.source === "manual") return true; // 作者手填事实始终保留
+    if (!f.source) return true; // 无来源信息， conservative 保留
+    return !summaryTitles.has(String(f.source).trim().toLowerCase());
+  });
+
+  if (kept.length === 0) return "";
+  const lines = kept.map(
     (f) => `- [${f.category}] ${f.subject} 的${f.attribute} = ${f.value}${f.source ? `（来源：${f.source}）` : ""}`,
   );
-  return `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】\n${lines.join("\n")}`;
+  const dropped = facts.length - kept.length;
+  const header =
+    dropped > 0
+      ? `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】（已剔除 ${dropped} 条摘要内已含的重复事实）`
+      : `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】`;
+  return `${header}\n${lines.join("\n")}`;
 }

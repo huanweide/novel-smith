@@ -18,6 +18,11 @@
 - **新增（合并级联改写）**：角色去重合并（`applyMerge`）后，自动把 `ConsistencyFact.subject`（被并名及别名）与结构化表格身份列值归一到主卡名并合并重复行，使「杀人凶手」等信息全部并回正主（`character-dedupe.ts`）。
 - 测试：新增 `entity-auto-creator.canon.test.ts`（12 项），全量 vitest 196 文件 / 2214 全绿，tsc / next build 门禁全绿。
 
+### 上下文质量维护（阶段2-①：被总结的不列入）
+
+- **优化（基线去重）**：一致性事实基线注入时，剔除来源命中章节摘要标题的事实（已随摘要注入上下文），避免同一信息在摘要与基线间重复占 token；作者手填（source=manual）与无来源事实保守保留，永不误删（`consistency/extractFacts.ts` 的 `getConsistencyBaselineText`）。
+- 注：「最近一章不填」「重要性分层」「清理/优化/补全三动作」等阶段2 其余项待与用户确认精确语义后再落地（见对话）。
+
 ## v3.1.165 — 2026-11-04
 
 ### 依赖大版本升级（门禁全绿验证）
