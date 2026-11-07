@@ -73,6 +73,9 @@ export async function PATCH(
       autoConfirmEnabled: optBool(raw.autoConfirmEnabled),
       // v1.1.0：全书智能交付自动执行开关 API 写入入口
       autoDeliverEnabled: optBool(raw.autoDeliverEnabled),
+      // v1.8.23：全局总览手工编辑入口——时间线/故事线摘要大纲（AI 写作与章纲的长期记忆，用户可手动纠正）
+      timelineDigest: optStr(raw.timelineDigest, "timelineDigest", 20000),
+      storylineDigest: optStr(raw.storylineDigest, "storylineDigest", 20000),
       // v2.55.0：章节标题风格（default/verse/prose/brief/suspense）
       titleStyle: optStr(raw.titleStyle, "titleStyle", 20),
     }));
