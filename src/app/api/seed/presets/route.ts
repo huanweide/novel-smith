@@ -19,19 +19,29 @@ import { BUILTINS } from "@/lib/builtin-presets";
 export async function POST() {
   try {
     let created = 0;
+    let updated = 0;
     for (const b of BUILTINS) {
+      const tags = Array.from(new Set([...asArray<string>(b.tags), "trirui推荐"]));
       const exists = await prisma.preset.findFirst({
         where: { type: b.type, title: b.title, isBuiltin: true },
       });
       if (!exists) {
-        const tags = Array.from(new Set([...asArray<string>(b.tags), "trirui推荐"]));
         await prisma.preset.create({
           data: { ...b, author: "trirui", tags, isBuiltin: true, isPublic: true } as any,
         });
         created++;
+      } else {
+        // 同步语义（P3 发布准备）：内置预设以代码为单一事实源——description/content/tags
+        // 随版本演进（修 regex 失效、重写描述、加防污染标注），升级用户的旧内置记录必须跟进，
+        // 否则「自动播种只处理从零、升级用户永远拿不到修复」。内置预设 UI 不可编辑（需先复刻），覆盖安全。
+        await prisma.preset.update({
+          where: { id: exists.id },
+          data: { description: b.description, content: b.content as any, tags },
+        });
+        updated++;
       }
     }
-    return NextResponse.json({ ok: true, created, total: BUILTINS.length });
+    return NextResponse.json({ ok: true, created, updated, total: BUILTINS.length });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return jsonError(`播种预设失败：${msg}`);

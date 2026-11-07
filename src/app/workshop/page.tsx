@@ -173,10 +173,9 @@ export default function Workshop() {
     if (res.ok) {
       const data = (await res.json()) as Preset[];
       setPresets(data);
-      // 自动播种内置示范预设：仅在「全部」页签、且库中尚无任何内置预设时触发一次。
-      // 这样全新本地安装（git clone 后首次打开创意工坊）也能立即看到系统预设，开箱即用。
-      // seed 接口按 {type,title,isBuiltin} 去重，重复调用安全；autoSeedRef 守卫避免切换页签反复触发。
-      if (tab === "all" && !autoSeedRef.current && !data.some((p) => p.isBuiltin)) {
+      // 自动播种 + 升级同步（P3）：打开「全部」页签时幂等触发一次——seed 接口按 {type,title,isBuiltin}
+      // 去重新建、已存在则同步 description/content/tags（升级用户拿最新内置内容），每次打开毫秒级开销。
+      if (tab === "all" && !autoSeedRef.current) {
         autoSeedRef.current = true;
         setLoading(false);
         seedBuiltins();
@@ -363,7 +362,10 @@ export default function Workshop() {
       const res = await fetch(`/api/seed/presets`, { method: "POST" });
       const d = await res.json();
       if (res.ok) {
-        toastCreated(`示范预设 ${d.created} 条`, "创意工坊");
+        const parts: string[] = [];
+        if (d.created > 0) parts.push(`新增 ${d.created} 条`);
+        if (d.updated > 0) parts.push(`同步更新 ${d.updated} 条`);
+        toastCreated(parts.length ? `内置预设：${parts.join("，")}` : "内置预设已是最新", "创意工坊");
         load();
       } else toastError(d.error || "载入失败");
     } finally { setBusy(false); }
