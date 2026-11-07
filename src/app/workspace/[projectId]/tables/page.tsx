@@ -19,6 +19,8 @@ interface LoreTableT {
   columns: { key: string; label: string; type: string }[];
   rows: Record<string, any>[]; // 动态列表格数据载体：col.key 运行时确定，值直接进 React 渲染（key/ReactNode/value），any 为合理动态豁免
     marker: string;
+  /** 是否参与自动填表（false = 填表引擎跳过此表；手动编辑不受影响） */
+  fillEnabled?: boolean;
   }
 
   /** 单表填表结果（POST /api/babylore/fill 返回，前端补 at 字段） */
@@ -225,6 +227,23 @@ interface LoreTableT {
     } : x));
   };
 
+  // 填表参与开关：切到 false 后填表引擎（自动/一键/手动注入）全部跳过此表，手动编辑不受影响
+  const toggleFill = async (t: LoreTableT) => {
+    const next = !(t.fillEnabled ?? true);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lore-tables/${t.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fillEnabled: next }),
+      });
+      if (res.ok) {
+        setTables((ts) => ts.map((x) => (x.id === t.id ? { ...x, fillEnabled: next } : x)));
+        toastSuccess(next ? `「${t.name}」已恢复自动填表` : `「${t.name}」已停用自动填表（AI 不再写入此表）`);
+      } else toastError("切换失败");
+    } finally { setBusy(false); }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--nv-void)] text-[var(--nv-text-primary)] animate-in fade-in">
       <header className="border-b border-[var(--nv-border-2)] bg-[var(--nv-void)]/90 backdrop-blur-sm sticky top-0 z-10">
@@ -381,13 +400,30 @@ interface LoreTableT {
                 <div key={t.id} className="surface-elevated rounded-2xl p-5">
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <h3 className="font-semibold">{t.name} <span className="text-xs text-[var(--nv-text-muted)]">（{t.key} · {t.category}）</span></h3>
-                      {t.key === "auto_facts" && (
-                        <span className="ml-2 rounded-md bg-[var(--nv-primary)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--nv-primary)] align-middle"><Icon name="bot" size={15} className="inline-block align-text-bottom shrink-0" /> 写作自动维护</span>
-                      )}
+                      <h3 className="font-semibold">{t.name} <span className="text-xs text-[var(--nv-text-muted)]">（{t.key} · {t.category}）</span>
+                        {(t.fillEnabled ?? true) ? (
+                          t.key === "auto_facts" && (
+                            <span className="ml-2 rounded-md bg-[var(--nv-primary)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--nv-primary)] align-middle"><Icon name="bot" size={15} className="inline-block align-text-bottom shrink-0" /> 写作自动维护</span>
+                          )
+                        ) : (
+                          <span className="ml-2 rounded-md bg-[var(--nv-text-tertiary)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--nv-text-tertiary)] align-middle">已停用自动填表</span>
+                        )}
+                      </h3>
                       <p className="text-xs text-[var(--nv-text-muted)]">{t.note || "—"} · {t.rows.length} 行</p>
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleFill(t)}
+                        disabled={busy}
+                        title={(t.fillEnabled ?? true) ? "停用后 AI 填表（自动/一键/手动注入）不再写入此表，已有行与手动编辑保留" : "恢复参与自动填表"}
+                        className={`text-xs px-3 py-1.5 rounded-xl border transition-colors ${
+                          (t.fillEnabled ?? true)
+                            ? "border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:border-[var(--nv-border-3)]"
+                            : "border-[var(--nv-warning)]/50 text-[var(--nv-warning)]"
+                        }`}
+                      >
+                        {(t.fillEnabled ?? true) ? "参与填表：开" : "参与填表：关"}
+                      </button>
                       <button onClick={() => setExpanded(expanded === t.id ? null : t.id)} className="btn-ghost text-xs px-3 py-1.5 rounded-xl">
                         {expanded === t.id ? "收起" : "查看/编辑"}
                       </button>

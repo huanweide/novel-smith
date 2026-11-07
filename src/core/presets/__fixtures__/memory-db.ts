@@ -54,6 +54,13 @@ export function createMemoryDb(seed?: {
         state.calls.created.push(`loreTable:${rec.id}`);
         return rec;
       },
+      update: async ({ where, data }: any) => {
+        const t = state.loreTables.find((x) => x.id === where.id);
+        if (!t) notFound("表格");
+        Object.assign(t, data);
+        state.calls.updated.push(`loreTable:${t.id}`);
+        return t;
+      },
       delete: async ({ where }: any) => {
         const i = state.loreTables.findIndex((t) => t.id === where.id);
         if (i < 0) notFound("表格");

@@ -23,6 +23,7 @@ export async function PUT(
         marker: body.marker,
         columns: body.columns,
         rows: body.rows,
+        fillEnabled: typeof body.fillEnabled === "boolean" ? body.fillEnabled : undefined,
       },
     });
     return NextResponse.json(lt);

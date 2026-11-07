@@ -7,6 +7,7 @@ export interface PrismaUndoWriter {
   loreTable: {
     findUnique(args: any): Promise<any>;
     delete(args: any): Promise<any>;
+    update(args: any): Promise<any>;
   };
   styleCard: {
     findUnique(args: any): Promise<any>;
@@ -111,6 +112,13 @@ export async function executeUndo(
         if (alreadyMatches(cur, u.before)) continue; // 已还原，静默跳过
         await db.lorebookEntry.update({ where: { id: u.id }, data: u.before });
         restored.push(`lorebook:${u.name}`);
+      } else if (u.kind === "fill_policy" && u.id && u.before) {
+        // 填表策略：还原 fillEnabled 开关旧值
+        const cur = await db.loreTable.findUnique({ where: { id: u.id } });
+        if (!cur) { skipped.push(`fill_policy:${u.name}（表已不存在，无法还原）`); continue; }
+        if (alreadyMatches(cur, u.before)) continue; // 已还原，静默跳过
+        await db.loreTable.update({ where: { id: u.id }, data: u.before });
+        restored.push(`fill_policy:${u.name}`);
       } else if (u.kind === "regex") {
         const project = await db.project.findUnique({ where: { id: projectId } });
         const rules = (Array.isArray(project?.postProcessingRules)

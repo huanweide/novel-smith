@@ -7,7 +7,10 @@ import type { PlanItem, PlanKind } from "./plan";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface PrismaApplyWriter {
-  loreTable: { create(args: any): Promise<any> };
+  loreTable: {
+    create(args: any): Promise<any>;
+    update(args: any): Promise<any>;
+  };
   styleCard: {
     create(args: any): Promise<any>;
     update(args: any): Promise<any>;
@@ -63,6 +66,10 @@ export async function executeApplyPlan(
     if (item.kind === "table" && item.action === "create") {
       const rec = await db.loreTable.create({ data: item.payload });
       created.push({ kind: "table", id: rec.id, name: item.name });
+    } else if (item.kind === "fill_policy" && item.action === "update" && item.id) {
+      // 填表策略：切换表的 fillEnabled 开关（撤销经 updatedBefore 还原旧值）
+      await db.loreTable.update({ where: { id: item.id }, data: item.payload });
+      updatedBefore.push({ kind: "fill_policy", id: item.id, name: item.name, before: item.before });
     } else if (item.kind === "style") {
       if (item.action === "create") {
         const rec = await db.styleCard.create({ data: item.payload });

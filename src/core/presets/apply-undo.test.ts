@@ -239,3 +239,39 @@ describe("撤销容错与兼容", () => {
     expect(undo.restored).toHaveLength(0);
   });
 });
+
+describe("fill_policy 填表策略（套用真改 fillEnabled + 可撤销）", () => {
+  // 每次测试新建 seed（createMemoryDb 直接引用 seed 数组，共享常量会把上一个测试的 state 带进来）
+  const mkSeed = () => ({ loreTables: [
+    { id: "lt_asset", projectId: PID, key: "asset_table", name: "资产表", fillEnabled: true },
+    { id: "lt_attr", projectId: PID, key: "attr_table", name: "属性表", fillEnabled: false },
+  ] });
+
+  it("套用：asset_table 禁用、attr_table 启用；表不存在则 skip 不静默", async () => {
+    const { db, state } = createMemoryDb({ projectId: PID, ...mkSeed() });
+    const { plan, record } = await applyPreset(db, {
+      id: "pr_fp", type: "fill_policy", title: "策略",
+      content: { disableTables: ["asset_table", "missing_table"], enableTables: ["attr_table"] },
+    });
+    expect(state.loreTables.find((t) => t.key === "asset_table")!.fillEnabled).toBe(false);
+    expect(state.loreTables.find((t) => t.key === "attr_table")!.fillEnabled).toBe(true);
+    expect(plan.find((p: any) => p.name === "missing_table")!.action).toBe("skip");
+    // 缺失表不进凭证、变化表进 updatedBefore
+    expect(record.updatedBefore.map((u: any) => u.name).sort()).toEqual(["资产表", "属性表"].sort());
+  });
+
+  it("撤销：fillEnabled 还原为套用前旧值（幂等二次撤销跳过）", async () => {
+    const { db, state } = createMemoryDb({ projectId: PID, ...mkSeed() });
+    const { record } = await applyPreset(db, {
+      id: "pr_fp", type: "fill_policy", title: "策略",
+      content: { disableTables: ["asset_table"], enableTables: ["attr_table"] },
+    });
+    const undo = await executeUndo(db, PID, record);
+    expect(state.loreTables.find((t) => t.key === "asset_table")!.fillEnabled).toBe(true);
+    expect(state.loreTables.find((t) => t.key === "attr_table")!.fillEnabled).toBe(false); // 启用动作被撤销，还原为 seed 的 false
+    expect(undo.restored).toHaveLength(2); // asset 被禁用、attr 被启用，各还原一次
+    // 幂等：再撤一次，当前已等于 before → 全部 skip
+    const undo2 = await executeUndo(db, PID, record);
+    expect(undo2.restored).toHaveLength(0);
+  });
+});

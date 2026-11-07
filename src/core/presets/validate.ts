@@ -150,6 +150,23 @@ export function validatePresetContent(type: string, content: unknown): Validatio
       break;
     }
 
+    case "fill_policy": {
+      // 填表策略：声明哪些表禁用/启用自动填表（按表的英文 key）。至少声明一项。
+      const dis = content.disableTables;
+      const en = content.enableTables;
+      const badArr = (v: unknown) => v !== undefined && (!Array.isArray(v) || v.some((x) => typeof x !== "string" || !x.trim()));
+      if (badArr(dis)) errors.push("disableTables 必须是非空字符串数组（表的英文 key）");
+      if (badArr(en)) errors.push("enableTables 必须是非空字符串数组（表的英文 key）");
+      const disList = Array.isArray(dis) ? (dis as string[]).filter(Boolean) : [];
+      const enList = Array.isArray(en) ? (en as string[]).filter(Boolean) : [];
+      if (disList.length === 0 && enList.length === 0) {
+        errors.push("disableTables / enableTables 至少声明一项（填表的英文 key 数组）");
+      }
+      const overlap = disList.filter((k) => enList.includes(k));
+      if (overlap.length) errors.push(`同一表不能同时出现在 disableTables 与 enableTables：${overlap.join("、")}`);
+      break;
+    }
+
     default:
       errors.push(`未知预设类型：${String(type)}`);
   }

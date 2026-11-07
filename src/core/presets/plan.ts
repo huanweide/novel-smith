@@ -19,10 +19,11 @@ export const PRESET_TYPES = [
   "regex",
   "lorebook",
   "api_config",
+  "fill_policy",
 ] as const;
 export type PresetType = (typeof PRESET_TYPES)[number];
 
-export type PlanKind = "table" | "style" | "lorebook" | "character" | "regex" | "api_config";
+export type PlanKind = "table" | "style" | "lorebook" | "character" | "regex" | "api_config" | "fill_policy";
 export type PlanAction = "create" | "update" | "skip";
 
 export interface PlanItem {
@@ -318,6 +319,35 @@ export async function computeApplyPlan(
         before,
         payload: merged,
       });
+      break;
+    }
+
+    case "fill_policy": {
+      // 填表策略：把 disableTables / enableTables 里的表切到 fillEnabled=false / true。
+      // 计划逐表列出「禁用/启用」动作；表不存在则 skip（不静默）；已是目标状态也 skip（幂等）。
+      const dis = Array.isArray(content.disableTables) ? (content.disableTables as string[]).filter(Boolean) : [];
+      const en = Array.isArray(content.enableTables) ? (content.enableTables as string[]).filter(Boolean) : [];
+      const planFor = async (keys: string[], target: boolean, verb: string) => {
+        for (const key of keys) {
+          const t = (await db.loreTable.findFirst({ where: { projectId, key } })) as { id: string; name: string; fillEnabled: boolean } | null;
+          if (!t) {
+            plan.push({ kind: "fill_policy", action: "skip", name: key, detail: `项目里没有 key 为「${key}」的表，跳过（可先套用表格模板预设）` });
+            continue;
+          }
+          if (t.fillEnabled === target) {
+            plan.push({ kind: "fill_policy", action: "skip", name: t.name, id: t.id, detail: `已是${verb}状态，跳过` });
+            continue;
+          }
+          plan.push({
+            kind: "fill_policy", action: "update", name: t.name, id: t.id,
+            detail: `${verb}自动填表（AI 不再向该表写入新行）`,
+            before: { fillEnabled: t.fillEnabled },
+            payload: { fillEnabled: target },
+          });
+        }
+      };
+      await planFor(dis, false, "停用");
+      await planFor(en, true, "启用");
       break;
     }
 

@@ -52,6 +52,7 @@ interface LocalTemplate {
 const TABS = [
   { key: "all", label: "全部" },
   { key: "table_template", label: "表格模板" },
+  { key: "fill_policy", label: "填表策略" },
   { key: "story_progression", label: "剧情推进" },
   { key: "style", label: "文风" },
   { key: "worldview", label: "世界观" },
@@ -64,6 +65,7 @@ const TABS = [
 
 const TYPE_LABEL: Record<string, string> = {
   table_template: "表格模板",
+  fill_policy: "填表策略",
   story_progression: "剧情推进",
   style: "文风",
   worldview: "世界观",
@@ -77,6 +79,7 @@ const TYPE_LABEL: Record<string, string> = {
 // 主区分靠图标 + 文字。技术配置类（表格/API）同归靛蓝族，靠图标区分）。
 const PRESET_TYPE_META: Record<string, { icon: IconName; colorVar: string }> = {
   table_template:    { icon: "grid",       colorVar: "var(--nv-primary)" },
+  fill_policy:       { icon: "shield",     colorVar: "var(--nv-warning)" },
   story_progression: { icon: "gitBranch",  colorVar: "var(--nv-success)" },
   style:             { icon: "palette",    colorVar: "var(--nv-creative)" },
   worldview:         { icon: "globe",      colorVar: "var(--nv-info)" },
@@ -89,6 +92,7 @@ const presetMeta = (type: string) => PRESET_TYPE_META[type] ?? { icon: "package"
 
 const PLACEHOLDER: Record<string, string> = {
   table_template: `{\n  "tables": [\n    { "key": "my_table", "name": "我的表", "note": "说明", "category": "custom",\n      "columns": [{"key":"name","label":"名称","type":"text"}], "rows": [] }\n  ]\n}`,
+  fill_policy: `{\n  "disableTables": ["asset_table"],\n  "enableTables": ["char_track"],\n  "note": "只填人物行踪，停用资产数值表"\n}`,
   style: `{\n  "styleDescription": "文风描述", "povType": "third_person_limited",\n  "avgSentenceLength": 25, "dialogueRatio": 0.35, "descriptionRatio": 0.25, "actionRatio": 0.25, "innerThoughtRatio": 0.15\n}`,
   worldview: `{\n  "entries": [ { "title": "条目名", "content": "设定内容", "keys": ["触发词"] } ]\n}`,
   story_progression: `{\n  "entries": [ { "title": "推进模板", "content": "<if cell=\\"属性表/角色/好感度 <= 10\\">阶段一...<else>...</if>", "keys": ["好感度"] } ]\n}`,
