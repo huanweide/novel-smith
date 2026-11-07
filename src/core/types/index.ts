@@ -487,6 +487,8 @@ export interface LLMConfig {
   defaultTopP: number;            // 默认Top-P (0.9-1.0)
   maxTokensPerRequest: number;    // 单次请求最大Token
   contextWindowSize: number;      // 模型上下文窗口大小
+  /** 关闭思考模式：对 GLM/Qwen3 等混合推理模型传 thinking:{type:"disabled"}，首字延迟从 130s+ 降到秒级（速度优先） */
+  disableThinking: boolean;
   /** 故障转移备用模型链：主模型重试耗尽后依次尝试；为空则不做故障转移 */
   fallbackModels?: FallbackModel[];
 }

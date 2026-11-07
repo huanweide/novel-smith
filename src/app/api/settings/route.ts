@@ -20,6 +20,11 @@ export async function GET() {
       llmApiKey: maskKey(settings.llmApiKey),
       llmModel: settings.llmModel,
       llmBaseUrl: settings.llmBaseUrl,
+      disableThinking: settings.disableThinking,
+      writerModel: settings.writerModel,
+      reviewerModel: settings.reviewerModel,
+      summarizeModel: settings.summarizeModel,
+      streaming: settings.streaming,
       hasKey: !!settings.llmApiKey,
     });
   } catch (err) {
@@ -30,13 +35,19 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { llmProvider, llmApiKey, llmModel, llmBaseUrl } = body;
+    const { llmProvider, llmApiKey, llmModel, llmBaseUrl, disableThinking, writerModel, reviewerModel, summarizeModel, streaming } = body;
 
-    const data: Record<string, string> = {};
+    const data: Record<string, string | boolean> = {};
     if (typeof llmProvider === "string") data.llmProvider = llmProvider;
     if (typeof llmApiKey === "string") data.llmApiKey = llmApiKey;
     if (typeof llmModel === "string") data.llmModel = llmModel;
     if (typeof llmBaseUrl === "string") data.llmBaseUrl = llmBaseUrl;
+    if (typeof disableThinking === "boolean") data.disableThinking = disableThinking;
+    if (typeof streaming === "boolean") data.streaming = streaming;
+    // 分工模型：允许空串（= 清空跟随默认模型）
+    if (typeof writerModel === "string") data.writerModel = writerModel.trim();
+    if (typeof reviewerModel === "string") data.reviewerModel = reviewerModel.trim();
+    if (typeof summarizeModel === "string") data.summarizeModel = summarizeModel.trim();
     // 预设 provider（非 custom/local）的 Base URL 由代码固定（PROVIDER_BASE_URLS），
     // 忽略前端可能误传的残留 baseUrl，避免污染后续生成请求（根因：残留 URL 致生成打到错误地址）。
     if (typeof data.llmProvider === "string" && ["siliconflow", "deepseek", "openai", "groq"].includes(data.llmProvider)) {

@@ -57,6 +57,7 @@ function mkConfig(over: Partial<LLMConfig> = {}): LLMConfig {
     defaultTopP: 0.95,
     maxTokensPerRequest: 4096,
     contextWindowSize: 65536,
+    disableThinking: false,
     ...over,
   };
 }

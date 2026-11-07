@@ -34,11 +34,22 @@ describe("classifyEvents — S 级（核心不可遗忘）", () => {
     expect(m.sTier[0].content).toContain("宝藏");
   });
 
-  it("已回收伏笔(status=resolved) → 不进 S", () => {
+  it("已回收伏笔(status=fulfilled) → 不进 S", () => {
     const m = classifyEvents(
       [],
       [],
-      [{ description: "宝藏", status: "resolved", chapterNumber: 3 }],
+      [{ description: "宝藏", status: "fulfilled", chapterNumber: 3 }],
+      [],
+      10,
+    );
+    expect(m.sTier).toHaveLength(0);
+  });
+
+  it("已废弃伏笔(status=voided) → 不进 S", () => {
+    const m = classifyEvents(
+      [],
+      [],
+      [{ description: "废案", status: "voided", chapterNumber: 3 }],
       [],
       10,
     );

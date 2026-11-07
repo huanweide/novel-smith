@@ -65,6 +65,10 @@ export interface LLMSettings {
   apiKey: string;
   model: string;
   baseUrl: string;
+  disableThinking: boolean;
+  writerModel: string;    // 分工：写稿（空=跟随 model）
+  reviewerModel: string;  // 分工：审稿（空=跟随 model）
+  summarizeModel: string; // 分工：摘要/抽取（空=跟随 model）
 }
 
 let cachedSettings: LLMSettings | null = null;
@@ -103,7 +107,7 @@ export async function getSettings(): Promise<LLMSettings> {
       if (!baseUrl) throw new Error("本地推理需填写 Base URL（如 http://localhost:11434/v1）");
       const model = db.llmModel;
       if (!model) throw new Error("本地推理需填写模型名（如 qwen2.5:7b，可在 Ollama 中 pull）");
-      cachedSettings = { provider: "local", apiKey: "", model, baseUrl };
+      cachedSettings = { provider: "local", apiKey: "", model, baseUrl, disableThinking: false, writerModel: "", reviewerModel: "", summarizeModel: "" };
       cacheTimestamp = now;
       return cachedSettings;
     }
@@ -127,6 +131,10 @@ export async function getSettings(): Promise<LLMSettings> {
         apiKey: db.llmApiKey,
         model,
         baseUrl,
+        disableThinking: db.disableThinking,
+        writerModel: db.writerModel || "",
+        reviewerModel: db.reviewerModel || "",
+        summarizeModel: db.summarizeModel || "",
       };
       // key 含中文 / 全角字符会在 fetch 头里炸出天书 ByteString 错误，提前拦截
       assertValidApiKey(db.llmApiKey, "设置");
@@ -189,6 +197,10 @@ export async function getSettings(): Promise<LLMSettings> {
     apiKey: envKey,
     model: finalModel,
     baseUrl: envBaseUrl || PROVIDER_BASE_URLS[envProvider] || "",
+    disableThinking: process.env.DISABLE_THINKING === "1",
+    writerModel: "",
+    reviewerModel: "",
+    summarizeModel: "",
   };
   assertValidApiKey(envKey, "环境变量 (.env)");
   cacheTimestamp = now;

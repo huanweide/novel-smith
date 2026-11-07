@@ -247,6 +247,13 @@ export async function runWriteGeneration(
   );
 
   // ── 9. 流式生成（原 SSE start 回调体，去掉 controller 依赖）──
+  // 流式输出开关（AppSettings.streaming，默认开）：关=生成期间不推 token 事件，done 一次性携带全文。
+  // 纯显示偏好：LLM 内部仍走流式（草稿落库/规则扫描不受影响），只影响前端是否逐字上屏。
+  const appSettings = await prisma.appSettings.findUnique({
+    where: { id: "default" },
+    select: { streaming: true },
+  });
+  const streamingOut = appSettings?.streaming ?? true;
   // 推送本轮召回的记忆列表（供前端透明展示「剧情推进=记忆召回」）
   if (recallItems.length > 0) {
     send({ type: "babylore_recall", items: recallItems });
@@ -292,7 +299,7 @@ export async function runWriteGeneration(
     )) {
       if (chunk.type === "token") {
         newContent += chunk.content;
-        send({ type: "token", content: chunk.content });
+        if (streamingOut) send({ type: "token", content: chunk.content });
 
         // ── 实时规则检测：每积累 ~200 字符扫描一次 ──
         scanBuffer += chunk.content;
@@ -419,7 +426,7 @@ export async function runWriteGeneration(
       }
       send({
         type: "done",
-        content: "",
+        content: streamingOut ? "" : fullContent,
         nodeId,
         status: STATUS_DRAFTING,
         truncated: true,
@@ -504,7 +511,7 @@ export async function runWriteGeneration(
     }
     send({
       type: "done",
-      content: "",
+      content: streamingOut ? "" : fullContent,
       nodeId: result?.nodeId || nodeId,
       status: finalStatus,
       usage: {

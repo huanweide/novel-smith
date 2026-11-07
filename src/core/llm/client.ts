@@ -41,7 +41,7 @@ export interface LLMRequest {
   /** 业务目标字数（中文）：用于 L5-01 动态推算 max_tokens，避免长章被固定 4096 硬截断 */
   targetWordCount?: number;
   stream?: boolean;
-  /** 推理模式：仅 DeepSeek 官方 API 支持，硅基流动等第三方不用传 */
+  /** 推理模式：显式传入时透传给供应商（GLM/Qwen3 混合推理模型用 thinking:disabled 关思考提速）；未传时由 config.disableThinking 全局决定 */
   thinking?: { type: "enabled" | "disabled" };
   /** 外部 AbortSignal（如用户停止生成）：与超时信号合并，真正中断底层 fetch，灭停止后仍在生成的 token 浪费 */
   signal?: AbortSignal;
@@ -217,7 +217,8 @@ async function attemptChat(
       contextWindowSize: config.contextWindowSize,
     }),
     stream: false,
-    ...(request.thinking ? { thinking: request.thinking } : {}),
+    // 思考模式：显式传入优先；否则全局开关 disableThinking 开启时注入 disabled（GLM/Qwen3 混合推理提速）
+    ...(request.thinking ? { thinking: request.thinking } : config.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
     ...(request.json ? { response_format: { type: "json_object" } } : {}),
   };
   if (request.tools && request.tools.length > 0) {
@@ -331,7 +332,8 @@ async function establishStream(
     }),
     stream: true,
     stream_options: { include_usage: true },
-    ...(request.thinking ? { thinking: request.thinking } : {}),
+    // 思考模式：显式传入优先；否则全局开关 disableThinking 开启时注入 disabled（GLM/Qwen3 混合推理提速）
+    ...(request.thinking ? { thinking: request.thinking } : config.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
   };
 
   // 合并超时信号与外部 signal：任一触发即中断 fetch（用户停止时真正停止生成，灭 token 浪费）。
@@ -609,10 +611,10 @@ export async function getEffectiveConfig(overrides?: Partial<LLMConfig>): Promis
 
   return {
     architectModel: overrides?.architectModel || settings.model,
-    writerModel: overrides?.writerModel || settings.model,
-    reviewerModel: overrides?.reviewerModel || settings.model,
-    summarizeModel: overrides?.summarizeModel || settings.model,
-    extractorModel: overrides?.extractorModel || settings.model,
+    writerModel: overrides?.writerModel || settings.writerModel || settings.model,
+    reviewerModel: overrides?.reviewerModel || settings.reviewerModel || settings.model,
+    summarizeModel: overrides?.summarizeModel || settings.summarizeModel || settings.model,
+    extractorModel: overrides?.extractorModel || settings.summarizeModel || settings.model,
     baseURL: overrides?.baseURL || settings.baseUrl,
     apiKey: overrides?.apiKey || settings.apiKey,
     defaultTemperature: overrides?.defaultTemperature ?? 0.8,
@@ -620,6 +622,7 @@ export async function getEffectiveConfig(overrides?: Partial<LLMConfig>): Promis
     maxTokensPerRequest: overrides?.maxTokensPerRequest ?? parseInt(process.env.MAX_TOKENS_PER_REQUEST || "4096"),
     contextWindowSize: overrides?.contextWindowSize ?? parseInt(process.env.CONTEXT_WINDOW_SIZE || "65536"),
     fallbackModels: overrides?.fallbackModels ?? parsedFallbacks,
+    disableThinking: overrides?.disableThinking ?? settings.disableThinking,
   };
 }
 
@@ -741,6 +744,7 @@ export function getDefaultLLMConfig(): LLMConfig {
     defaultTopP: 0.95,
     maxTokensPerRequest: parseInt(process.env.MAX_TOKENS_PER_REQUEST || "4096"),
     contextWindowSize: parseInt(process.env.CONTEXT_WINDOW_SIZE || "65536"),
+    disableThinking: process.env.DISABLE_THINKING === "1",
   };
 }
 

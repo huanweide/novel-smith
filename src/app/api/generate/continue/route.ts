@@ -62,8 +62,15 @@ export async function POST(request: Request) {
 
     let nextTitle = "";
     if (currentNode.title) {
-      const match = currentNode.title.match(/^(.+?)(\d+)$/);
-      nextTitle = match ? `${match[1]}${parseInt(match[2]) + 1}` : `${currentNode.title}（续）`;
+      // 章号递增：优先识别「第X章/节/卷」（X=中文或阿拉伯数字，位置不限）——
+      // 旧逻辑只认阿拉伯数字结尾，"第三章：xxx"匹配失败退化成"第三章：xxx（续）"，章号永不递增
+      const cnMatch = currentNode.title.match(/^(.*?第)([零一二三四五六七八九十百千两\d]+)([章节卷])(.*)$/);
+      if (cnMatch) {
+        nextTitle = `${cnMatch[1]}${cnNumberIncrement(cnMatch[2])}${cnMatch[3]}${cnMatch[4]}`;
+      } else {
+        const match = currentNode.title.match(/^(.+?)(\d+)$/);
+        nextTitle = match ? `${match[1]}${parseInt(match[2]) + 1}` : `${currentNode.title}（续）`;
+      }
     } else {
       nextTitle = `第${(allNodes as any[]).length + 1}节`;
     }
@@ -224,6 +231,12 @@ ${lastParagraphs}
     );
 
     // ── SSE 流 ──
+    // 流式输出开关（AppSettings.streaming，默认开）：关=生成期间不推 token，done 一次性携带全文
+    const contSettings = await prisma.appSettings.findUnique({
+      where: { id: "default" },
+      select: { streaming: true },
+    });
+    const streamingOut = contSettings?.streaming ?? true;
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -248,7 +261,7 @@ ${lastParagraphs}
           )) {
             if (chunk.type === "token") {
               fullContent += chunk.content;
-              send({ type: "token", content: chunk.content });
+              if (streamingOut) send({ type: "token", content: chunk.content });
 
               saveCounter += chunk.content.length;
               // F3 修复：草稿保存改 await 同步落库，杜绝 fire-and-forget 与后处理落库竞态导致 [PARTIAL_DRAFT] 泄漏
@@ -313,7 +326,7 @@ ${lastParagraphs}
                 /* 回滚状态失败不阻塞告警返回 */
               }
               send({
-                type: "done", content: "",
+                type: "done", content: streamingOut ? "" : fullContent,
                 nodeId: nextNode.id, title: nextTitle, order: nextNode.order,
                 status: "drafting",
                 truncated: true,
@@ -359,7 +372,7 @@ ${lastParagraphs}
           // → applyConfirm → safeFillAfterWriting），与 write 路径完全一致，杜绝未审视草稿污染下游记忆/设定库，
           // 并消除 autoConfirm 时与 applyConfirm 的双重填表触发。
           send({
-            type: "done", content: "",
+            type: "done", content: streamingOut ? "" : fullContent,
             nodeId: result?.nodeId || nextNode.id, title: nextTitle, order: nextNode.order,
             status: result?.status || "completed",
             nextAction: `已自动创建并完成「${nextTitle}」，请确认后回填记忆库`,
@@ -389,4 +402,30 @@ ${lastParagraphs}
   } catch (err) {
     return jsonError(err);
   }
+}
+
+/** 中文/阿拉伯数字 +1：支持 一~九百九十九 与任意位数阿拉伯数字；无法解析时返回 null（调用方兜底「（续）」） */
+function cnNumberIncrement(s: string): string {
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10) + 1);
+  const digits: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const units: Record<string, number> = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0, current = 0, ok = true;
+  for (const ch of s) {
+    if (ch in digits) current = digits[ch];
+    else if (ch in units) { total += (current || 1) * units[ch]; current = 0; }
+    else { ok = false; break; }
+  }
+  if (!ok) return `${s}（续）`;
+  return toCnNumber(total + current + 1);
+}
+
+function toCnNumber(n: number): string {
+  const d = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (n <= 10) return n === 10 ? "十" : d[n];
+  if (n < 20) return `十${d[n % 10]}`;
+  if (n < 100) { const t = Math.floor(n / 10), o = n % 10; return `${d[t]}十${o ? d[o] : ""}`; }
+  const h = Math.floor(n / 100), rest = n % 100;
+  if (rest === 0) return `${d[h]}百`;
+  if (rest < 10) return `${d[h]}百零${d[rest]}`;
+  return `${d[h]}百${toCnNumber(rest)}`;
 }

@@ -48,11 +48,12 @@ export function parseSummaryResponse(response: string): ChapterSummaryParseResul
 
     const closingSnapshot = moodMatch?.[1]?.trim() || "";
 
-    // 解析附加 JSON 字段（threadProgress / unresolvedQuestions / impactScore）
+    // 解析附加 JSON 字段（threadProgress / unresolvedQuestions / impactScore / chapterTitle / summary）
     let threadProgress: Array<{ storylineId: string; stage: string; progressNote: string }> = [];
     let unresolvedQuestions: string[] = [];
     let impactScore = 5;
     let chapterTitle = ""; // v2.43.0：解析 LLM 摘要里的专用短章名
+    let jsonSummary = ""; // P2 修复：从 JSON 中提取 summary 作为正则匹配失败时的回退
 
     // 1) 优先匹配末尾的 ```json 代码块
     const jsonBlockRegex = /```json\s*([\s\S]*?)```/g;
@@ -68,6 +69,7 @@ export function parseSummaryResponse(response: string): ChapterSummaryParseResul
         if (Array.isArray(parsed.unresolvedQuestions)) unresolvedQuestions = parsed.unresolvedQuestions;
         if (typeof parsed.impactScore === "number") impactScore = parsed.impactScore;
         if (typeof parsed.chapterTitle === "string") chapterTitle = parsed.chapterTitle;
+        if (typeof parsed.summary === "string") jsonSummary = parsed.summary;
       }
     } else {
       // 2) 回退：尝试从响应整体提取 JSON 对象
@@ -77,11 +79,17 @@ export function parseSummaryResponse(response: string): ChapterSummaryParseResul
         if (Array.isArray(fallback.unresolvedQuestions)) unresolvedQuestions = fallback.unresolvedQuestions;
         if (typeof fallback.impactScore === "number") impactScore = fallback.impactScore;
         if (typeof fallback.chapterTitle === "string") chapterTitle = fallback.chapterTitle;
+        if (typeof fallback.summary === "string") jsonSummary = fallback.summary;
       }
     }
 
+    // P2 修复：摘要回退链——优先正则「摘要：」，其次 JSON.summary，最后剥离代码块后取纯文本前 200 字
+    // 避免把 ```json 标记或 JSON 结构当作摘要注入 mediumTerm 记忆
+    const cleanTextForFallback = response.replace(/```json\s*[\s\S]*?```/g, "").replace(/```/g, "").trim();
+    const fallbackSummary = jsonSummary.trim() || cleanTextForFallback.slice(0, 200);
+
     return {
-      summary: summaryMatch?.[1]?.trim() || response.slice(0, 200),
+      summary: summaryMatch?.[1]?.trim() || fallbackSummary,
       keyEvents,
       characterStates: statesMatch?.[1]?.trim() || "",
       closingSnapshot,

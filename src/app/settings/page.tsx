@@ -51,6 +51,13 @@ export default function SettingsPage() {
   const [models, setModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [disableThinking, setDisableThinking] = useState(false);
+  // 流式输出开关：开=逐字上屏；关=一次性出文（生成中转圈，完成后整章出现）
+  const [streaming, setStreaming] = useState(true);
+  // 分工模型（参考 Pagekin）：写稿/审稿/摘要各自可指定模型，留空=跟随上面的默认模型
+  const [writerModel, setWriterModel] = useState("");
+  const [reviewerModel, setReviewerModel] = useState("");
+  const [summarizeModel, setSummarizeModel] = useState("");
   // FE-N7 违禁词自定义词库
   const [bannedWords, setBannedWords] = useState("");
   const [bannedSaved, setBannedSaved] = useState(false);
@@ -112,6 +119,11 @@ export default function SettingsPage() {
         setProvider(s.llmProvider || "siliconflow");
         setModel(s.llmModel || "");
         setBaseUrl(s.llmBaseUrl || "");
+        setDisableThinking(!!s.disableThinking);
+        setStreaming(s.streaming !== false);
+        setWriterModel(s.writerModel || "");
+        setReviewerModel(s.reviewerModel || "");
+        setSummarizeModel(s.summarizeModel || "");
         setHasExistingKey(!!s.hasKey);
         if (s.hasKey) setApiKey("");
         // 已有配置时自动检索一次模型列表（后端用库中 Key）
@@ -238,6 +250,11 @@ export default function SettingsPage() {
           llmApiKey: key || undefined,
           llmModel: model || undefined,
           llmBaseUrl: baseUrl || undefined,
+          disableThinking,
+          streaming,
+          writerModel,
+          reviewerModel,
+          summarizeModel,
         }),
       });
       if (res.ok) {
@@ -506,6 +523,87 @@ export default function SettingsPage() {
           <p className="text-xs text-[var(--nv-text-muted)] mt-2">
             切换提供商或点「检索模型」会自动拉取该服务商的可用模型列表（需已填 Key）。也可直接手动输入模型 ID。
           </p>
+          {/* 思考模式开关：GLM/Qwen3 等混合推理模型默认先思考再输出，首字可达 2 分钟；关闭后秒级出字 */}
+          <label className="flex items-center gap-3 mt-4 cursor-pointer select-none group">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={disableThinking}
+              onClick={() => setDisableThinking((v) => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${
+                disableThinking ? "bg-[var(--nv-primary)]" : "bg-[var(--nv-border-2)]"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                  disableThinking ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+            <span className="text-sm text-[var(--nv-text-secondary)] group-hover:text-[var(--nv-text-primary)] transition-colors">
+              关闭思考模式（速度优先）
+            </span>
+            <span className="text-xs text-[var(--nv-text-muted)]">
+              GLM / Qwen3 等模型默认先「思考」再写（首字可达 2 分钟）；开启后直接输出，首字秒级。填表/审校等结构化任务建议保持开启。
+            </span>
+          </label>
+
+          {/* 流式输出开关：开=逐字上屏；关=一次性出文 */}
+          <label className="flex items-center gap-3 mt-4 cursor-pointer select-none group">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={streaming}
+              onClick={() => setStreaming((v) => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${
+                streaming ? "bg-[var(--nv-primary)]" : "bg-[var(--nv-border-2)]"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                  streaming ? "translate-x-5" : ""
+                }`}
+              />
+            </button>
+            <span className="text-sm text-[var(--nv-text-secondary)] group-hover:text-[var(--nv-text-primary)] transition-colors">
+              流式输出（逐字上屏）
+            </span>
+            <span className="text-xs text-[var(--nv-text-muted)]">
+              开：写正文时边生成边显示，实时看到进度。关：一次性出文——生成中只显示进度状态，完成后整章一次性出现。对生成速度与结果没有影响，纯显示偏好。
+            </span>
+          </label>
+
+          {/* ── 分工模型：写稿 / 审稿 / 摘要各用各的（留空=跟随默认模型） ── */}
+          <div className="mt-5 pt-4 border-t border-[var(--nv-border-2)]">
+            <p className="text-xs font-semibold text-[var(--nv-text-secondary)] mb-3">
+              分工模型 <span className="font-normal text-[var(--nv-text-muted)]">（可选，留空 = 全部跟随上面的默认模型；大纲生成跟随默认）</span>
+            </p>
+            <div className="space-y-2.5">
+              {([
+                { key: "writer", label: "写稿模型", desc: "生成正文 —— 用质量最好的模型", value: writerModel, set: setWriterModel, ph: "跟随默认" },
+                { key: "reviewer", label: "审稿模型", desc: "审校 / 逻辑自查 —— 可与写稿不同", value: reviewerModel, set: setReviewerModel, ph: "跟随默认" },
+                { key: "summarize", label: "摘要 / 填表模型", desc: "章节摘要、三卡抽取、填表等轻任务 —— 用快模型省钱提速", value: summarizeModel, set: setSummarizeModel, ph: "跟随默认" },
+              ] as const).map((row) => (
+                <div key={row.key} className="flex items-center gap-2.5">
+                  <span className="w-28 shrink-0 text-xs text-[var(--nv-text-secondary)]" title={row.desc}>
+                    {row.label}
+                  </span>
+                  <input
+                    list="model-list"
+                    type="text"
+                    value={row.value}
+                    onChange={(e) => row.set(e.target.value)}
+                    placeholder={row.ph}
+                    aria-label={row.label}
+                    className="input-glass flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs font-mono"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-[var(--nv-text-muted)] mt-2">
+              想省钱提速：写稿用大模型，摘要/填表用 Flash 类小模型。改完记得点下方「保存设置」。
+            </p>
+          </div>
         </section>
 
         {/* 自定义 / 本地 Base URL */}

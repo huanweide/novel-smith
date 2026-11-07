@@ -211,6 +211,12 @@ ${selectedText.trim()}
     );
 
     // ── 9. SSE 流 ──
+    // 流式输出开关（AppSettings.streaming，默认开）：关=生成期间不推 token，done 一次性携带全文
+    const refineSettings = await prisma.appSettings.findUnique({
+      where: { id: "default" },
+      select: { streaming: true },
+    });
+    const streamingOut = refineSettings?.streaming ?? true;
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -253,7 +259,7 @@ ${selectedText.trim()}
           )) {
             if (chunk.type === "token") {
               newContent += chunk.content;
-              send({ type: "token", content: chunk.content });
+              if (streamingOut) send({ type: "token", content: chunk.content });
             } else if (chunk.type === "done") {
               // L5-01：流式末尾携带 finish_reason
               if (chunk.finishReason) finishReason = chunk.finishReason;
@@ -415,7 +421,7 @@ ${selectedText.trim()}
 
           const tokenCount = countTokens(newContent);
           send({
-            type: "done", content: "", nodeId: result?.nodeId || nodeId, status: result?.status || "completed",
+            type: "done", content: streamingOut ? "" : newContent, nodeId: result?.nodeId || nodeId, status: result?.status || "completed",
             mode: hasContent ? "refine" : "write", wordCount: newContent.length,
             usage: { completionTokens: tokenCount, totalTokens: tokenCount },
             babylore,

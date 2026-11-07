@@ -59,7 +59,9 @@ export function classifyEvents(
   const bTier: TieredEvent[] = [];
 
   // ── S 级 ①：未回收伏笔（最近5章和即将到期的） ──
-  const unresolved = commitments.filter((c) => c.status !== "resolved");
+  // 伏笔状态枚举（schema.prisma:408）：pending | detected | partially_fulfilled | fulfilled | voided
+  // 已回收(fulfilled)/已废弃(voided)不再注入，避免 AI 被反复提醒回收已完成的伏笔
+  const unresolved = commitments.filter((c) => !["fulfilled", "voided"].includes(c.status));
   for (const c of unresolved) {
     const urgency =
       c.expiryChapter != null && c.expiryChapter - currentChapter <= 3

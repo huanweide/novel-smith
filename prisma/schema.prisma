@@ -591,12 +591,17 @@ model Rule {
 // ─── 全局设置 (App Settings) —— 单例，LLM 提供商 + API Key ──
 
 model AppSettings {
-  id          String   @id @default("default") // 单例，固定 key
-  llmProvider String   @default("siliconflow") // openai | siliconflow | deepseek | groq | custom
-  llmApiKey   String   @default("")            // API Key（明文存储，数据库本地）
-  llmModel    String   @default("deepseek-ai/DeepSeek-V4-Flash")
-  llmBaseUrl  String   @default("")            // 自定义 base URL（custom 提供商时使用）
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default("default") // 单例，固定 key
+  llmProvider     String   @default("siliconflow") // openai | siliconflow | deepseek | groq | custom
+  llmApiKey       String   @default("")            // API Key（明文存储，数据库本地）
+  llmModel        String   @default("deepseek-ai/DeepSeek-V4-Flash")
+  llmBaseUrl      String   @default("")            // 自定义 base URL（custom 提供商时使用）
+  disableThinking Boolean  @default(false)         // 关闭思考模式（GLM/Qwen3 混合推理模型传 thinking:disabled，速度优先）
+  writerModel     String   @default("")            // 分工模型：写稿（留空=跟随 llmModel）
+  reviewerModel   String   @default("")            // 分工模型：审稿/审校（留空=跟随 llmModel）
+  summarizeModel  String   @default("")            // 分工模型：摘要/抽取等轻任务（留空=跟随 llmModel）
+  streaming       Boolean  @default(true)          // 写作输出流式开关：开=逐字上屏；关=一次性出文（生成中不推 token，done 携带全文）
+  updatedAt       DateTime @updatedAt
 }
 
 // ─── 文风卡 (Style Card) —— 量化导入文本的笔触特征 ──────────
@@ -756,6 +761,7 @@ model LoreTable {
 
   columns  Json @default(dbgenerated("'[]'"))       // [{key,label,type}]  例 [{key:"name",label:"妃嫔名称",type:"text"}]
   rows     Json @default(dbgenerated("'[]'"))       // [{row_id, ...列值}]  例 [{row_id:1,name:"甄嬛",live:"碎玉轩",status:"已入住",note:"初入宫"}]
+  fillEnabled Boolean @default(true)                 // 是否参与自动填表：false = 填表引擎跳过此表（手动编辑仍可用；创意工坊填表策略/表格页开关可改）
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
