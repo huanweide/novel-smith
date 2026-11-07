@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { completeText } from "@/core/llm/client";
 import { safeParseAIArray } from "@/lib/json-parser";
+import { asArray } from "@/lib/utils";
 
 export type ConsistencyCategory = "character" | "world" | "plot" | "relationship";
 
@@ -111,6 +112,8 @@ interface ExtractProjectShape {
     chapterId: string;
     chapterTitle: string;
     summary: string;
+    keyEvents?: unknown;
+    characterStates?: unknown;
   }>;
 }
 
@@ -132,7 +135,16 @@ function buildExtractionContext(project: ExtractProjectShape): string {
     parts.push(
       "【已归档章节摘要】\n" +
         project.chapterSummaries
-          .map((s) => `第${s.chapterId}章《${s.chapterTitle}》: ${s.summary}`)
+          // 章号用归档顺序（chapterId 是 UUID 不能直接展示）；keyEvents/characterStates 必须带上——
+          // 关键物品的转移/交付记录在 keyEvents 里，持有状态在 characterStates 里，缺了它们物品轨迹就断
+          .map((s, i) => {
+            const events = asArray<string>(s.keyEvents)
+              .filter(Boolean)
+              .map((e) => `    · ${e}`)
+              .join("\n");
+            const states = s.characterStates ? `\n    角色状态: ${String(s.characterStates).slice(0, 300)}` : "";
+            return `第${i + 1}章《${s.chapterTitle}》: ${s.summary}${events ? `\n    关键事件:\n${events}` : ""}${states}`;
+          })
           .join("\n"),
     );
   }
@@ -143,7 +155,12 @@ const EXTRACTION_SYSTEM = `你是一致性事实抽取器。从给定的小说�
 每条事实描述一个主体(subject)的某个属性(attribute)的确定值(value)。
 类别(category)限四选一：character(人物) / world(世界) / plot(情节) / relationship(关系)。
 只抽取文中明确陈述或可高置信推断的事实，严禁编造。
-返回 JSON 数组，每条字段：category, subject, attribute, value, source, confidence(0~1)。`;
+返回 JSON 数组，每条字段：category, subject, attribute, value, source, confidence(0~1)。
+输出压缩纪律：每条 value ≤60 字、不写解释性文字、不重复输出已知设定——条数会很多，超长截断=全部报废。
+
+除常规设定外，以下两类"状态事实"必须抽取（缺失会导致后续章节物品位置/时间线前后矛盾）：
+- 关键物品持有与位置：先识别故事里的关键物品（账册/钥匙/信物/武器等反复出现的道具），然后**逐章扫描**该物品在每章的持有者/位置，每章各出一条事实（attribute=第N章持有者/位置，value=谁/哪里）。物品即使只在某章被提及归属变化，也要单独成条——这些轨迹是冲突审计的原料，漏一条就审不出"物品凭空移动"。
+- 时间流：subject=故事时间线，attribute=第N章，value=该章的时间标记（如"雨夜当晚""三日后"）。摘要句首的时间标记就是来源。`;
 
 /**
  * 抽取并落库一致性事实基线（幂等）。
@@ -171,7 +188,8 @@ export async function extractConsistencyFacts(
 
   const text = await completeText(EXTRACTION_SYSTEM, prompt, {
     temperature: 0.2,
-    maxTokens: 2500,
+    // 6000：抽取含物品轨迹/时间流后条数 50+（2500/4000 均实测截断 JSON 致解析为空）
+    maxTokens: 6000,
     model: opts?.model,
   });
 
