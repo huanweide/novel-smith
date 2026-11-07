@@ -1,0 +1,66 @@
+name: Release
+
+# 发版标签（v*）触发：云端自动构建 Windows 安装包并发布 GitHub Release。
+# 用 Actions 内置 GITHUB_TOKEN（permissions.contents: write），本机不需要任何 token——
+# 本机只负责 push tag，构建/打包/发 Release 全部在云端完成。
+# 资产三件套缺一不可（electron-updater 依赖）：
+#   NovelSmith-<ver>-setup.exe           安装包本体
+#   NovelSmith-<ver>-setup.exe.blockmap  差分下载地图（老版本→新版本只下差异块）
+#   latest.yml                           更新清单（版本号 + sha512 + 文件名），缺它 updater 报 404
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: npm ci
+
+      # Prisma Client 不入库（src/generated 被 gitignore），且 generate 在缺 DATABASE_URL 时
+      # 会静默成功但什么都不产出（与 ci.yml 同一坑）——显式带 DATABASE_URL 并校验产物。
+      - name: Generate Prisma Client
+        run: |
+          npx prisma generate
+          if (!(Test-Path src/generated/prisma/client.ts)) {
+            echo "::error::Prisma Client 未生成（src/generated/prisma/client.ts 不存在）"
+            exit 1
+          }
+        env:
+          DATABASE_URL: "file:./data/novelforge.db"
+
+      # next build 的静态收集会实例化 DB（Server Component 查项目列表），需要真实表结构。
+      - name: Setup database
+        run: npx prisma db push
+        env:
+          DATABASE_URL: "file:./data/novelforge.db"
+
+      # npm run dist 完整链：build（safe-build 版本一致性校验）→ rebuild:electron（better-sqlite3
+      # 换 Electron-ABI，CI 海外直连 GitHub Releases 下载 prebuild，无需镜像）→ deref prisma symlinks
+      # → electron-builder --win --publish never（只构建，发布交给下一步的 action-gh-release）
+      # → check-dist-version（安装包/latest.yml 版本一致性断言）→ rebuild:node（CI 内无需，幂等无害）
+      - name: Build installer
+        run: npm run dist
+
+      # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/NovelSmith-*-setup.exe
+            release/NovelSmith-*-setup.exe.blockmap
+            release/latest.yml
