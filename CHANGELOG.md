@@ -2,6 +2,28 @@
 
 ## 未发布（main 已合入，随下个版本发布）
 
+### 发布链路修复（dist 全链一次跑通 + win-unpacked 实测全绿）
+
+- **修复（rebuild:electron 从未生效）**：`prebuild-install` 必须在 `node_modules/better-sqlite3` 目录内执行——在项目根执行会把 novel-smith 自己当目标包（请求 `undefined/releases/download/v3.1.166/...` 静默失败）。v3.1.162 以来的 script 一直因此在根目录空跑，打包产物全靠 node_modules 恰好处于 Electron-ABI 的运气；本次实测抓到包内二进制为 Node-ABI（Electron 运行时 DB 全崩，/api/health 报原生模块不兼容）。
+- **修复（dist 全链固化）**：`npm run dist` = build → rebuild:electron → deref-prisma-symlinks → electron-builder --win --publish never → check-dist-version → rebuild:node。`--publish never` 杜绝无 GH_TOKEN 时上传环节失败；尾部自动恢复 Node-ABI（vitest/next dev 需要，本机 Node 24 = ABI 137）。
+- **修复（rebuild:node 名实相反）**：原 `rebuild:node` 内容是 electron-rebuild（产出 Electron-ABI），已改为按 Node runtime 下载 prebuild。
+- **验证**：六环节一次跑通；win-unpacked 全新启动 `/api/health` 返回 db/llm/server 全绿；双 script 往返切换 ABI 实测有效。国内网络需在本地 .npmrc 配 `better_sqlite3_binary_host` 镜像（见 electron-builder.yml 注释）。
+
+### 桌面版崩溃自愈
+
+- **新增（renderer 崩溃自动恢复）**：本地服务无状态（数据在 SQLite），renderer 进程崩溃直接重载页面，附观测日志。
+- **新增（主进程异常兜底）**：Next server 跑在主进程，任何未捕获异常此前会让整个应用静默退出（DB 故障期 500 连锁即触发）；现兜底记日志继续运行。
+- **新增（utility 进程观测）**：network/gpu 等 child-process-gone 事件写入 ns-app.log，此前完全静默无从诊断。
+
+### 续写章名契约（修复章号递增但描述沿用上章）
+
+- **新增（chapter-title 契约模块）**：continue 建章与 post-processor 自动命名共用「占位 = 纯章号」判定。continue 新章只给「第四章」占位（不再继承「第三章：雨夜追踪」的旧描述——旧描述与新章内容必然不符，且会让自动命名误判为用户自定义标题而跳过）；自动命名守卫扩认中文数字/卷号前缀/章节卷类型；回填继承原占位的数字风格与类型（「第四章」→「第四章：新章名」，阿拉伯风格不突变）。判别测试 19 条。
+
+### 填表策略列级禁用（修复仅表级无列级粒度）
+
+- **新增（列级填表禁用）**：LoreTable 新增 `disabledColumns` 列 key 黑名单，AI 填表对命中列只读不写——引擎在列名归一后代码级剔除写入（LLM 违规输出也不落库，中文 label 键绕道同样拦截）；prompt 列清单同步加 [禁填] 软引导。表格页展开区「AI 可写列」chip 一键切换。
+- **新增（身份列保护）**：禁用列必须真实存在且不含身份列（AI 按它匹配既有行，禁掉会破坏行复用与去重；与飞书/Airtable 字段权限保护索引列同做法）。判别测试 3 条。
+
 ### 全书一致性互审（长篇一致性的最后一块拼图）
 
 - **新增（全书互审引擎）**：跨章累积矛盾单章检测抓不到——账册第 3 章「留给林振山」、第 6 章在怀里、第 9 章出现在出租屋，每一单章看都「合理」。新增 `auditBaselineConflicts`：把全部一致性事实交给 LLM 跨章互审（`POST /api/projects/[id]/consistency/audit`，一致性面板一键触发），实测自主抓出「账册凭空移动」真矛盾。
