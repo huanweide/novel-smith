@@ -19,9 +19,9 @@
     "import:corpus": "tsx scripts/import-corpus.ts",
     "test:coverage": "vitest run --coverage",
     "db:migrate-json": "node scripts/migrate-json-fields.mjs",
-    "dist": "npm run build && node scripts/deref-prisma-symlinks.mjs && electron-builder --win && node scripts/check-dist-version.mjs",
-    "rebuild:electron": "npx prebuild-install --runtime=electron --target=37.10.3 --arch=x64 --platform=win32",
-    "rebuild:node": "npx electron-rebuild -f -w better-sqlite3"
+    "dist": "npm run build && npm run rebuild:electron && node scripts/deref-prisma-symlinks.mjs && electron-builder --win --publish never && node scripts/check-dist-version.mjs && npm run rebuild:node",
+    "rebuild:electron": "cd node_modules/better-sqlite3 && npx prebuild-install --runtime=electron --target=37.10.3 --arch=x64 --platform=win32",
+    "rebuild:node": "cd node_modules/better-sqlite3 && npx prebuild-install --runtime=node --arch=x64 --platform=win32"
   },
   "engines": {
     "node": ">=20"

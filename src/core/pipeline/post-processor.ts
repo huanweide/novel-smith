@@ -25,6 +25,7 @@ import { evaluateConfirmEligibility, applyConfirm, triggerForeshadowDetect } fro
 import { extractConsistencyFacts } from "@/core/consistency/extractFacts";
 import { detectConsistencyConflicts } from "@/core/consistency/detectConflicts";
 import { rebuildProjectDigest } from "./digest";
+import { isPlaceholderChapterTitle, rebuildChapterTitle } from "@/lib/chapter-title";
 
 /**
  * 推导章名（v2.43.0）：简短（≤5 字）+ 不含任何人名。
@@ -696,7 +697,10 @@ export async function runPostGenerationPipeline(
           .map((s) => s.trim())
           .filter((s) => s.length > 0)[0] || "";
         const curTitle = String(currentNode?.title || "").trim();
-        const isPlaceholder = !curTitle || /^第\s*\d+\s*章$/.test(curTitle);
+        // M3 修复：占位判定改用与 continue 建章对齐的契约（chapter-title.ts）——
+        // 旧正则只认阿拉伯「第\d+章」，continue 生成的中文数字占位（「第四章」）被误判为
+        // 用户自定义标题，自动命名永远跳过。现在中文/阿拉伯、卷号前缀、章/节/卷占位都识别。
+        const isPlaceholder = isPlaceholderChapterTitle(curTitle);
         // 守卫：仅当正文非空时才回填标题。正文为空（模型偶发空返回）时摘要 LLM 会对空内容胡说，
         // 此时不该写标题，保留占位，交由上层错误流程处理。
         if (content && content.trim().length > 0 && isPlaceholder) {
@@ -710,7 +714,9 @@ export async function runPostGenerationPipeline(
             ),
           });
           if (candidate) {
-            const newTitle = `第${chapterOrder + 1}章：${candidate}`;
+            // M3：回填继承原占位的「前缀 + 数字风格 + 章/节/卷类型」——
+            // 中文占位回填中文章号（「第四章」→「第四章：xxx」），阿拉伯风格不突变。
+            const newTitle = rebuildChapterTitle(curTitle, chapterOrder + 1, candidate);
             await prisma.storyNode.update({
               where: { id: nodeId },
               data: { title: newTitle },

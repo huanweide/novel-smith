@@ -325,6 +325,12 @@ function createWindow() {
 
   win.loadURL(`http://127.0.0.1:${PORT}`);
 
+  // —— M6 崩溃自愈：本地服务无状态（数据在 SQLite），renderer 崩溃直接重载恢复，并留日志供诊断 ——
+  win.webContents.on("render-process-gone", (_e, details) => {
+    logf(`render-process-gone: reason=${details && details.reason} exitCode=${details && details.exitCode}`);
+    try { if (win && !win.isDestroyed()) win.webContents.reload(); } catch {}
+  });
+
   win.on("closed", () => { win = null; });
   // 关闭窗口不退出，缩到托盘
   win.on("close", (e) => {
@@ -354,6 +360,24 @@ function createTray() {
 app.on("second-instance", () => {
   if (!win) createWindow();
   else { win.show(); win.focus(); }
+});
+
+// —— M6 崩溃观测：network/gpu 等 utility 进程崩溃记日志（此前静默，无从诊断「应用数分钟自退」）——
+app.on("child-process-gone", (_e, details) => {
+  try {
+    logf(`child-process-gone: type=${details && details.type} reason=${details && details.reason}` +
+      (details && details.name ? ` name=${details.name}` : "") + ` exitCode=${details && details.exitCode}`);
+  } catch {}
+});
+
+// —— M6 主进程异常兜底：Next server 在主进程跑，任何未捕获异常（如 DB 故障期 500 连锁）
+// 默认会让整个应用静默退出。本地服务可通过重启恢复，绝不让单次异常杀死整个工坊 ——
+process.on("uncaughtException", (err) => {
+  logf("uncaughtException: " + (err && err.stack ? err.stack : err));
+  try { console.error("[ns] 主进程未捕获异常（已兜底，应用继续运行）：", err && err.message); } catch {}
+});
+process.on("unhandledRejection", (reason) => {
+  logf("unhandledRejection: " + String(reason && reason.stack ? reason.stack : reason).slice(0, 2000));
 });
 
 app.whenReady().then(async () => {

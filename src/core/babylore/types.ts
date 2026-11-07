@@ -28,4 +28,7 @@ export interface TableDef {
   category: string;
   columns: LoreTableColumn[];
   rows: LoreTableRow[];
+  /** 列级填表禁用（M4）：key 黑名单。命中的列 AI 填表只读不写（引擎代码级过滤，不依赖 LLM 自觉）；
+   *  身份列（getIdentityCol）不允许进黑名单（行匹配依赖它）。 */
+  disabledColumns?: string[];
 }

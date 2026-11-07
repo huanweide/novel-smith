@@ -21,6 +21,8 @@ interface LoreTableT {
     marker: string;
   /** 是否参与自动填表（false = 填表引擎跳过此表；手动编辑不受影响） */
   fillEnabled?: boolean;
+  /** 列级填表禁用（M4）：列 key 黑名单，AI 填表对命中列只读不写；身份列不可进黑名单 */
+  disabledColumns?: string[];
   }
 
   /** 单表填表结果（POST /api/babylore/fill 返回，前端补 at 字段） */
@@ -244,6 +246,27 @@ interface LoreTableT {
     } finally { setBusy(false); }
   };
 
+  // M4 列级填表禁用：禁掉后 AI 填表对该列只读不写（引擎代码级过滤），手动编辑不受影响
+  const toggleColDisable = async (t: LoreTableT, colKey: string) => {
+    const cur = t.disabledColumns ?? [];
+    const next = cur.includes(colKey) ? cur.filter((k) => k !== colKey) : [...cur, colKey];
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lore-tables/${t.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disabledColumns: next }),
+      });
+      if (res.ok) {
+        setTables((ts) => ts.map((x) => (x.id === t.id ? { ...x, disabledColumns: next } : x)));
+        toastSuccess(next.length ? `「${t.name}」已禁 AI 写入 ${next.length} 列（手动编辑不受影响）` : `「${t.name}」全部列恢复 AI 写入`);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toastError((j as { error?: string }).error || "切换失败");
+      }
+    } finally { setBusy(false); }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--nv-void)] text-[var(--nv-text-primary)] animate-in fade-in">
       <header className="border-b border-[var(--nv-border-2)] bg-[var(--nv-void)]/90 backdrop-blur-sm sticky top-0 z-10">
@@ -432,14 +455,46 @@ interface LoreTableT {
                   </div>
 
                   {expanded === t.id && (
-                    <LoreTableGrid
-                      table={t}
-                      busy={busy}
-                      flaggedRows={flaggedByTable.get(t.name)}
-                      onUpdateCell={updateCell}
-                      onAddRow={addRow}
-                      onSave={saveTable}
-                    />
+                    <div>
+                      {/* M4 列级填表禁用：点击列 chip 切换「禁 AI 写入」，身份列不可禁（与后端/API 同源保护） */}
+                      <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="text-[var(--nv-text-muted)] mr-1">AI 可写列：</span>
+                        {(() => {
+                          const priority = ["name", "title", "place", "live", "key", "building"];
+                          const keys = t.columns.map((c) => c.key);
+                          const idCol = priority.find((p) => keys.includes(p)) ?? keys[0] ?? "name";
+                          return t.columns.map((c) => {
+                            const disabled = (t.disabledColumns ?? []).includes(c.key);
+                            const isId = c.key === idCol;
+                            return (
+                              <button
+                                key={c.key}
+                                onClick={() => !isId && toggleColDisable(t, c.key)}
+                                disabled={busy || isId}
+                                title={isId ? "身份列不可禁用：AI 按它匹配既有行" : disabled ? "点击恢复 AI 写入此列" : "点击禁止 AI 写入此列（手动编辑不受影响）"}
+                                className={`px-2 py-0.5 rounded-lg border transition-colors ${
+                                  isId
+                                    ? "border-[var(--nv-border-1)] text-[var(--nv-text-tertiary)] cursor-not-allowed"
+                                    : disabled
+                                      ? "border-[var(--nv-warning)]/50 text-[var(--nv-warning)] hover:border-[var(--nv-warning)]"
+                                      : "border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:border-[var(--nv-border-3)]"
+                                }`}
+                              >
+                                {c.label}{isId ? " ·锚" : disabled ? " ·锁" : ""}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                      <LoreTableGrid
+                        table={t}
+                        busy={busy}
+                        flaggedRows={flaggedByTable.get(t.name)}
+                        onUpdateCell={updateCell}
+                        onAddRow={addRow}
+                        onSave={saveTable}
+                      />
+                    </div>
                   )}
                 </div>
               ))}

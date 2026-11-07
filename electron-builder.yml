@@ -8,9 +8,14 @@ electronVersion: 37.10.3
 #   并谎报 finished，导致打包产物在 Electron37 里 ERR_DLOPEN_FAILED → 所有 DB 查询 503 →
 #   系统自检横幅误报「原生模块与运行时不兼容」。这是真故障，不是误判。
 # 修复：改为 npmRebuild:false，打包时直接拷贝**已预编好**的 electron-v136 二进制。
-# 前置步骤（必须）：打包前执行 `npm run rebuild:electron`（prebuild-install --runtime=electron --target=37.10.3），
-#   把源 node_modules/better-sqlite3 预编为 electron-v136。否则打包会带入 Node-ABI(127) 的坏二进制。
-# 开发环境（npm run dev / next start）跑在系统 Node22(127)，需另用 `npm rebuild better-sqlite3` 编回 127。
+# 前置步骤（v3.1.166 整链已固化进 `npm run dist`）：rebuild:electron 在 node_modules/better-sqlite3
+#   目录内跑 prebuild-install --runtime=electron --target=37.10.3（⚠️ 必须在包目录内跑——在项目根跑会
+#   把本项目当目标包，GET undefined/releases/download/v3.1.166/... 必然静默失败；v3.1.162~166 的
+#   rebuild:electron script 一直因此从未生效，打包全靠 node_modules 恰好处于 Electron-ABI 的运气）。
+#   dist 尾部串 rebuild:node 恢复 Node-ABI（本机 Node 24 = ABI 137，vitest/next dev 需要）。
+# 国内网络：prebuild-install 默认从 GitHub Releases 下载（被墙超时）。本地 .npmrc 需配置镜像
+#   `better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3`（.npmrc 被
+#   .gitignore 忽略防 token 泄漏；CI 海外直连无需镜像，国内开发者首次跑 dist 前手动加这一行）。
 npmRebuild: false
 directories:
   output: release

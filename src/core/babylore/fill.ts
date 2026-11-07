@@ -227,11 +227,18 @@ function makeTypeMismatchIssue(tableName: string, entityName: string, tableCateg
   };
 }
 
+/** 列显示名：禁用列尾缀「(禁填)」标注（M4 软引导——落库安全由 normalizeOpColumns 代码级过滤兜底） */
+function colDisplayLabel(c: { label?: string; key?: string }, disabled: Set<string>): string {
+  const base = `${c.label}(${c.key})`;
+  return disabled.has(String(c.key)) ? `${base}[禁填]` : base;
+}
+
 /** 组装给 LLM 的表格文本：权威名录（已有名称）+ 全量样例行（截断保护） */
 function buildTablesText(tables: TableDef[]): string {
   return tables
     .map((t) => {
-      const cols = (t.columns as any[]).map((c) => `${c.label}(${c.key})`).join("、");
+      const disabled = new Set((t.disabledColumns as string[]) || []);
+      const cols = (t.columns as any[]).map((c) => colDisplayLabel(c, disabled)).join("、");
       const idCol = getIdentityCol(t);
       const allRows = (t.rows as any[]) || [];
       // 权威名录：所有已有名称（去重），防止 LLM 造地名变体
@@ -265,6 +272,7 @@ const STRICT_SYSTEM_PROMPT = `你是小说数据库填表助手（宝宝流数�
 2. 复用已有：每个表已附【权威名录·已有名称】。若本章事实涉及的名称已在名录中，必须用 update 复用该行（match 按名称列匹配），严禁再 insert 同名新行。
 3. 新增慎重：仅当正文出现全新且确定性的名称、且不在名录中时，才 insert 新行；新名称仍须与正文用字完全一致。
 4. 填后自检：每个被填的名称值都必须能在【最新章节正文】里找到原文；若找不到，说明是错误地名/名称，绝对不要填。
+5. 禁填列不写：列清单中带 [禁填] 标记的列是作者锁定列，禁止出现在 values 里（写了也会被系统丢弃）；按其他列正常写入。
 
 完整性召回（防漏抽，与上面防杜撰同级重要，漏抽=记忆缺口=后续剧情矛盾）：
 A. 人物全覆盖：正文中出现、或仅在对话/回忆/短信中被提及的每一个具名人物，都必须在人物类表中有行——新人物 insert，已有人物 update。只抽主角不抽配角与被提及者 = 漏抽错误。示例：正文只写了一句「你姐在旧城图书馆，等你」而姐姐没出场——也要为她 insert 一行（位置=旧城图书馆，状态=约主角见面）。
@@ -421,15 +429,23 @@ ${chapterText.slice(0, 12000)}
  * 有时用列 label（"人物"）。label 键落库后与列定义对不上，成为读不出/无法复用匹配的脏行。
  * 这里按每张表的 columns 把 label→key、key→key 统一归一（values 与 match.col 都处理）。
  * 未识别的键原样保留（可能来自表 note 里约定别名），由后续守卫兜底。
+ *
+ * M4 列级禁用：归一后剔除 disabledColumns 黑名单命中的 values 键（代码级强保证，
+ * LLM 是否遵守 prompt「禁填」标注不 影响 落库安全）。match.col 只读不写，不禁。
  */
 function normalizeOpColumns(op: LoreTableOp, table: TableDef): LoreTableOp {
   const cols = (table.columns as any[]) || [];
   const byKey = new Map(cols.map((c) => [String(c.key), String(c.key)]));
   const byLabel = new Map(cols.map((c) => [String(c.label).toLowerCase(), String(c.key)]));
   const normKey = (k: string) => byKey.get(k) ?? byLabel.get(String(k).toLowerCase()) ?? k;
+  const disabled = new Set((table.disabledColumns as string[]) || []);
   const values = ((op as any).values && typeof (op as any).values === "object" ? (op as any).values : {}) as Record<string, unknown>;
   const normValues: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(values)) normValues[normKey(k)] = v;
+  for (const [k, v] of Object.entries(values)) {
+    const nk = normKey(k);
+    if (disabled.has(nk)) continue; // 禁用列：剔除写入（身份列由 API 层校验不可进黑名单）
+    normValues[nk] = v;
+  }
   const match = (op as any).match && typeof (op as any).match === "object" ? { ...(op as any).match } : undefined;
   if (match?.col) match.col = normKey(String(match.col));
   return { ...op, values: normValues, ...(match ? { match } : {}) } as LoreTableOp;
@@ -641,6 +657,7 @@ export async function babyloreFill(
     category: t.category || "custom",
     columns: (t.columns as any) || [],
     rows: (t.rows as any) || [],
+    disabledColumns: asArray<string>(t.disabledColumns) as string[],
   }));
 
   // v1.6.19 #6 修复：填表前深拷贝各表 rows 作为 before 快照，
@@ -775,6 +792,7 @@ export async function babyloreFillAll(
     category: t.category || "custom",
     columns: (t.columns as any) || [],
     rows: (t.rows as any) || [],
+    disabledColumns: asArray<string>(t.disabledColumns) as string[],
   }));
 
   // 阶段1：构建「实体名 → 角色卡正主」解析器（一次构建全章复用），填表落库前自然归一。

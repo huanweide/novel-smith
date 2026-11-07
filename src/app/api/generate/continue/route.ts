@@ -27,6 +27,7 @@ import { classifyTruncation } from "@/core/finish-reason";
 import { STATUS_OUTLINE_ONLY } from "@/core/story-status";
 import { toAppStoryNode } from "@/core/story-node-bridge";
 import { NODE_TYPE } from "@/core/node-type";
+import { incrementChapterTitle } from "@/lib/chapter-title";
 
 /**
  * POST /api/generate/continue
@@ -60,20 +61,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "该节点已被删除（回收站），无法续写。如需操作请先从回收站恢复" }, { status: 410 });
     }
 
-    let nextTitle = "";
-    if (currentNode.title) {
-      // 章号递增：优先识别「第X章/节/卷」（X=中文或阿拉伯数字，位置不限）——
-      // 旧逻辑只认阿拉伯数字结尾，"第三章：xxx"匹配失败退化成"第三章：xxx（续）"，章号永不递增
-      const cnMatch = currentNode.title.match(/^(.*?第)([零一二三四五六七八九十百千两\d]+)([章节卷])(.*)$/);
-      if (cnMatch) {
-        nextTitle = `${cnMatch[1]}${cnNumberIncrement(cnMatch[2])}${cnMatch[3]}${cnMatch[4]}`;
-      } else {
-        const match = currentNode.title.match(/^(.+?)(\d+)$/);
-        nextTitle = match ? `${match[1]}${parseInt(match[2]) + 1}` : `${currentNode.title}（续）`;
-      }
-    } else {
-      nextTitle = `第${(allNodes as any[]).length + 1}节`;
-    }
+    // M3 修复：新章标题只给纯章号占位（「第三章：雨夜追踪」→「第四章」，不继承旧描述）。
+    // 旧描述与新章内容必然不符，且带描述的标题会被 post-processor 误判为「用户自定义标题」
+    // 而跳过 LLM 自动命名——旧章号递增但描述永远沿用上章的 KNOWN-LIMITATION 即源于此。
+    // 占位标题由 post-processor 的自动命名（v2.43.0 LLM 短章名管线）在生成完成后回填。
+    const nextTitle = incrementChapterTitle(
+      currentNode.title ?? "",
+      (allNodes as any[]).length + 1,
+    );
 
     let nextOutline = "";
     if (autoOutline && currentNode.content) {
@@ -402,30 +397,4 @@ ${lastParagraphs}
   } catch (err) {
     return jsonError(err);
   }
-}
-
-/** 中文/阿拉伯数字 +1：支持 一~九百九十九 与任意位数阿拉伯数字；无法解析时返回 null（调用方兜底「（续）」） */
-function cnNumberIncrement(s: string): string {
-  if (/^\d+$/.test(s)) return String(parseInt(s, 10) + 1);
-  const digits: Record<string, number> = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-  const units: Record<string, number> = { 十: 10, 百: 100, 千: 1000 };
-  let total = 0, current = 0, ok = true;
-  for (const ch of s) {
-    if (ch in digits) current = digits[ch];
-    else if (ch in units) { total += (current || 1) * units[ch]; current = 0; }
-    else { ok = false; break; }
-  }
-  if (!ok) return `${s}（续）`;
-  return toCnNumber(total + current + 1);
-}
-
-function toCnNumber(n: number): string {
-  const d = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
-  if (n <= 10) return n === 10 ? "十" : d[n];
-  if (n < 20) return `十${d[n % 10]}`;
-  if (n < 100) { const t = Math.floor(n / 10), o = n % 10; return `${d[t]}十${o ? d[o] : ""}`; }
-  const h = Math.floor(n / 100), rest = n % 100;
-  if (rest === 0) return `${d[h]}百`;
-  if (rest < 10) return `${d[h]}百零${d[rest]}`;
-  return `${d[h]}百${toCnNumber(rest)}`;
 }

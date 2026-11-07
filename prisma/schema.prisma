@@ -762,6 +762,7 @@ model LoreTable {
   columns  Json @default(dbgenerated("'[]'"))       // [{key,label,type}]  例 [{key:"name",label:"妃嫔名称",type:"text"}]
   rows     Json @default(dbgenerated("'[]'"))       // [{row_id, ...列值}]  例 [{row_id:1,name:"甄嬛",live:"碎玉轩",status:"已入住",note:"初入宫"}]
   fillEnabled Boolean @default(true)                 // 是否参与自动填表：false = 填表引擎跳过此表（手动编辑仍可用；创意工坊填表策略/表格页开关可改）
+  disabledColumns Json @default(dbgenerated("'[]'")) // 列级填表禁用（M4）：列 key 黑名单，AI 填表对命中列只读不写（引擎代码级过滤；身份列不允许进黑名单）
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -365,3 +365,46 @@ describe("M2 人物落地点表 → 报错不写错", () => {
     expect(written.some((row: any) => row.name === "碎玉轩")).toBe(true);
   });
 });
+
+// ─── M4 列级填表禁用：disabledColumns 黑名单的代码级强过滤（不依赖 LLM 遵守 prompt 禁填标注）───
+describe("M4 列级填表禁用", () => {
+  it("禁用列的写入被剔除：LLM 违规输出该列值也不落库，原值保留、其他列正常更新", async () => {
+    (prisma.loreTable.findMany as any).mockResolvedValueOnce([{ ...makeTable(), disabledColumns: ["related"] }]);
+    mockFetch(
+      JSON.stringify({
+        operations: [{ table: "geo", op: "update", match: { col: "name", val: "青龙镇" }, values: { related: "不该写入", name: "青龙镇" } }],
+      }),
+    );
+    const r = await babyloreFill("proj-x", CHAPTER);
+    expect(r.applied).toBe(1);
+    const written = updateCalls[0].data.rows as any[];
+    const row = written.find((x: any) => x.name === "青龙镇");
+    expect(row).toBeTruthy();
+    expect(row.related).toBe(""); // 禁用列原值保留，未被 LLM 输出改写
+  });
+
+  it("中文 label 键命中禁用列同样被剔除（归一先于过滤，label「关联」→ key related → 黑名单命中）", async () => {
+    (prisma.loreTable.findMany as any).mockResolvedValueOnce([{ ...makeTable(), disabledColumns: ["related"] }]);
+    mockFetch(
+      JSON.stringify({
+        operations: [{ table: "geo", op: "update", match: { col: "name", val: "青龙镇" }, values: { "关联": "label 键绕道写入" } }],
+      }),
+    );
+    const r = await babyloreFill("proj-x", CHAPTER);
+    expect(r.applied).toBe(1);
+    const written = updateCalls[0].data.rows as any[];
+    expect(written.find((x: any) => x.name === "青龙镇").related).toBe("");
+  });
+
+  it("黑名单为空/缺省 → 行为与既有完全一致（回归守卫）", async () => {
+    mockFetch(
+      JSON.stringify({
+        operations: [{ table: "geo", op: "update", match: { col: "name", val: "青龙镇" }, values: { related: "正常写入" } }],
+      }),
+    );
+    const r = await babyloreFill("proj-x", CHAPTER);
+    expect(r.applied).toBe(1);
+    const written = updateCalls[0].data.rows as any[];
+    expect(written.find((x: any) => x.name === "青龙镇").related).toBe("正常写入");
+  });
+});
