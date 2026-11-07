@@ -264,8 +264,14 @@ const STRICT_SYSTEM_PROMPT = `你是小说数据库填表助手（宝宝流数�
 1. 名称零杜撰：所有写入的名称（人名/地名/组织名/物品名/功法名）必须逐字复制【最新章节正文】里的原文用字（含繁简、异体写法），禁止音译、改写、缩写、自创同义变体。例：正文写「青龙镇」就填「青龙镇」，不得改成「青龍镇」「青龙城」或「青龙门」之类。
 2. 复用已有：每个表已附【权威名录·已有名称】。若本章事实涉及的名称已在名录中，必须用 update 复用该行（match 按名称列匹配），严禁再 insert 同名新行。
 3. 新增慎重：仅当正文出现全新且确定性的名称、且不在名录中时，才 insert 新行；新名称仍须与正文用字完全一致。
-4. 完整性：提取正文中明确出现、且属于本表列项的事实，不遗漏；但不要凭空补充正文没有的信息。
-5. 填后自检：每个被填的名称值都必须能在【最新章节正文】里找到原文；若找不到，说明是错误地名/名称，绝对不要填。
+4. 填后自检：每个被填的名称值都必须能在【最新章节正文】里找到原文；若找不到，说明是错误地名/名称，绝对不要填。
+
+完整性召回（防漏抽，与上面防杜撰同级重要，漏抽=记忆缺口=后续剧情矛盾）：
+A. 人物全覆盖：正文中出现、或仅在对话/回忆/短信中被提及的每一个具名人物，都必须在人物类表中有行——新人物 insert，已有人物 update。只抽主角不抽配角与被提及者 = 漏抽错误。示例：正文只写了一句「你姐在旧城图书馆，等你」而姐姐没出场——也要为她 insert 一行（位置=旧城图书馆，状态=约主角见面）。
+B. 对话即事实：对话、短信、回忆中明确说出的事实（身世、下落、约定、身份、数字）与叙述描写同等有效，照常提取。
+C. 状态列写「变化+要点」：状态/说明类列必须写该人物本章的关键状态变化、新获取的信息、去向或待办（例：「交出书房钥匙」「得知父亲坠桥存疑，动身赴约」），禁止写「在X处」「正常」「无变化」这类零信息值；纯位置写位置列，不占状态列。
+D. 存疑也入表：正文以疑问或悬念抛出的重要事实（某人下落不明、死亡存疑、身份存疑），照常写入并在值尾标注「（存疑）」，不得因不确定而丢弃。
+E. 下一章钩子必须记录：章末出现的赴约地点、待办、收到的消息等指向下一章的信息，必须写入对应人物的状态列。
 
 输出严格 JSON（response_format=json_object），不要任何解释文字、不要 Markdown。
 返回结构：{"operations":[{"table":"表英文key","op":"insert|update|delete","match":{"col":"列key","val":"匹配值"},"values":{"列key":"值"}}]}
@@ -279,6 +285,8 @@ interface LlmCreds {
   baseURL: string;
   apiKey: string;
   model: string;
+  /** 全局「关闭思考模式」开关透传：混合推理模型（DeepSeek-V4-Flash 等）填表时禁用思考，速度优先 */
+  disableThinking?: boolean;
 }
 
 /**
@@ -341,14 +349,15 @@ ${chapterText.slice(0, 12000)}
         },
         signal: AbortSignal.timeout(120000),
         body: JSON.stringify({
-          model: fillModelOf(llm.model),
+          model: fillModelOf(llm.model, llm.baseURL),
           messages: [
             { role: "system", content: STRICT_SYSTEM_PROMPT },
             { role: "user", content: userPrompt },
           ],
-          temperature: 1,
+          temperature: 0.5, // 结构化抽取任务：低温稳定（原 1.0 同章两次注入随机波动）；0.3 过保守漏抽新人物，0.5 平衡稳定与覆盖
           max_tokens: 8000,
           response_format: { type: "json_object" },
+          ...(llm.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
         }),
       });
 
@@ -407,6 +416,25 @@ ${chapterText.slice(0, 12000)}
   return { ok: false, operations: 0, applied: 0, warnings: [], skippedOps: [], crossTableIssues: [], error: lastErr };
 }
 
+/**
+ * 列名归一（D 轮实测抓出）：模型输出 ops.values 的键不稳定——有时用列 key（"name"），
+ * 有时用列 label（"人物"）。label 键落库后与列定义对不上，成为读不出/无法复用匹配的脏行。
+ * 这里按每张表的 columns 把 label→key、key→key 统一归一（values 与 match.col 都处理）。
+ * 未识别的键原样保留（可能来自表 note 里约定别名），由后续守卫兜底。
+ */
+function normalizeOpColumns(op: LoreTableOp, table: TableDef): LoreTableOp {
+  const cols = (table.columns as any[]) || [];
+  const byKey = new Map(cols.map((c) => [String(c.key), String(c.key)]));
+  const byLabel = new Map(cols.map((c) => [String(c.label).toLowerCase(), String(c.key)]));
+  const normKey = (k: string) => byKey.get(k) ?? byLabel.get(String(k).toLowerCase()) ?? k;
+  const values = ((op as any).values && typeof (op as any).values === "object" ? (op as any).values : {}) as Record<string, unknown>;
+  const normValues: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) normValues[normKey(k)] = v;
+  const match = (op as any).match && typeof (op as any).match === "object" ? { ...(op as any).match } : undefined;
+  if (match?.col) match.col = normKey(String(match.col));
+  return { ...op, values: normValues, ...(match ? { match } : {}) } as LoreTableOp;
+}
+
 async function applyOps(
   tables: TableDef[],
   ops: LoreTableOp[],
@@ -422,9 +450,11 @@ async function applyOps(
   const crossTableIssues: SelfCheckIssue[] = [];
   const now = new Date().toISOString();
 
-  for (const op of ops) {
-    const t = byKey.get(op.table);
+  for (const rawOp of ops) {
+    const t = byKey.get(rawOp.table);
     if (!t) continue;
+    // 列名归一：label（"人物"）→ key（"name"），values 与 match.col 统一（见 normalizeOpColumns）
+    const op = normalizeOpColumns(rawOp, t);
     // 直接累积修改 tables 内的 t.rows（同一引用贯穿多章循环）：
     // 上一章写回后 t.rows 即最新，下一章 applyOps 看到累积结果，
     // 灭「一键填表每章整体覆盖写回、静默丢失前序章」的缺陷（墨白 P0-1）。
@@ -456,6 +486,13 @@ async function applyOps(
       const rawNewVal = (op.values || {})[idCol];
       // 落库前归一：李大师 类变体 → 角色卡正主（李富贵），使代码级去重自然并回（阶段1）。
       const newVal = nameResolver && rawNewVal != null ? nameResolver(String(rawNewVal)) : rawNewVal;
+      // 主键必填守卫（D 轮实测抓出）：身份列（如 name）为空的 insert 无法被后续章节按名复用匹配，
+      // 必成孤儿脏行（第1章抽出的无名行直到终态都无人 update）→ 跳过不落库。
+      if (newVal == null || String(newVal).trim() === "") {
+        warnings.push(`表「${t.name}」insert 缺少身份列「${idCol}」值，已跳过（空主键行无法被后续章节复用匹配）`);
+        skippedOps.push({ op, reason: `insert 缺少身份列「${idCol}」值`, table: t.name });
+        continue;
+      }
       // 代码级去重：同主键名已存在则转 update（杜绝同名重复行）
       const existingIdx =
         newVal != null
@@ -499,6 +536,12 @@ async function applyOps(
         if (col !== idCol) {
           warnings.push(`表「${t.name}」update 按「${String(col)}」未命中任何行，且该列非身份列，已跳过（不静默新建伪行）`);
           skippedOps.push({ op, reason: `update 按「${String(col)}」未命中且该列非身份列`, table: t.name });
+          continue;
+        }
+        // 主键必填守卫：兜底新建同样不许身份列空值（同 insert 守卫）
+        if (val == null || String(val).trim() === "") {
+          warnings.push(`表「${t.name}」update 兜底新建缺少身份列「${idCol}」值，已跳过`);
+          skippedOps.push({ op, reason: `update 兜底新建缺少身份列值`, table: t.name });
           continue;
         }
         const maxId = rows.reduce((m: number, r: any) => Math.max(m, Number(r.row_id) || 0), 0);
@@ -573,16 +616,20 @@ export async function babyloreFill(
   const rawProj = (options?.projectLlmConfig || {}) as Record<string, unknown>;
   const model = typeof rawProj.model === "string" && rawProj.model.trim() ? rawProj.model : settings.model;
 
-  const where: any = { projectId };
+  const where: any = { projectId, fillEnabled: true };   // fillEnabled=false 的表跳过自动填表（用户/填表策略预设禁用的区块）
   if (options?.tableKeys?.length) where.key = { in: options.tableKeys };
   const dbTables = await prisma.loreTable.findMany({ where });
 
   if (dbTables.length === 0) {
+    // 区分「没有表」与「有表但全被禁用自动填表」，避免误导用户去建表
+    const total = await prisma.loreTable.count({ where: { projectId } });
     return {
       ok: false,
       operations: 0,
       applied: 0,
-      error: "项目暂无结构化表格。请先在创意工坊套用「表格模板预设」，或在项目「结构化表格」页新建。",
+      error: total === 0
+        ? "项目暂无结构化表格。请先在创意工坊套用「表格模板预设」，或在项目「结构化表格」页新建。"
+        : "所有表格均已停用自动填表（可在「结构化表格」页逐表开启，或套用填表策略预设）。请确认后重试。",
     };
   }
 
@@ -603,7 +650,7 @@ export async function babyloreFill(
     dbTables.map((t: any) => [t.id, JSON.parse(JSON.stringify(asArray<any>(t.rows)))]),
   );
 
-  const llm: LlmCreds = { baseURL, apiKey, model };
+  const llm: LlmCreds = { baseURL, apiKey, model, disableThinking: settings.disableThinking };
   const srcLabel = `ch${options?.chapterOrder ?? "?"}:batch${options?.batchId ?? "manual"}${options?.source ? ":" + options.source : ""}`;
   // 阶段1：构建「实体名 → 角色卡正主」解析器，填表落库前自然归一（李大师→李富贵）。
   const nameResolver = await buildNameResolver(projectId);
@@ -694,9 +741,9 @@ export async function babyloreFillAll(
   const apiKey = projOverride.apiKey || settings.apiKey;
   const rawProj = (options?.projectLlmConfig || {}) as Record<string, unknown>;
   const model = typeof rawProj.model === "string" && rawProj.model.trim() ? rawProj.model : settings.model;
-  const llm: LlmCreds = { baseURL, apiKey, model };
+  const llm: LlmCreds = { baseURL, apiKey, model, disableThinking: settings.disableThinking };
 
-  const where: any = { projectId };
+  const where: any = { projectId, fillEnabled: true };   // fillEnabled=false 的表跳过自动填表（用户/填表策略预设禁用的区块）
   if (options?.tableKeys?.length) where.key = { in: options.tableKeys };
   const dbTables = await prisma.loreTable.findMany({ where });
 

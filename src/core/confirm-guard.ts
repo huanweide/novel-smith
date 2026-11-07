@@ -112,6 +112,8 @@ export async function applyConfirm(node: {
   content: string | null;
   order: number;
   skipDetect?: boolean;
+  /** 可选 SSE 通知：填表结果（babylore_fill 事件）经此透传给前端，auto-confirm 填表不再静默 */
+  notify?: (o: object) => void;
 }): Promise<string> {
   const now = new Date();
   const existing = await prisma.storyNode.findUnique({
@@ -147,7 +149,7 @@ export async function applyConfirm(node: {
       const fillRes = await safeFillAfterWriting({
         projectId: node.projectId,
         content: node.content,
-        send: undefined,
+        send: node.notify, // 透传：前端已有 babylore_fill 消费逻辑（toast 收敛），auto-confirm 填表失败不再无感
         nodeOrder: node.order,
         isLatestChapter,
         nodeId: node.id,

@@ -31,6 +31,8 @@ interface LlmCreds {
   baseURL: string;
   apiKey: string;
   model: string;
+  /** 全局「关闭思考模式」透传：混合推理模型抽取实体时禁用思考提速 */
+  disableThinking?: boolean;
 }
 
 export interface EntitySyncResult {
@@ -96,7 +98,7 @@ export async function syncChapterEntities(
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.apiKey}` },
       signal: AbortSignal.timeout(90000),
       body: JSON.stringify({
-        model: fillModelOf(llm.model),
+        model: fillModelOf(llm.model, llm.baseURL),
         messages: [
           { role: "system", content: ENTITY_SYSTEM_PROMPT },
           { role: "user", content: `【正文】\n${chapterText.slice(0, 12000)}\n\n请抽取新实体并输出 JSON。` },
@@ -104,6 +106,7 @@ export async function syncChapterEntities(
         temperature: 0.5,
         max_tokens: 8000,
         response_format: { type: "json_object" },
+        ...(llm.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
       }),
     });
     if (!res.ok) {

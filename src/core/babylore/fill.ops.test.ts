@@ -133,6 +133,35 @@ describe("P1-1 update 未命中且非身份列 → 不静默建伪行", () => {
   });
 });
 
+describe("D 轮：列名归一 + 主键必填守卫", () => {
+  it("insert 用中文 label 当键（名称）→ 归一成 name 正常落库（不因键名不稳而丢事实）", async () => {
+    mockFetch(
+      JSON.stringify({
+        operations: [{ table: "geo", op: "insert", values: { "名称": "白帝城", "关联": "李白" } }],
+      }),
+    );
+    const r = await babyloreFill("proj-x", CHAPTER);
+    expect(r.ok).toBe(true);
+    expect(r.applied).toBe(1);
+    const written = updateCalls[0].data.rows as any[];
+    const row = written.find((x: any) => x.name === "白帝城");
+    expect(row).toBeTruthy();
+    expect(row.related).toBe("李白"); // label 键已归一为 key，值没有丢成脏键
+  });
+
+  it("insert 缺身份列值 → 跳过不落库（防孤儿脏行），带警告", async () => {
+    mockFetch(
+      JSON.stringify({
+        operations: [{ table: "geo", op: "insert", values: { related: "只有关联没有名称" } }],
+      }),
+    );
+    const r = await babyloreFill("proj-x", CHAPTER);
+    expect(r.applied).toBe(0);
+    expect(updateCalls.length).toBe(0);
+    expect(safeJoin(r.warnings, "")).toContain("身份列");
+  });
+});
+
 // ─── P1-1 babyloreFillAll 不得恒返回 ok:true（静默假完成）───
 // 验证汇总态真实反映各章 applied/ok：全章失败 → ok:false；部分失败 → ok:false；
 // 全部已填跳过 → ok:true（正常无需重试）。

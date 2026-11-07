@@ -314,6 +314,7 @@ export async function runPostGenerationPipeline(
           content,
           order: currentNode?.order ?? 0,
           skipDetect: true,
+          notify: (o) => send(o), // auto-confirm 填表结果（babylore_fill）透传前端，失败不再静默
         });
         send({ type: "auto_confirm", content: "智能审阅：质量达标，已自动确认" });
       }
