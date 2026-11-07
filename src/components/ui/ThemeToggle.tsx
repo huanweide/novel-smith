@@ -19,19 +19,9 @@ import { createPortal } from "react-dom";
 import { Icon, type IconName } from "@/components/ui/icons";
 
 type ThemeId =
-  | "dark"
-  | "light"
-  | "azure"
-  | "theme-github"
-  | "theme-dracula"
-  | "theme-nord"
-  | "theme-tokyo"
-  | "theme-gruvbox"
-  | "theme-solarized"
-  | "theme-catppuccin"
-  | "theme-dusk"   // 柔和深夜（风格 C，默认）
-  | "theme-paper"  // 暖白纸稿（风格 A，浅）
-  | "theme-doc";   // 简洁文档（风格 B，浅）
+  | "theme-dusk"   // 柔和深夜（深色主力）
+  | "theme-paper"  // 暖白纸稿（浅色，默认）
+  | "theme-dracula"; // 德古拉（深色 · 强个性）
 
 type Group = "dark" | "light";
 
@@ -48,27 +38,18 @@ interface ThemeDef {
 }
 
 const THEMES: ThemeDef[] = [
-  { id: "dark", name: "夜航", desc: "墨蓝紫 · 经典暗", icon: "moon", group: "dark", swatch: "#0B1322", meta: "#0B1322" },
-  { id: "azure", name: "苍青", desc: "青绿 · 通透", icon: "sparkles", group: "dark", swatch: "#04181A", meta: "#04181A" },
-  { id: "theme-github", name: "GitHub", desc: "官方深灰蓝", icon: "moon", group: "dark", swatch: "#0D1117", meta: "#0D1117" },
-  { id: "theme-dracula", name: "德古拉", desc: "暗紫霓虹", icon: "moon", group: "dark", swatch: "#282A36", meta: "#282A36" },
-  { id: "theme-nord", name: "北境", desc: "冷灰蓝", icon: "moon", group: "dark", swatch: "#2E3440", meta: "#2E3440" },
-  { id: "theme-tokyo", name: "东京夜", desc: "深蓝紫霓虹", icon: "moon", group: "dark", swatch: "#1A1B26", meta: "#1A1B26" },
-  { id: "theme-gruvbox", name: "古旧", desc: "暖褐黄", icon: "moon", group: "dark", swatch: "#282828", meta: "#282828" },
+  { id: "theme-paper", name: "暖白纸稿", desc: "暖米底 · 书稿感（默认）", icon: "sun", group: "light", swatch: "#F3EEE3", meta: "#F3EEE3" },
   { id: "theme-dusk", name: "柔和深夜", desc: "深炭灰 · 零发光", icon: "moon", group: "dark", swatch: "#15171D", meta: "#15171D" },
-  { id: "light", name: "白昼", desc: "米白 · 经典浅", icon: "sun", group: "light", swatch: "#F3EFE8", meta: "#F3EFE8" },
-  { id: "theme-solarized", name: "曜石", desc: "Solarized 纸感", icon: "sun", group: "light", swatch: "#FDF6E3", meta: "#FDF6E3" },
-  { id: "theme-catppuccin", name: "拿铁", desc: "冷白柔光", icon: "sun", group: "light", swatch: "#EFF1F5", meta: "#EFF1F5" },
-  { id: "theme-paper", name: "暖白纸稿", desc: "暖米底 · 书稿感", icon: "sun", group: "light", swatch: "#F3EEE3", meta: "#F3EEE3" },
-  { id: "theme-doc", name: "简洁文档", desc: "近白 · Notion 风", icon: "sun", group: "light", swatch: "#FFFFFF", meta: "#FFFFFF" },
+  { id: "theme-dracula", name: "德古拉", desc: "暗紫霓虹 · 强个性", icon: "moon", group: "dark", swatch: "#282A36", meta: "#282A36" },
 ];
 
 const ALL_IDS: ThemeId[] = THEMES.map((t) => t.id);
-const LIGHT_IDS = new Set<ThemeId>(["light", "theme-solarized", "theme-catppuccin", "theme-paper", "theme-doc"]);
+const LIGHT_IDS = new Set<ThemeId>(["theme-paper"]);
 
 function applyTheme(id: ThemeId) {
   const d = document.documentElement;
-  for (const c of ALL_IDS) d.classList.remove(c);
+  // 基础明暗类（dark/light）也要先清掉，否则切主题时上一个 light 残留导致配色错乱
+  for (const c of [...ALL_IDS, "dark", "light"]) d.classList.remove(c);
   d.classList.add(id);
   d.classList.add(LIGHT_IDS.has(id) ? "light" : "dark"); // 浅色/深色系各补基础 class，复用既有适配规则
   try {
@@ -83,13 +64,10 @@ function applyTheme(id: ThemeId) {
 
 function currentTheme(): ThemeId {
   const d = document.documentElement;
-  // 非 dark/light 的主题 id 优先命中（azure / theme-* 都会带自己的 class）
-  const found = ALL_IDS.find((id) => id !== "dark" && id !== "light" && d.classList.contains(id));
+  const found = ALL_IDS.find((id) => d.classList.contains(id));
   if (found) return found;
-  if (d.classList.contains("light")) return "light";
-  // 兜底：仅带 dark 基类（夜航）而无具体主题 class 时，归到 dark；
-  // 新访客由 layout 防闪烁脚本直接加具体 class（theme-dusk 等），走上面 found 分支命中
-  return "dark";
+  // 兜底：无具体主题 class 时归到默认（新访客由 layout 防闪烁脚本直接加 theme-paper）
+  return "theme-paper";
 }
 
 export function ThemeToggle({ className = "" }: { className?: string }) {

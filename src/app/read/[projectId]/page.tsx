@@ -348,7 +348,7 @@ export default function ReadPage() {
       {tocOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-[var(--nv-veil)] z-40 lg:hidden"
             onClick={() => setTocOpen(false)}
             aria-hidden="true"
           />

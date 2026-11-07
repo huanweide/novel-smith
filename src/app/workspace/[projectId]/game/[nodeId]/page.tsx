@@ -813,13 +813,13 @@ export default function GamePage() {
         </aside>
         {/* 窄屏抽屉遮罩 */}
         {(leftDrawerOpen || rightDrawerOpen) && (
-          <div aria-hidden="true" className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => { setLeftDrawerOpen(false); setRightDrawerOpen(false); }} />
+          <div aria-hidden="true" className="fixed inset-0 z-30 bg-[var(--nv-veil)] lg:hidden" onClick={() => { setLeftDrawerOpen(false); setRightDrawerOpen(false); }} />
         )}
       </div>
 
       {/* ═══ 章纲编辑器浮层 ═══ */}
       {showOutlineEditor && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--nv-veil)] backdrop-blur-[2px]">
           <div className="h-[85vh] max-h-[800px] w-[900px]">
             <GameOutlineEditor
               projectId={projectId}

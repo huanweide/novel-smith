@@ -98,6 +98,7 @@
   --nv-border-1:    rgba(255, 255, 255, 0.07);   /* 基底边线 */
   --nv-border-2:    rgba(255, 255, 255, 0.11);   /* 抬升边线 */
   --nv-border-3:    rgba(255, 255, 255, 0.16);   /* 浮起边线 */
+  --nv-veil:        rgba(5, 9, 20, 0.42);        /* 弹窗/抽屉遮罩——轻纱而非黑幕（层级靠面板浮起表达） */
 
   /* ── 功能色彩（OKLCH 空间，感知均匀）—— 亮度微升保对比 ── */
   --nv-primary:      oklch(0.66 0.19 270);       /* 靛蓝 —— 主操作/生成 */
@@ -121,6 +122,8 @@
   /* ── 文字层级（4级明度 + 功能色）—— 更亮、对比更强 ── */
   --nv-text-primary:   #F8F7F2;   /* L1 主文字——近白，对比度 17:1 */
   --nv-prose:          #E9E7E0;   /* 正文阅读色——暖近白，长文不刺眼；与辅文字灰(#B9B7AD)拉开层级，避免正文被当成注释 */
+  --nv-prose-font: "Noto Serif SC","Source Han Serif SC","Songti SC",STSong,SimSun,Georgia,serif;  /* 正文衬线栈——书籍排版感；系统未装则回退宋体/系统衬线 */
+
   --nv-text-secondary: #B9B7AD;   /* L2 辅文字——亮灰，对比度 7:1 */
   --nv-text-tertiary:  #98968C;   /* L3 弱文字——中灰，对比度 5.2:1（达 WCAG AA） */
   --nv-text-muted:     #8E8B82;   /* L4 禁用/占位文字——灰；R2-010：提亮至落深色卡片/弹窗(popover #161E34)≥4.5:1(WCAG AA)，实测约 4.86:1，且仍低于 tertiary #98968C 保层级 */
@@ -233,6 +236,17 @@
   from { transform: scale(0.8); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+@keyframes nf-step-flash {
+  0% { opacity: 0; transform: scale(0.82); filter: blur(4px); }
+  20% { opacity: 1; transform: scale(1.03); filter: blur(0); }
+  32% { transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); filter: blur(3px); }
+}
+
+/* 隐藏横向滚动条（进度条等横向滑动容器专用，保留滚动能力） */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 
 .dark {
   --background: #0B1322;
@@ -285,6 +299,7 @@
   --nv-border-1:    rgba(15, 18, 30, 0.07);
   --nv-border-2:    rgba(15, 18, 30, 0.11);
   --nv-border-3:    rgba(15, 18, 30, 0.16);
+  --nv-veil:        rgba(48, 38, 24, 0.12);   /* 浅色：暖纱极轻——弹窗层级靠跳起面板+浮影表达，不压黑底 */
 
   --nv-primary:      oklch(0.52 0.17 270);  /* F02：浅色主色文字由 0.55(CR4.42<4.5 AA) 压暗至 0.52(CR5.00≥AA)，消除浅色主题主色/链接文字临界不达标 */
   --nv-primary-soft: oklch(0.52 0.17 270 / 0.12);
@@ -404,12 +419,12 @@
 /* 正文 / 滚动条 / 幽灵按钮 / 提示气泡 浅色适配 */
 .light .markdown-body { color: #2A2C33; }
 .light .btn-ghost { color: var(--nv-text-secondary); border-color: var(--nv-border-2); }
-.light .btn-ghost:hover { background: var(--nv-surface-2); border-color: rgba(15, 18, 30, 0.2); color: var(--nv-text-primary); }
+.light .btn-ghost:hover { background: var(--nv-surface-2); border-color: rgba(15, 18, 30, 0.2); color: var(--nv-text-primary); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(43,39,31,0.10); }
 /* 浅色主题：按钮统一无色玻璃 + 香槟金/语义描边（与 dark 同构，文字加深保对比） */
 .light .btn-primary,
-.light .btn-creative { color: var(--nv-accent-text-on-light, #9A6E22); border-color: rgba(184, 137, 58, 0.55); box-shadow: var(--shadow-glass-rest), 0 0 18px rgba(184, 137, 58, 0.16); }
+.light .btn-creative { color: var(--nv-accent-text-on-light, #9A6E22); border-color: rgba(184, 137, 58, 0.55); box-shadow: 0 1px 3px rgba(43,39,31,0.08); }
 .light .btn-primary:hover,
-.light .btn-creative:hover { border-color: rgba(184, 137, 58, 0.8); box-shadow: var(--shadow-glass-hover), 0 0 26px rgba(184, 137, 58, 0.28); }
+.light .btn-creative:hover { border-color: rgba(184, 137, 58, 0.8); box-shadow: 0 2px 6px rgba(43,39,31,0.1); }
 .light .btn-success { color: oklch(0.42 0.13 160); border-color: oklch(0.55 0.16 160 / 0.55); }
 .light .btn-success:hover { border-color: oklch(0.55 0.16 160 / 0.8); }
 .light .btn-danger { color: oklch(0.42 0.20 18); border-color: oklch(0.55 0.22 18 / 0.55); }
@@ -648,6 +663,7 @@
   border-color: rgba(255, 255, 255, 0.18);
   color: var(--nv-text-primary);
   box-shadow: var(--shadow-glass-rest);
+  transform: translateY(-1px);   /* 悬浮跳起统一：所有按钮 hover 一律轻抬，无黑底突变 */
 }
 .btn-ghost:active {
   background: rgba(255, 255, 255, 0.12);
@@ -1121,18 +1137,6 @@
 @keyframes nf-orb-spin { to { transform: rotate(360deg); } }
 
 /* 主 CTA 流光扫过 */
-.nf-btn-flow { position: relative; overflow: hidden; }
-.nf-btn-flow::after {
-  content: "";
-  position: absolute; top: 0; bottom: 0; left: -75%; width: 42%;
-  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.28), transparent);
-  transform: skewX(-20deg);
-  transition: left 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.nf-btn-flow:hover::after { left: 135%; }
-
-/* 项目卡：书脊 + 水印 + 题材色 */
 .nf-book { position: relative; overflow: hidden; }
 .nf-book::before {
   content: "";
@@ -1462,68 +1466,7 @@
 /* ═══════════════════════════════════════════
    「苍青」主题（参考 改造：青绿·通透（与夜航墨蓝紫拉开））
    切 html.azure 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.azure {
-  color-scheme: dark;
 
-  --nv-void:        #04181A;
-  --nv-abyss:       #0A272B;
-  --nv-surface-1:   rgba(150, 240, 230, 0.025);
-  --nv-surface-2:   rgba(150, 240, 230, 0.05);
-  --nv-surface-3:   rgba(150, 240, 230, 0.08);
-  --nv-border-1:    rgba(150, 240, 230, 0.08);
-  --nv-border-2:    rgba(150, 240, 230, 0.12);
-  --nv-border-3:    rgba(150, 240, 230, 0.18);
-
-  --nv-primary:      #5FE3C8;
-  --nv-primary-soft: rgba(95, 227, 200, 0.15);
-  --nv-success:      #5FD6A8;
-  --nv-success-soft: rgba(95, 214, 168, 0.15);
-  --nv-warning:      #E8C86A;
-  --nv-warning-soft: rgba(232, 200, 106, 0.15);
-  --nv-danger:       #F2746B;
-  --nv-danger-soft:  rgba(242, 116, 107, 0.15);
-  --nv-creative:     #F0D08A;
-  --nv-creative-soft:rgba(240, 208, 138, 0.15);
-  --nv-creative-fill:#2FA98C;
-  --nv-info:         #63D8DF;
-  --nv-info-soft:    rgba(99, 216, 223, 0.15);
-  --nv-accent:       #8FF0D8;
-  --nv-accent-soft:  rgba(143, 240, 216, 0.14);
-
-  --nv-text-primary:   #dfe5e4;
-  --nv-text-secondary: #b3c1bf;
-  --nv-text-tertiary:  #94a8a5;
-  --nv-text-muted:     #789591;
-  --nv-text-muted-on-surface-3: #789591;
-
-  --background: #04181A;
-  --foreground: #dfe5e4;
-  --card: rgba(150, 240, 230, 0.05);
-  --card-foreground: #dfe5e4;
-  --popover: #0A272B;
-  --popover-foreground: #dfe5e4;
-  --primary: #5FE3C8;
-  --primary-foreground: #04181A;
-  --secondary: rgba(150, 240, 230, 0.06);
-  --secondary-foreground: #dfe5e4;
-  --muted: rgba(150, 240, 230, 0.05);
-  --muted-foreground: #94a8a5;
-  --accent: rgba(150, 240, 230, 0.06);
-  --accent-foreground: #dfe5e4;
-  --destructive: #F2746B;
-  --border: rgba(150, 240, 230, 0.12);
-  --input: rgba(150, 240, 230, 0.14);
-  --ring: rgba(95, 227, 200, 0.5);
-  --sidebar: #04181A;
-  --sidebar-foreground: #dfe5e4;
-  --sidebar-primary: #5FE3C8;
-  --sidebar-primary-foreground: #04181A;
-  --sidebar-accent: rgba(150, 240, 230, 0.05);
-  --sidebar-accent-foreground: #dfe5e4;
-  --sidebar-border: rgba(150, 240, 230, 0.09);
-  --sidebar-ring: rgba(95, 227, 200, 0.5);
-}
 /* 苍青主题下按钮统一无色玻璃 + 香槟金/语义描边（与 dark 同构） */
 html.azure .btn-primary,
 html.azure .btn-creative { color: var(--nv-gold); border-color: rgba(228, 184, 99, 0.5); }
@@ -1533,68 +1476,7 @@ html.azure .btn-danger { color: oklch(0.76 0.18 20); border-color: oklch(0.62 0.
 /* ═══════════════════════════════════════════
    「GitHub 暗」主题（参考 GitHub Dark #0D1117 / #58A6FF）
    切 html.theme-github 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-github {
-  color-scheme: dark;
 
-  --nv-void:        #0D1117;
-  --nv-abyss:       #161B22;
-  --nv-surface-1:   rgba(139, 148, 158, 0.025);
-  --nv-surface-2:   rgba(139, 148, 158, 0.05);
-  --nv-surface-3:   rgba(139, 148, 158, 0.08);
-  --nv-border-1:    rgba(139, 148, 158, 0.08);
-  --nv-border-2:    rgba(139, 148, 158, 0.12);
-  --nv-border-3:    rgba(139, 148, 158, 0.18);
-
-  --nv-primary:      #58A6FF;
-  --nv-primary-soft: rgba(88, 166, 255, 0.15);
-  --nv-success:      #3FB950;
-  --nv-success-soft: rgba(63, 185, 80, 0.15);
-  --nv-warning:      #D29922;
-  --nv-warning-soft: rgba(210, 153, 34, 0.15);
-  --nv-danger:       #F85149;
-  --nv-danger-soft:  rgba(248, 81, 73, 0.15);
-  --nv-creative:     #D2A8FF;
-  --nv-creative-soft:rgba(210, 168, 255, 0.15);
-  --nv-creative-fill:#8957E5;
-  --nv-info:         #58A6FF;
-  --nv-info-soft:    rgba(88, 166, 255, 0.15);
-  --nv-accent:       #79C0FF;
-  --nv-accent-soft:  rgba(121, 192, 255, 0.14);
-
-  --nv-text-primary:   #d4d7dc;
-  --nv-text-secondary: #adb4bc;
-  --nv-text-tertiary:  #919ba5;
-  --nv-text-muted:     #7c8998;
-  --nv-text-muted-on-surface-3: #7a8796;
-
-  --background: #0D1117;
-  --foreground: #d4d7dc;
-  --card: rgba(139, 148, 158, 0.05);
-  --card-foreground: #d4d7dc;
-  --popover: #161B22;
-  --popover-foreground: #d4d7dc;
-  --primary: #58A6FF;
-  --primary-foreground: #0D1117;
-  --secondary: rgba(139, 148, 158, 0.06);
-  --secondary-foreground: #d4d7dc;
-  --muted: rgba(139, 148, 158, 0.05);
-  --muted-foreground: #919ba5;
-  --accent: rgba(139, 148, 158, 0.06);
-  --accent-foreground: #d4d7dc;
-  --destructive: #F85149;
-  --border: rgba(139, 148, 158, 0.12);
-  --input: rgba(139, 148, 158, 0.14);
-  --ring: rgba(88, 166, 255, 0.5);
-  --sidebar: #0D1117;
-  --sidebar-foreground: #d4d7dc;
-  --sidebar-primary: #58A6FF;
-  --sidebar-primary-foreground: #0D1117;
-  --sidebar-accent: rgba(139, 148, 158, 0.05);
-  --sidebar-accent-foreground: #d4d7dc;
-  --sidebar-border: rgba(139, 148, 158, 0.09);
-  --sidebar-ring: rgba(88, 166, 255, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    「德古拉」主题（参考 Dracula #282A36 / #BD93F9）
@@ -1665,332 +1547,27 @@ html.theme-dracula {
 /* ═══════════════════════════════════════════
    「北境」主题（参考 Nord #2E3440 / #88C0D0）
    切 html.theme-nord 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-nord {
-  color-scheme: dark;
 
-  --nv-void:        #242933;
-  --nv-abyss:       #2E3440;
-  --nv-surface-1:   rgba(216, 222, 233, 0.025);
-  --nv-surface-2:   rgba(216, 222, 233, 0.05);
-  --nv-surface-3:   rgba(216, 222, 233, 0.08);
-  --nv-border-1:    rgba(216, 222, 233, 0.08);
-  --nv-border-2:    rgba(216, 222, 233, 0.12);
-  --nv-border-3:    rgba(216, 222, 233, 0.18);
-
-  --nv-primary:      #88C0D0;
-  --nv-primary-soft: rgba(136, 192, 208, 0.15);
-  --nv-success:      #A3BE8C;
-  --nv-success-soft: rgba(163, 190, 140, 0.15);
-  --nv-warning:      #EBCB8B;
-  --nv-warning-soft: rgba(235, 203, 139, 0.15);
-  --nv-danger:       #BF616A;
-  --nv-danger-soft:  rgba(191, 97, 106, 0.15);
-  --nv-creative:     #B48EAD;
-  --nv-creative-soft:rgba(180, 142, 173, 0.15);
-  --nv-creative-fill:#5E81AC;
-  --nv-info:         #81A1C1;
-  --nv-info-soft:    rgba(129, 161, 193, 0.15);
-  --nv-accent:       #8FBCBB;
-  --nv-accent-soft:  rgba(143, 188, 187, 0.14);
-
-  --nv-text-primary:   #ffffff;
-  --nv-text-secondary: #d1d7d9;
-  --nv-text-tertiary:  #b0bbbf;
-  --nv-text-muted:     #92a5aa;
-  --nv-text-muted-on-surface-3: #94a6ab;
-
-  --background: #242933;
-  --foreground: #ffffff;
-  --card: rgba(216, 222, 233, 0.05);
-  --card-foreground: #ffffff;
-  --popover: #2E3440;
-  --popover-foreground: #ffffff;
-  --primary: #88C0D0;
-  --primary-foreground: #242933;
-  --secondary: rgba(216, 222, 233, 0.06);
-  --secondary-foreground: #ffffff;
-  --muted: rgba(216, 222, 233, 0.05);
-  --muted-foreground: #b0bbbf;
-  --accent: rgba(216, 222, 233, 0.06);
-  --accent-foreground: #ffffff;
-  --destructive: #BF616A;
-  --border: rgba(216, 222, 233, 0.12);
-  --input: rgba(216, 222, 233, 0.14);
-  --ring: rgba(136, 192, 208, 0.5);
-  --sidebar: #242933;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #88C0D0;
-  --sidebar-primary-foreground: #242933;
-  --sidebar-accent: rgba(216, 222, 233, 0.05);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(216, 222, 233, 0.09);
-  --sidebar-ring: rgba(136, 192, 208, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    「东京夜」主题（参考 Tokyo Night #1A1B26 / #7AA2F7）
    切 html.theme-tokyo 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-tokyo {
-  color-scheme: dark;
 
-  --nv-void:        #16161E;
-  --nv-abyss:       #1A1B26;
-  --nv-surface-1:   rgba(122, 162, 247, 0.025);
-  --nv-surface-2:   rgba(122, 162, 247, 0.05);
-  --nv-surface-3:   rgba(122, 162, 247, 0.08);
-  --nv-border-1:    rgba(122, 162, 247, 0.08);
-  --nv-border-2:    rgba(122, 162, 247, 0.12);
-  --nv-border-3:    rgba(122, 162, 247, 0.18);
-
-  --nv-primary:      #7AA2F7;
-  --nv-primary-soft: rgba(122, 162, 247, 0.15);
-  --nv-success:      #9ECE6A;
-  --nv-success-soft: rgba(158, 206, 106, 0.15);
-  --nv-warning:      #E0AF68;
-  --nv-warning-soft: rgba(224, 175, 104, 0.15);
-  --nv-danger:       #F7768E;
-  --nv-danger-soft:  rgba(247, 118, 142, 0.15);
-  --nv-creative:     #BB9AF7;
-  --nv-creative-soft:rgba(187, 154, 247, 0.15);
-  --nv-creative-fill:#7C6FE8;
-  --nv-info:         #7DCFFF;
-  --nv-info-soft:    rgba(125, 207, 255, 0.15);
-  --nv-accent:       #2AC3DE;
-  --nv-accent-soft:  rgba(42, 195, 222, 0.14);
-
-  --nv-text-primary:   #dddfe3;
-  --nv-text-secondary: #b6bac3;
-  --nv-text-tertiary:  #9ba0ad;
-  --nv-text-muted:     #80899c;
-  --nv-text-muted-on-surface-3: #848c9e;
-
-  --background: #16161E;
-  --foreground: #dddfe3;
-  --card: rgba(122, 162, 247, 0.05);
-  --card-foreground: #dddfe3;
-  --popover: #1A1B26;
-  --popover-foreground: #dddfe3;
-  --primary: #7AA2F7;
-  --primary-foreground: #16161E;
-  --secondary: rgba(122, 162, 247, 0.06);
-  --secondary-foreground: #dddfe3;
-  --muted: rgba(122, 162, 247, 0.05);
-  --muted-foreground: #9ba0ad;
-  --accent: rgba(122, 162, 247, 0.06);
-  --accent-foreground: #dddfe3;
-  --destructive: #F7768E;
-  --border: rgba(122, 162, 247, 0.12);
-  --input: rgba(122, 162, 247, 0.14);
-  --ring: rgba(122, 162, 247, 0.5);
-  --sidebar: #16161E;
-  --sidebar-foreground: #dddfe3;
-  --sidebar-primary: #7AA2F7;
-  --sidebar-primary-foreground: #16161E;
-  --sidebar-accent: rgba(122, 162, 247, 0.05);
-  --sidebar-accent-foreground: #dddfe3;
-  --sidebar-border: rgba(122, 162, 247, 0.09);
-  --sidebar-ring: rgba(122, 162, 247, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    「古旧」主题（参考 Gruvbox #282828 / #FABD2F）
    切 html.theme-gruvbox 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-gruvbox {
-  color-scheme: dark;
 
-  --nv-void:        #1D2021;
-  --nv-abyss:       #282828;
-  --nv-surface-1:   rgba(235, 219, 178, 0.025);
-  --nv-surface-2:   rgba(235, 219, 178, 0.05);
-  --nv-surface-3:   rgba(235, 219, 178, 0.08);
-  --nv-border-1:    rgba(235, 219, 178, 0.08);
-  --nv-border-2:    rgba(235, 219, 178, 0.12);
-  --nv-border-3:    rgba(235, 219, 178, 0.18);
-
-  --nv-primary:      #FABD2F;
-  --nv-primary-soft: rgba(250, 189, 47, 0.15);
-  --nv-success:      #B8BB26;
-  --nv-success-soft: rgba(184, 187, 38, 0.15);
-  --nv-warning:      #FABD2F;
-  --nv-warning-soft: rgba(250, 189, 47, 0.15);
-  --nv-danger:       #FB4934;
-  --nv-danger-soft:  rgba(251, 73, 52, 0.15);
-  --nv-creative:     #D3869B;
-  --nv-creative-soft:rgba(211, 134, 155, 0.15);
-  --nv-creative-fill:#D65D0E;
-  --nv-info:         #83A598;
-  --nv-info-soft:    rgba(131, 165, 152, 0.15);
-  --nv-accent:       #FABD2F;
-  --nv-accent-soft:  rgba(250, 189, 47, 0.14);
-
-  --nv-text-primary:   #f2f1ef;
-  --nv-text-secondary: #cdc9c2;
-  --nv-text-tertiary:  #b3aea2;
-  --nv-text-muted:     #9b9380;
-  --nv-text-muted-on-surface-3: #a09886;
-
-  --background: #1D2021;
-  --foreground: #f2f1ef;
-  --card: rgba(235, 219, 178, 0.05);
-  --card-foreground: #f2f1ef;
-  --popover: #282828;
-  --popover-foreground: #f2f1ef;
-  --primary: #FABD2F;
-  --primary-foreground: #1D2021;
-  --secondary: rgba(235, 219, 178, 0.06);
-  --secondary-foreground: #f2f1ef;
-  --muted: rgba(235, 219, 178, 0.05);
-  --muted-foreground: #b3aea2;
-  --accent: rgba(235, 219, 178, 0.06);
-  --accent-foreground: #f2f1ef;
-  --destructive: #FB4934;
-  --border: rgba(235, 219, 178, 0.12);
-  --input: rgba(235, 219, 178, 0.14);
-  --ring: rgba(250, 189, 47, 0.5);
-  --sidebar: #1D2021;
-  --sidebar-foreground: #f2f1ef;
-  --sidebar-primary: #FABD2F;
-  --sidebar-primary-foreground: #1D2021;
-  --sidebar-accent: rgba(235, 219, 178, 0.05);
-  --sidebar-accent-foreground: #f2f1ef;
-  --sidebar-border: rgba(235, 219, 178, 0.09);
-  --sidebar-ring: rgba(250, 189, 47, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    「曜石」主题（参考 Solarized Light #FDF6E3 / #268BD2）
    切 html.theme-solarized 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-solarized {
-  color-scheme: light;
 
-  --nv-void:        #FDF6E3;
-  --nv-abyss:       #FFFBF0;
-  --nv-surface-1:   rgba(15, 18, 30, 0.025);
-  --nv-surface-2:   rgba(15, 18, 30, 0.05);
-  --nv-surface-3:   rgba(15, 18, 30, 0.08);
-  --nv-border-1:    rgba(15, 18, 30, 0.07);
-  --nv-border-2:    rgba(15, 18, 30, 0.12);
-  --nv-border-3:    rgba(15, 18, 30, 0.18);
-
-  --nv-primary:      #268BD2;
-  --nv-primary-soft: rgba(38, 139, 210, 0.15);
-  --nv-success:      #859900;
-  --nv-success-soft: rgba(133, 153, 0, 0.15);
-  --nv-warning:      #B58900;
-  --nv-warning-soft: rgba(181, 137, 0, 0.15);
-  --nv-danger:       #DC322F;
-  --nv-danger-soft:  rgba(220, 50, 47, 0.15);
-  --nv-creative:     #6C71C4;
-  --nv-creative-soft:rgba(108, 113, 196, 0.15);
-  --nv-creative-fill:#B58900;
-  --nv-info:         #2AA198;
-  --nv-info-soft:    rgba(42, 161, 152, 0.15);
-  --nv-accent:       #CB4B16;
-  --nv-accent-soft:  rgba(203, 75, 22, 0.14);
-
-  --nv-text-primary:   #1a2730;
-  --nv-text-secondary: #2c4252;
-  --nv-text-tertiary:  #39566a;
-  --nv-text-muted:     #4b708b;
-  --nv-text-muted-on-surface-3: #456780;
-
-  --background: #FDF6E3;
-  --foreground: #1a2730;
-  --card: rgba(15, 18, 30, 0.7);
-  --card-foreground: #1a2730;
-  --popover: #FFFBF0;
-  --popover-foreground: #1a2730;
-  --primary: #268BD2;
-  --primary-foreground: #FFFFFF;
-  --secondary: rgba(15, 18, 30, 0.06);
-  --secondary-foreground: #1a2730;
-  --muted: rgba(15, 18, 30, 0.05);
-  --muted-foreground: #39566a;
-  --accent: rgba(15, 18, 30, 0.06);
-  --accent-foreground: #1a2730;
-  --destructive: #DC322F;
-  --border: rgba(15, 18, 30, 0.12);
-  --input: rgba(15, 18, 30, 0.14);
-  --ring: rgba(38, 139, 210, 0.5);
-  --sidebar: #f6efdd;
-  --sidebar-foreground: #1a2730;
-  --sidebar-primary: #268BD2;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: rgba(15, 18, 30, 0.05);
-  --sidebar-accent-foreground: #1a2730;
-  --sidebar-border: rgba(15, 18, 30, 0.09);
-  --sidebar-ring: rgba(38, 139, 210, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    「拿铁」主题（参考 Catppuccin Latte #EFF1F5 / #1E66F5）
    切 html.theme-catppuccin 生效（layout 防闪烁脚本 + ThemeToggle 选择器）
-   ═══════════════════════════════════════════ */
-html.theme-catppuccin {
-  color-scheme: light;
 
-  --nv-void:        #EFF1F5;
-  --nv-abyss:       #FFFFFF;
-  --nv-surface-1:   rgba(15, 18, 30, 0.025);
-  --nv-surface-2:   rgba(15, 18, 30, 0.05);
-  --nv-surface-3:   rgba(15, 18, 30, 0.08);
-  --nv-border-1:    rgba(15, 18, 30, 0.07);
-  --nv-border-2:    rgba(15, 18, 30, 0.12);
-  --nv-border-3:    rgba(15, 18, 30, 0.18);
-
-  --nv-primary:      #1E66F5;
-  --nv-primary-soft: rgba(30, 102, 245, 0.15);
-  --nv-success:      #40A02B;
-  --nv-success-soft: rgba(64, 160, 43, 0.15);
-  --nv-warning:      #DF8E1D;
-  --nv-warning-soft: rgba(223, 142, 29, 0.15);
-  --nv-danger:       #D20F39;
-  --nv-danger-soft:  rgba(210, 15, 57, 0.15);
-  --nv-creative:     #8839EF;
-  --nv-creative-soft:rgba(136, 57, 239, 0.15);
-  --nv-creative-fill:#1E66F5;
-  --nv-info:         #04A5E5;
-  --nv-info-soft:    rgba(4, 165, 229, 0.15);
-  --nv-accent:       #FE640B;
-  --nv-accent-soft:  rgba(254, 100, 11, 0.14);
-
-  --nv-text-primary:   #1b2133;
-  --nv-text-secondary: #313c5b;
-  --nv-text-tertiary:  #404e78;
-  --nv-text-muted:     #55679e;
-  --nv-text-muted-on-surface-3: #4e5e90;
-
-  --background: #EFF1F5;
-  --foreground: #1b2133;
-  --card: rgba(15, 18, 30, 0.7);
-  --card-foreground: #1b2133;
-  --popover: #FFFFFF;
-  --popover-foreground: #1b2133;
-  --primary: #1E66F5;
-  --primary-foreground: #FFFFFF;
-  --secondary: rgba(15, 18, 30, 0.06);
-  --secondary-foreground: #1b2133;
-  --muted: rgba(15, 18, 30, 0.05);
-  --muted-foreground: #404e78;
-  --accent: rgba(15, 18, 30, 0.06);
-  --accent-foreground: #1b2133;
-  --destructive: #D20F39;
-  --border: rgba(15, 18, 30, 0.12);
-  --input: rgba(15, 18, 30, 0.14);
-  --ring: rgba(30, 102, 245, 0.5);
-  --sidebar: #e8eaef;
-  --sidebar-foreground: #1b2133;
-  --sidebar-primary: #1E66F5;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: rgba(15, 18, 30, 0.05);
-  --sidebar-accent-foreground: #1b2133;
-  --sidebar-border: rgba(15, 18, 30, 0.09);
-  --sidebar-ring: rgba(30, 102, 245, 0.5);
-}
 
 /* ═══════════════════════════════════════════
    我的作品区 · 交互/视觉增强（v0.46.50）
@@ -2485,67 +2062,24 @@ html.theme-paper {
 /* ═══════════════════════════════════════════
    「简洁文档」主题（去 AI 味方案 · 风格 B，浅色）
    切 html.theme-doc 生效：近白 + Notion 式微妙边框 + 无发光，最去 AI 味
-   */
-html.theme-doc {
-  color-scheme: light;
 
-  --nv-void:        #FFFFFF;
-  --nv-abyss:       #FFFFFF;
-  --nv-surface-1:   rgba(15,18,30,0.02);
-  --nv-surface-2:   rgba(15,18,30,0.04);
-  --nv-surface-3:   #FFFFFF;
-  --nv-border-1:    rgba(15,18,30,0.06);
-  --nv-border-2:    #ECECEA;
-  --nv-border-3:    #E2E2DE;
 
-  --nv-primary:      #3F5BD0;
-  --nv-primary-soft: rgba(63,91,208,0.10);
-  --nv-success:      #2E9E6B;
-  --nv-success-soft: rgba(46,158,107,0.14);
-  --nv-warning:      #B5832A;
-  --nv-warning-soft: rgba(181,131,42,0.14);
-  --nv-danger:       #D2493F;
-  --nv-danger-soft:  rgba(210,73,63,0.14);
-  --nv-creative:     #3F5BD0;
-  --nv-creative-soft:rgba(63,91,208,0.10);
-  --nv-creative-fill:#3F5BD0;
-  --nv-creative-text:#FFFFFF;
-  --nv-info:         #2F6FB0;
-  --nv-info-soft:    rgba(47,111,176,0.14);
-  --nv-accent:       #3F5BD0;
-  --nv-accent-soft:  rgba(63,91,208,0.10);
 
-  --nv-text-primary:   #37352F;
-  --nv-text-secondary: #595959;
-  --nv-text-tertiary:  #6E6E6E;
-  --nv-text-muted:     #767676;
-  --nv-text-muted-on-surface-3: #767676;
-  --nv-prose:          #2F2D29;
+/* ═══ 纸面（.paper-sheet）：深色 UI 中央的一张浅色「书页」，参考 Pagekin 排版 ═══
+   变量覆盖在 CenterPanel 纸面 div 的 inline style（wcag-contrast 主题解析只认含
+   --nv-* 变量的规则块，此处只留纯外观，避免被当成第 17 套主题） */
+  .paper-sheet .paper-kicker { color: #A09A88; letter-spacing: 0.35em; }
+  .paper-sheet .paper-big-no {
+    color: #D8D2BE;
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-weight: 700;
+    line-height: 1;
+    user-select: none;
+  }
 
-  --background: #FFFFFF;
-  --foreground: #37352F;
-  --card: #FFFFFF;
-  --card-foreground: #37352F;
-  --popover: #FFFFFF;
-  --popover-foreground: #37352F;
-  --primary: #3F5BD0;
-  --primary-foreground: #FFFFFF;
-  --secondary: rgba(15,18,30,0.03);
-  --secondary-foreground: #37352F;
-  --muted: rgba(15,18,30,0.03);
-  --muted-foreground: #6B6A65;
-  --accent: rgba(15,18,30,0.04);
-  --accent-foreground: #37352F;
-  --destructive: #D2493F;
-  --border: #ECECEA;
-  --input: #E2E2DE;
-  --ring: rgba(63,91,208,0.5);
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #37352F;
-  --sidebar-primary: #3F5BD0;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: rgba(15,18,30,0.03);
-  --sidebar-accent-foreground: #37352F;
-  --sidebar-border: #ECECEA;
-  --sidebar-ring: rgba(63,91,208,0.5);
-}
+/* ═══ 浅色主题适配（.light 基础类下减弱深色系阴影，消除「灰晕溢出」廉价感） ═══ */
+.light .nf-header { box-shadow: 0 2px 14px rgba(43,39,31,0.08); }
+.light .paper-sheet { box-shadow: 0 8px 28px rgba(43,39,31,0.10), 0 2px 6px rgba(43,39,31,0.06); }
+.light [class*="shadow-[0_0_24px"] { box-shadow: 0 0 18px rgba(154,110,34,0.15); }
+.light .surface-elevated { box-shadow: 0 4px 16px rgba(43,39,31,0.08); }

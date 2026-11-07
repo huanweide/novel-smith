@@ -202,8 +202,8 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             </div>
           </div>
           <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Link href="/explore" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium">
-              <Icon name="sparkles" size={14} /> <span>开始创作</span>
+            <Link href="/explore" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium whitespace-nowrap shrink-0">
+              <Icon name="sparkles" size={14} /> <span className="whitespace-nowrap">开始创作</span>
             </Link>
             <span className="w-px h-5 bg-[var(--nv-border-2)] mx-0.5" aria-hidden="true" />
             <Link href="/dissect" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">

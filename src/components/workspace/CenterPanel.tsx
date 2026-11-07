@@ -98,12 +98,26 @@ const StreamingBody = memo(function StreamingBody({
 
   return (
     <>
-      {/* 章节标题（书籍式居中标题；正文之上只留标题，不堆工具装饰） */}
-      {selectedNode?.title && (
-        <h1 className="text-xl font-bold text-[var(--nv-text-primary)] text-center mb-7 mt-1 tracking-wide">
-          {selectedNode.title}
-        </h1>
-      )}
+      {/* 章节头（书籍式仪式感）：序号 kicker + 大标题 + 分隔细线；标题自带「第N章：」前缀时去重 */}
+      {selectedNode?.title && (() => {
+        const rawTitle = selectedNode.title;
+        const m = rawTitle.match(/^第\s*([0-9一二三四五六七八九十百千零两]+)\s*章/);
+        const chapterNo = m ? m[1] : String((selectedNode as { order?: number }).order != null ? (selectedNode as { order?: number }).order! + 1 : 1);
+        const displayTitle = m ? rawTitle.slice(m[0].length).replace(/^[:：\s]+/, "") : rawTitle;
+        const statusMap: Record<string, string> = { outline_only: "未动笔", drafting: "草稿", completed: "完稿", confirmed: "已定稿" };
+        const statusLabel = statusMap[(selectedNode as { status?: string }).status ?? ""] ?? "";
+        return (
+          <header className="text-center mb-8 mt-1 relative z-10">
+            <p className="paper-kicker text-[11px] mb-2.5">
+              第 {chapterNo} 章{statusLabel ? ` · ${statusLabel}` : ""}
+            </p>
+            <h1 className="text-[26px] leading-snug font-bold text-[var(--nv-text-primary)] tracking-wide">
+              {displayTitle || rawTitle}
+            </h1>
+            <div className="mx-auto mt-5 h-px w-20 bg-[var(--nv-border-3)]" />
+          </header>
+        );
+      })()}
 
       <MarkdownViewer
         content={content}
@@ -245,6 +259,8 @@ export function CenterPanel({
     }
   }, []);
   const [outlineExpanded, setOutlineExpanded] = useState(false);
+  // 写作工具折叠（v3.1.167）：默认收起成单行，正文上移占满首屏；展开才见章纲/批量/游戏模式/过审自检等
+  const [toolsExpanded, setToolsExpanded] = useState(false);
   // ── AI 念书（语音朗读）：标题下方「朗读本章」入口的展开态 ──
   const [showTTS, setShowTTS] = useState(false);
   // ── 本地过审自检：检测「机器味」，纯本地规则引擎，不上传正文 ──
@@ -821,6 +837,17 @@ export function CenterPanel({
                 </button>
               </span>
             </div>
+            {/* ── 写作工具区：默认收起（单行），展开才显示完整工具 ── */}
+            {toolsExpanded && (
+              <div className="flex justify-end mb-1.5">
+                <button onClick={() => setToolsExpanded(false)}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)] transition-colors"
+                  title="收起工具区，给正文腾出整屏">
+                  <span className="text-[9px] leading-none">▴</span> 收起工具
+                </button>
+              </div>
+            )}
+            {toolsExpanded ? (<>
             {/* 下一步建议：首写引导（v3.1.62，纯展示、只读 state，降低首写决策成本 · 痛点#3） */}
             {(() => {
               if (isGenerating) return null;
@@ -993,12 +1020,67 @@ export function CenterPanel({
                 <p className="text-[10px] text-accent-label">微调模式：不重写正文，按指令修改现有内容或续写补长。字数不够会自动补，中途打断可续写。</p>
               )}
             </div>
+            </>) : (
+            /* ── 收起态：单行工具条——生成 / 目标字数 / 作者指令 / 展开工具，正文首屏最大化 ── */
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40 px-2.5 py-1.5">
+              <button onClick={() => setToolsExpanded(true)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)] transition-colors shrink-0"
+                title="展开写作工具（章纲 / 微调 / 批量写作 / 游戏模式 / 过审自检 / 专注）">
+                <span className="text-[10px] leading-none">▾</span> <Icon name="wrench" size={12} /> 工具
+              </button>
+              {isGenerating ? (
+                <Button size="sm" onClick={onStop} className="btn-danger h-7 text-xs rounded-lg shrink-0"><Icon name="stop" size={11} /> 停止</Button>
+              ) : (
+                !refineMode && (
+                  <Button size="sm" onClick={onWrite} className="btn-primary h-7 text-xs rounded-lg shrink-0"><Icon name="pencil" size={11} /> 生成/重写</Button>
+                )
+              )}
+              {refineMode && (
+                <Button size="sm" onClick={onRefine} className="btn-ghost h-7 text-xs rounded-lg shrink-0 text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调</Button>
+              )}
+              <input type="number" value={targetWordCount} onChange={(e) => onTargetWordCountChange(parseInt(e.target.value) || 3000)}
+                className="input-glass w-14 h-7 rounded-lg px-1.5 text-xs text-center shrink-0" title="目标字数" aria-label="目标字数" />
+              <span className="text-xs text-[var(--nv-text-tertiary)] shrink-0">字</span>
+              <input placeholder={refineMode ? "微调指令…" : "作者指令（高优先级）…"}
+                value={refineMode ? refineInstruction : authorNote}
+                onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
+                className="input-glass flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />
+            </div>
+            )}
           </div>
           )}
           {/* 正文显示区 */}
-          <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-4" onMouseUp={handleEditorSelection} onScroll={() => setSelToolbar(null)}>
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-4 py-6 lg:px-8" onMouseUp={handleEditorSelection} onScroll={() => setSelToolbar(null)}>
             {displayContent ? (
-              <div className="max-w-[700px] mx-auto">
+              <div className="max-w-[860px] mx-auto">
+                {/* 纸面容器：深色 UI 中央的一张浅色「书页」（inline style 变量域覆盖——
+                    纸内组件强制浅色配色，深浅主题下都可读；避免污染 wcag 主题解析） */}
+                <div
+                  className="paper-sheet relative rounded-2xl px-6 py-8 sm:px-10 lg:px-14 lg:py-10"
+                  style={{
+                    "--nv-prose": "#2E3038",
+                    "--nv-text-primary": "#1B1D24",
+                    "--nv-text-secondary": "#4A4C55",
+                    "--nv-text-tertiary": "#8A8778",
+                    "--nv-text-muted": "#A3A094",
+                    "--nv-text-muted-on-surface-3": "#A3A094",
+                    "--nv-border-2": "rgba(26,28,34,0.14)",
+                    "--nv-border-3": "#DDD9CC",
+                    "--nv-surface-1": "#FFFFFF",
+                    "--nv-surface-2": "#F4F2EA",
+                    "--nv-surface-3": "#ECE9DE",
+                    "--nv-primary-soft": "rgba(99,102,241,0.08)",
+                  } as React.CSSProperties}
+                >
+                {/* 大号章节数字（参考书页左上角，纯装饰） */}
+                <span aria-hidden className="paper-big-no absolute top-4 right-7 text-[64px] sm:text-[80px]">
+                  {(() => {
+                    const m = (selectedNode?.title || "").match(/^第\s*([0-9一二三四五六七八九十百千零两]+)\s*章/);
+                    const no = m ? m[1] : String(((selectedNode as { order?: number }).order ?? 0) + 1);
+                    const cn: Record<string, string> = { "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9", "十": "10" };
+                    return cn[no] ?? no;
+                  })()}
+                </span>
                 {!inlineEditing && (
                   <div className="flex items-center gap-1.5 mb-4">
                     <div className="flex items-center gap-1.5 flex-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1">
@@ -1064,7 +1146,7 @@ export function CenterPanel({
                     contentEditable
                     suppressContentEditableWarning
                     spellCheck={false}
-                    className="max-w-[700px] mx-auto text-[18.5px] leading-[1.95] text-[var(--nv-prose)] whitespace-pre-wrap break-words outline-none rounded-lg px-2 -mx-2 min-h-[70vh] focus:bg-[var(--nv-surface-1)]/40"
+                    className="text-[18.5px] leading-[1.95] tracking-[0.015em] [font-family:var(--nv-prose-font)] text-[var(--nv-prose)] whitespace-pre-wrap break-words outline-none rounded-lg px-2 -mx-2 min-h-[60vh] focus:bg-[var(--nv-surface-2)]/40"
                   />
                 ) : (
                 <StreamingBody
@@ -1079,6 +1161,7 @@ export function CenterPanel({
                   locateEntityId={locateEntityId}
                 />
                 )}
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-[var(--nv-text-tertiary)] text-sm">

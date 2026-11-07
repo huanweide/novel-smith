@@ -22,7 +22,7 @@ const menuItems = () =>
 
 describe("v3.1.131 ThemeToggle 菜单脱离容器裁剪", () => {
   beforeEach(() => {
-    document.documentElement.className = "dark";
+    document.documentElement.className = "theme-paper light";
     try { localStorage.clear(); } catch { /* ignore */ }
   });
 
@@ -42,15 +42,16 @@ describe("v3.1.131 ThemeToggle 菜单脱离容器裁剪", () => {
     expect(document.body.contains(bodyMenu())).toBe(true);
   });
 
-  it("选择「白昼」后 html 加 light class 并写入 localStorage", () => {
+  it("选择「柔和深夜」后 html 加 theme-dusk + dark class 并写入 localStorage", () => {
     render(<ThemeToggle />);
     fireEvent.click(themeButton());
-    const white = menuItems().find((b) => b.textContent?.includes("白昼"));
-    expect(white).toBeTruthy();
-    fireEvent.click(white!);
-    expect(document.documentElement.classList.contains("light")).toBe(true);
-    expect(document.documentElement.classList.contains("dark")).toBe(false);
-    expect(localStorage.getItem("nf-theme")).toBe("light");
+    const target = menuItems().find((b) => b.textContent?.includes("柔和深夜"));
+    expect(target).toBeTruthy();
+    fireEvent.click(target!);
+    expect(document.documentElement.classList.contains("theme-dusk")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("light")).toBe(false);
+    expect(localStorage.getItem("nf-theme")).toBe("theme-dusk");
     // 选择后菜单关闭
     expect(bodyMenu()).toBeNull();
   });
@@ -63,17 +64,17 @@ describe("v3.1.131 ThemeToggle 菜单脱离容器裁剪", () => {
     expect(bodyMenu()).toBeNull();
   });
 
-  it("右键按钮直接循环到下一档（夜航 → 苍青）", () => {
+  it("右键按钮直接循环到下一档（暖白纸稿 → 柔和深夜）", () => {
     render(<ThemeToggle />);
     fireEvent.contextMenu(themeButton());
-    expect(document.documentElement.classList.contains("azure")).toBe(true);
+    expect(document.documentElement.classList.contains("theme-dusk")).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(localStorage.getItem("nf-theme")).toBe("azure");
+    expect(localStorage.getItem("nf-theme")).toBe("theme-dusk");
   });
 
-  it("菜单含全部 13 档主题（深 8 / 浅 5）", () => {
+  it("菜单含全部 3 档主题（纸稿/深夜/德古拉）", () => {
     render(<ThemeToggle />);
     fireEvent.click(themeButton());
-    expect(menuItems()).toHaveLength(13);
+    expect(menuItems()).toHaveLength(3);
   });
 });

@@ -37,7 +37,7 @@ const VARIANT_TOKEN = "muted-on-surface-3";
 
 describe("虚空玻璃主题 · WCAG AA 对比度永久回归", () => {
   it("能从 globals.css 解析出全部十六套主题（防止解析逻辑被改坏却静默通过）", () => {
-    expect(THEMES).toHaveLength(16);
+    expect(THEMES).toHaveLength(8);
     expect(THEMES.map((t) => t.selector).sort()).toEqual(
       [
         ":root",
@@ -45,17 +45,9 @@ describe("虚空玻璃主题 · WCAG AA 对比度永久回归", () => {
         ".reader-theme-night",
         ".reader-theme-sepia",
         '[data-game-theme="day"]',
-        "html.azure",
-        "html.theme-github",
         "html.theme-dracula",
-        "html.theme-nord",
-        "html.theme-tokyo",
-        "html.theme-gruvbox",
-        "html.theme-solarized",
-        "html.theme-catppuccin",
         "html.theme-dusk",
         "html.theme-paper",
-        "html.theme-doc",
       ].sort()
     );
   });

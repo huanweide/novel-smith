@@ -251,7 +251,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
       {/* Confirm 对话框 */}
       {confirmState ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--nv-veil)] p-4 backdrop-blur-[2px]">
           <div
             ref={confirmPanelRef}
             tabIndex={-1}
@@ -295,7 +295,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
       {/* Prompt 对话框（替代原生 prompt） */}
       {promptState ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--nv-veil)] p-4 backdrop-blur-[2px]">
           <div
             ref={promptPanelRef}
             tabIndex={-1}

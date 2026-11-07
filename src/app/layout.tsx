@@ -40,12 +40,15 @@ export default function RootLayout({
 /* 首屏前应用主题，避免闪烁（十三档主题：夜航/苍青 + GitHub/德古拉/北境/东京夜/古旧/柔和深夜 + 白昼/曜石/拿铁/暖白纸稿/简洁文档） */
 (function(){
   try {
-    var ALL = ['dark','light','azure','theme-github','theme-dracula','theme-nord','theme-tokyo','theme-gruvbox','theme-solarized','theme-catppuccin','theme-dusk','theme-paper','theme-doc'];
-    var LIGHT = { light: 1, 'theme-solarized': 1, 'theme-catppuccin': 1, 'theme-paper': 1, 'theme-doc': 1 };
+    var ALL = ['theme-dusk','theme-paper','theme-dracula'];
+    var BASE = ['dark','light'];
+    var LIGHT = { 'theme-paper': 1 };
     var d = document.documentElement;
-    var t = localStorage.getItem('nf-theme') || 'theme-dusk';
-    if (ALL.indexOf(t) < 0) t = 'theme-dusk';
+    // 默认「暖白纸稿」——书稿感浅色主题（用户校准：浅色为默认，可随时切回深色系）
+    var t = localStorage.getItem('nf-theme') || 'theme-paper';
+    if (ALL.indexOf(t) < 0) t = 'theme-paper';
     for (var i = 0; i < ALL.length; i++) d.classList.remove(ALL[i]);
+    for (var j = 0; j < BASE.length; j++) d.classList.remove(BASE[j]);
     d.classList.add(t);
     d.classList.add(LIGHT[t] ? 'light' : 'dark');
   } catch(e){}

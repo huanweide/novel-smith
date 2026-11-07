@@ -135,7 +135,7 @@ export function Modal({
 
   const modal = (
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--nv-veil)] p-4 backdrop-blur-[2px]"
       onClick={() => closeOnOverlay && onClose()}
     >
       <div
