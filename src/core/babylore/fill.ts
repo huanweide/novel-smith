@@ -28,6 +28,7 @@ import { buildProjectOverrides } from "@/core/llm/client";
 import { syncChapterEntities } from "./entity-sync";
 import { fillModelOf } from "./table-model";
 import type { LoreTableOp, TableDef } from "./types";
+import { resolveNameToCanonical, type CanonicalCharacter } from "@/lib/entity-auto-creator";
 
 export interface FillResult {
   ok: boolean;
@@ -280,6 +281,27 @@ interface LlmCreds {
   model: string;
 }
 
+/**
+ * 构建「实体名 → 角色卡正主」解析器：取项目全部角色卡（排除🗂已合并脏卡），
+ * 用 resolveNameToCanonical 把 李大师/李神医 等变体归一到正主（如 李富贵），
+ * 使填表落库前自然并回，无需手动点去重（阶段1 目标）。取数失败安全降级为「不归一」。
+ */
+async function buildNameResolver(projectId: string): Promise<(name: string) => string> {
+  let characters: CanonicalCharacter[] = [];
+  try {
+    const rows = await prisma.characterCard.findMany({
+      where: { projectId },
+      select: { name: true, aliases: true, tags: true },
+    });
+    characters = (rows as any[])
+      .filter((c) => !((c.tags as string[]) || []).includes("🗂 已合并"))
+      .map((c) => ({ name: c.name, aliases: Array.isArray(c.aliases) ? (c.aliases as string[]) : [] }));
+  } catch {
+    characters = [];
+  }
+  return (name: string) => resolveNameToCanonical(characters, name);
+}
+
 async function runFillForText(
   chapterText: string,
   tables: TableDef[],
@@ -287,6 +309,7 @@ async function runFillForText(
   tableKeys?: string[],
   srcLabel?: string,
   projectId?: string,
+  nameResolver?: (name: string) => string,
 ): Promise<{ ok: boolean; operations: number; applied: number; warnings: string[]; skippedOps: SkippedOp[]; crossTableIssues: SelfCheckIssue[]; error?: string }> {
   const filteredTables = tableKeys && tableKeys.length ? tables.filter((t) => tableKeys.includes(t.key)) : tables;
   if (filteredTables.length === 0) {
@@ -349,7 +372,7 @@ ${chapterText.slice(0, 12000)}
         lastErr = "模型未返回任何有效操作";
         if (attempt < 3) continue;
       }
-      const r = await applyOps(filteredTables, ops, srcLabel || "ch?:batch?", chapterText);
+      const r = await applyOps(filteredTables, ops, srcLabel || "ch?:batch?", chapterText, nameResolver);
       const warnings = [...r.warnings, ...buildWarnings(r.appliedNames, chapterText)];
       // P0-3：以「实际落地数 applied」为完成门槛——空 ops / 全失效 ops 的章节
       // 须视为失败（ok:false），使其可重试而非被永久标记「已填」（防重复机制反噬）。
@@ -389,6 +412,7 @@ async function applyOps(
   ops: LoreTableOp[],
   srcLabel: string,
   chapterText?: string,
+  nameResolver?: (name: string) => string,
 ): Promise<{ applied: number; appliedNames: { table: string; value: string }[]; warnings: string[]; skippedOps: SkippedOp[]; crossTableIssues: SelfCheckIssue[] }> {
   const byKey = new Map(tables.map((t) => [t.key, t]));
   let applied = 0;
@@ -411,8 +435,11 @@ async function applyOps(
     // 目标表为地理/建筑类（geo）却要写入一个高置信度「人物」实体 → 类型不匹配，
     // 不静默写错表，改为跳过并上报 cross-table issue（报错不写错，避免数据污染）。
     const opAny = op as any;
-    const entityName =
+    const entityNameRaw =
       (op.op === "insert" ? (opAny.values || {})[idCol] : opAny.match?.val) ?? (opAny.values || {})[idCol];
+    // 落库前归一：李大师 类变体 → 角色卡正主（李富贵），使代码级去重自然并回（阶段1）。
+    const entityName =
+      nameResolver && entityNameRaw != null ? nameResolver(String(entityNameRaw)) : entityNameRaw;
     if (
       entityName != null &&
       inferEntityType(String(entityName), chapterText || "") === "character" &&
@@ -426,7 +453,9 @@ async function applyOps(
     }
 
     if (op.op === "insert") {
-      const newVal = (op.values || {})[idCol];
+      const rawNewVal = (op.values || {})[idCol];
+      // 落库前归一：李大师 类变体 → 角色卡正主（李富贵），使代码级去重自然并回（阶段1）。
+      const newVal = nameResolver && rawNewVal != null ? nameResolver(String(rawNewVal)) : rawNewVal;
       // 代码级去重：同主键名已存在则转 update（杜绝同名重复行）
       const existingIdx =
         newVal != null
@@ -436,16 +465,16 @@ async function applyOps(
         // P1-F（墨白）：去重合并时同步刷新溯源标记（最后写入来源）
         rows[existingIdx] = { ...rows[existingIdx], ...(op.values || {}), _src: srcLabel, _ts: now };
         applied++;
-        if (newVal != null) appliedNames.push({ table: t.name, value: String(newVal) });
+        if (rawNewVal != null) appliedNames.push({ table: t.name, value: String(rawNewVal) });
       } else {
         const maxId = rows.reduce((m: number, r: any) => Math.max(m, Number(r.row_id) || 0), 0);
         const row: any = { row_id: maxId + 1, ...(op.values || {}), _src: srcLabel, _ts: now };
         rows.push(row);
         applied++;
-        if (newVal != null) appliedNames.push({ table: t.name, value: String(newVal) });
+        if (rawNewVal != null) appliedNames.push({ table: t.name, value: String(rawNewVal) });
       }
     } else if (op.op === "update") {
-      const { col, val } = (op as any).match || {};
+      const { col, val: rawVal } = (op as any).match || {};
       const cols = asArray<any>(t.columns) as Array<{ key: string }>;
       // 守卫：LLM 发 update 却漏给 match 或 col 非有效列时，原逻辑会推入带脏键「undefined」的伪行且不报警，
       // 破坏防重复/零错名。此处无效则跳过该 op，不落库、不插伪行（P1-①）。
@@ -454,13 +483,15 @@ async function applyOps(
         skippedOps.push({ op, reason: `update 缺少有效 match 列「${String(col || "")}」`, table: t.name });
         continue;
       }
+      // 落库前归一：李大师 类变体 → 角色卡正主，命中已归一的行（阶段1）。
+      const val = nameResolver && rawVal != null ? nameResolver(String(rawVal)) : rawVal;
       // 大小写不敏感匹配（与 insert 去重一致），避免「青龙镇」/「青龙鎮」因字形/大小写漏匹配（墨白 F5）
       const idx = rows.findIndex((r: any) => String(r[col] ?? "").toLowerCase() === String(val ?? "").toLowerCase());
       if (idx >= 0) {
         // P1-F（墨白）：命中即刷新溯源标记
         rows[idx] = { ...rows[idx], ...(op.values || {}), _src: srcLabel, _ts: now };
         applied++;
-        const uv = (op.values || {})[idCol] ?? val;
+        const uv = (op.values || {})[idCol] ?? rawVal;
         if (uv != null) appliedNames.push({ table: t.name, value: String(uv) });
       } else {
         // P1：update 按 match 列未命中任何行。若 match 列非身份列，则无有效身份，
@@ -473,10 +504,10 @@ async function applyOps(
         const maxId = rows.reduce((m: number, r: any) => Math.max(m, Number(r.row_id) || 0), 0);
         rows.push({ row_id: maxId + 1, [col]: val, ...(op.values || {}), _src: srcLabel, _ts: now });
         applied++;
-        if (val != null) appliedNames.push({ table: t.name, value: String(val) });
+        if (rawVal != null) appliedNames.push({ table: t.name, value: String(rawVal) });
       }
     } else if (op.op === "delete") {
-      const { col, val } = (op as any).match || {};
+      const { col, val: rawVal } = (op as any).match || {};
       const cols = asArray<any>(t.columns) as Array<{ key: string }>;
       // 守卫：delete 缺有效 match 列时，原逻辑会按 undefined 列过滤→误删整表或静默不删，
       // 此处无效则整体跳过该 op，不删除任何行（P1-①）。
@@ -485,6 +516,8 @@ async function applyOps(
         skippedOps.push({ op, reason: `delete 缺少有效 match 列「${String(col || "")}」`, table: t.name });
         continue;
       }
+      // 落库前归一：按已归一名删除（阶段1）。
+      const val = nameResolver && rawVal != null ? nameResolver(String(rawVal)) : rawVal;
       const before = rows.length;
       // 大小写不敏感匹配，与 update 一致（墨白 F5）
       const filtered = rows.filter((r: any) => String(r[col] ?? "").toLowerCase() !== String(val ?? "").toLowerCase());
@@ -572,7 +605,9 @@ export async function babyloreFill(
 
   const llm: LlmCreds = { baseURL, apiKey, model };
   const srcLabel = `ch${options?.chapterOrder ?? "?"}:batch${options?.batchId ?? "manual"}${options?.source ? ":" + options.source : ""}`;
-  const r = await runFillForText(chapterText, tables, llm, options?.tableKeys, srcLabel, projectId);
+  // 阶段1：构建「实体名 → 角色卡正主」解析器，填表落库前自然归一（李大师→李富贵）。
+  const nameResolver = await buildNameResolver(projectId);
+  const r = await runFillForText(chapterText, tables, llm, options?.tableKeys, srcLabel, projectId, nameResolver);
 
   // v1.6.19 #6 修复：仅当本次填表有落地（applied>0）且携带 nodeId 时才记录溯源批次。
   // diff 逻辑：after（tables[i].rows 已被 applyOps 原地改写）中存在、before 快照中不存在 row_id 的行 = 本次新增。
@@ -695,6 +730,9 @@ export async function babyloreFillAll(
     rows: (t.rows as any) || [],
   }));
 
+  // 阶段1：构建「实体名 → 角色卡正主」解析器（一次构建全章复用），填表落库前自然归一。
+  const nameResolver = await buildNameResolver(projectId);
+
   const filledMap = loadFilled();
   const filledSet = new Set(filledMap[projectId] || []);
 
@@ -724,7 +762,7 @@ export async function babyloreFillAll(
       continue;
     }
     const srcLabel = `ch${ch.order}:batch${runBatch}`;
-    const r = await runFillForText(ch.content || "", tables, llm, options?.tableKeys, srcLabel, projectId);
+    const r = await runFillForText(ch.content || "", tables, llm, options?.tableKeys, srcLabel, projectId, nameResolver);
     // v1.2.1：逐章同步抽取角色/世界书实体（一键追评也覆盖角色卡/世界卡）
     await syncChapterEntities(projectId, ch.content || "", llm).catch(() => null);
     processed++;

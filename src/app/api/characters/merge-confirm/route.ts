@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     if (mergedRows.length === 0) return NextResponse.json({ error: "被并卡已不存在" }, { status: 404 });
 
     // pending 时主卡/被并卡未被改动，DB 当前值即合并前快照，直接执行合并
-    const mainAfter = await applyMerge(toCharLite(main), mergedRows.map(toCharLite));
+    const mainAfter = await applyMerge(toCharLite(main), mergedRows.map(toCharLite), rev.projectId);
     await prisma.characterCardRevision.update({
       where: { id: rev.id },
       data: { status: "applied", mainAfter: mainAfter as any },

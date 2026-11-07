@@ -19,7 +19,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { completeText } from "@/core/llm/client";
-import { isHonorificVariant, resolveVariantTarget, isSurnameAbbrevOrDescriptor, coreSurname } from "@/lib/entity-auto-creator";
+import { isHonorificVariant, resolveVariantTarget, isSurnameAbbrevOrDescriptor, coreSurname, resolveNameToCanonical } from "@/lib/entity-auto-creator";
 import {  safeJoin, asArray } from "@/lib/utils";
 import { safeParseAIJson } from "@/lib/json-parser";
 
@@ -329,7 +329,7 @@ export function toCharLite(row: {
 }
 
 /** 执行合并：别名并入主卡、内容取更长、关系合并；被并卡软删标记「🗂 已合并」。返回主卡实际写入字段（审计）。 */
-export async function applyMerge(main: CharLite, merged: CharLite[]): Promise<Record<string, unknown>> {
+export async function applyMerge(main: CharLite, merged: CharLite[], projectId: string): Promise<Record<string, unknown>> {
   const extraAliases = merged.flatMap((x) => [x.name, ...asArray<string>(x.aliases)]);
   const newAliases = Array.from(new Set([...asArray<string>(main.aliases), ...extraAliases])).slice(0, 50);
   const bestBg = merged.reduce((m, x) => ((x.background || "").length > (m || "").length ? x.background : m), main.background);
@@ -352,6 +352,67 @@ export async function applyMerge(main: CharLite, merged: CharLite[]): Promise<Re
       data: { tags: Array.from(new Set([...asArray<string>(x.tags), "🗂 已合并"])) },
     });
   }
+
+  // 阶段1 级联：把「被并名（含别名）→ 主卡名」统一到一致性事实与结构化表格，
+  // 使「李大师→李富贵」及「杀人凶手」等信息全部并回正主，无需手动点去重。
+  // 同步存在性守卫：生产 prisma 必含这两个 model；单测 partial mock 下跳过，不影响核心合并断言。
+  const mergedNames = Array.from(new Set(merged.flatMap((x) => [x.name, ...asArray<string>(x.aliases)])));
+  const factModel = (prisma as any).consistencyFact;
+  const loreModel = (prisma as any).loreTable;
+  if (mergedNames.length > 0 && projectId) {
+    // 1) 一致性事实 subject 改指主卡名（覆盖 subject 为被并名或别名的事实）
+    if (factModel?.updateMany) {
+      await factModel
+        .updateMany({
+          where: { projectId, subject: { in: mergedNames } },
+          data: { subject: main.name },
+        })
+        .catch(() => null);
+    }
+
+    // 2) 结构化表格：身份列值从被并名/别名归一到主卡名，并合并重复行（数据不丢）
+    if (loreModel?.findMany) {
+      const loreTables = (await loreModel.findMany({ where: { projectId } }).catch(() => [] as any[])) as any[];
+      const canonChar = [{ name: main.name, aliases: newAliases }];
+      const idPriority = ["name", "title", "place", "live", "key", "building"];
+      for (const t of loreTables) {
+        const cols = (t.columns as any[]) || [];
+        const keys = cols.map((c) => c.key);
+        let idCol = "name";
+        for (const p of idPriority) if (keys.includes(p)) { idCol = p; break; }
+        const rows = (t.rows as any[]) || [];
+        if (rows.length === 0) continue;
+        const byId = new Map<string, any>();
+        const kept: any[] = [];
+        let changed = false;
+        for (const row of rows) {
+          const rawId = row[idCol];
+          if (rawId == null) { kept.push(row); continue; }
+          const canon = resolveNameToCanonical(canonChar, String(rawId));
+          if (canon !== String(rawId)) { row[idCol] = canon; changed = true; }
+          const id = row[idCol];
+          if (byId.has(id)) {
+            // 重复行：把被丢行的非空列补进保留行（数据不丢），丢弃空壳行
+            const keeper = byId.get(id)!;
+            for (const k of Object.keys(row)) {
+              if (k === "row_id") continue;
+              const rv = row[k];
+              const kv = keeper[k];
+              if ((kv == null || kv === "") && rv != null && rv !== "") { keeper[k] = rv; changed = true; }
+            }
+            changed = true;
+          } else {
+            byId.set(id, row);
+            kept.push(row);
+          }
+        }
+        if (changed && loreModel.update) {
+          await loreModel.update({ where: { id: t.id }, data: { rows: kept } }).catch(() => null);
+        }
+      }
+    }
+  }
+
   return { aliases: newAliases, background: bestBg || main.background, storyLine: bestSl || main.storyLine, relationships: newRels };
 }
 
@@ -485,7 +546,7 @@ export async function dedupeCharacters(
       merged: merged.map((x) => ({ id: x.id, name: x.name })),
       confidence: "high",
     });
-    const mainAfter = await applyMerge(main, merged);
+    const mainAfter = await applyMerge(main, merged, projectId);
     await prisma.characterCardRevision.create({
       data: {
         projectId,

@@ -9,7 +9,14 @@
 - **修复（选中即改「续写」毁正文）**：带真实选区时，旧判定会命中增量追加分支，把内容拼到章末并重复选中段。新建 refine-intent.ts 纯函数加「真实选区绝不落入追加」守卫，前端预设措辞避开续写正则（refine/route.ts + workspace 页）。
 - **修复（大纲替换硬删丢正文）**：PUT replaceAll 旧逻辑硬删旧章节导致已写正文不可恢复、分卷项目目录混杂。现改为软删全部层级并保留分卷，旧章节进回收站可恢复（outline/route.ts）。
 - **安全**：`.gitignore` 新增 `/release/`，防止 500MB+ Electron 构建产物被误入库。
-- 测试：vitest 195 文件 / 2202 全绿，tsc --noEmit 零错误。
+- 测试：vitest 196 文件 / 2214 全绿，tsc --noEmit 零错误。
+
+### 智能填表去重合并（实体归一 + 合并级联）
+
+- **新增（填表自动归一）**：填表落库前，表格身份列实体名经 `resolveNameToCanonical` 对照角色卡正主与别名归一到正主（李大师 → 李富贵），使代码级去重自然并回，无需每次手动点去重（`babylore/fill.ts` + `entity-auto-creator.ts`）。
+- **新增（称谓变体识别）**：新增 `isTitleVariant` 与 `TITLE_WORDS`，覆盖「姓 + 职业/身份尊称」（李大师 / 王神医 / 张郎中 / 赵城主）等同人异称维度，与既有尊称/缩写判定互补，且不污染自动建卡与角色去重主判定。
+- **新增（合并级联改写）**：角色去重合并（`applyMerge`）后，自动把 `ConsistencyFact.subject`（被并名及别名）与结构化表格身份列值归一到主卡名并合并重复行，使「杀人凶手」等信息全部并回正主（`character-dedupe.ts`）。
+- 测试：新增 `entity-auto-creator.canon.test.ts`（12 项），全量 vitest 196 文件 / 2214 全绿，tsc / next build 门禁全绿。
 
 ## v3.1.165 — 2026-11-04
 

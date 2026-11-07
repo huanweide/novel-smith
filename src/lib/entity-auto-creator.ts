@@ -88,6 +88,11 @@ const TRAD_TO_SIMP: Record<string, string> = {
   時: "时",
   來: "来",
   個: "个",
+  師: "师",
+  術: "术",
+  醫: "医",
+  禪: "禅",
+  館: "馆",
 };
 
 /** 字符级繁简归一化：繁体字符映射为简体，其余字符原样保留 */
@@ -130,6 +135,38 @@ const HONORIFIC_TOKENS = [
 ];
 const PREFIX_HONORIFICS = ["老", "小", "阿", "大"];
 const BEFORE_FILLERS = ["", "大", "小", "阿", "二", "三", "老", "少", "姓"];
+
+/**
+ * 后缀尊称（姓 + 后缀尊称，如 迭戈先生 / 王夫人）：同人异称补充维度。
+ * 模块级导出供 resolveDiscoveryMergeTarget 与 resolveNameToCanonical 共用，避免两处重复定义漂移。
+ */
+export const SUFFIX_HONORIFICS = [
+  "先生", "女士", "小姐", "公子", "姑娘", "少年", "少女", "夫人", "阁下", "大人",
+  "老板", "师傅", "师父", "少爷", "殿下", "陛下", "兄台", "大侠", "少侠", "壮士",
+  "道友", "前辈", "掌门", "宗主", "将军", "书生", "侠女", "女侠", "朋友",
+];
+
+/**
+ * 称谓 / 职业尊称（姓 + 称谓变体，如 李大师 / 王神医 / 张郎中 / 赵城主）：与正主指同一人，
+ * 应并入正主而非拆成两张卡。与 HONORIFIC_TOKENS（X先生/女子 等标准尊称）互补——
+ * 本集合覆盖「职业/身份尊称」，单独成列便于按需增删，且不污染自动建卡/角色去重的主判定分支。
+ */
+const TITLE_WORDS = [
+  "大师", "老师", "教授", "博士", "真人", "道长", "神医", "圣手", "药师", "法师",
+  "术士", "剑客", "刀客", "城主", "郡主", "县令", "知府", "掌柜", "郎中", "军师",
+  "统领", "校尉", "捕快", "镖师", "管家", "伙计", "小二", "丫鬟", "侍女", "奴才",
+  "护卫", "侍卫", "船夫", "渔夫", "樵夫", "农夫", "铁匠", "木匠", "裁缝", "账房",
+  "媒婆", "稳婆", "巫师", "刺客", "杀手", "盗贼", "神偷", "侠盗", "道人", "和尚",
+  "尼姑", "方丈", "住持",
+];
+
+/** 是否为「姓 + 称谓/职业尊称」变体（李大师 / 王神医 / 张郎中）。长度 3~5 字，整段后缀即称谓。 */
+export function isTitleVariant(name: string): boolean {
+  const n = normalizeTraditional(name.trim().toLowerCase());
+  if (n.length < 3 || n.length > 5) return false; // 至少 姓+2字称谓；过长非变体
+  const rest = n.slice(1); // 去掉姓
+  return TITLE_WORDS.some((t) => rest === t); // 整段后缀即称谓（李大师）；称谓后不允许再有实义字
+}
 
 /** 是否为「称呼/描述性变体」（如 韩先生 / 韩姓男子 / 韩某 / 老韩） */
 export function isHonorificVariant(name: string): boolean {
@@ -300,11 +337,6 @@ export function resolveDiscoveryMergeTarget(allNames: string[], variantName: str
   if (!v) return null;
   // 后缀尊称（只匹配结尾，避免误命中「王小明」这类含单字尊称的普通名）：
   // 「迭戈先生」= 迭戈 + 先生，按后缀尊称识别为变体，可合并到同姓正主。
-  const SUFFIX_HONORIFICS = [
-    "先生", "女士", "小姐", "公子", "姑娘", "少年", "少女", "夫人", "阁下", "大人",
-    "老板", "师傅", "师父", "少爷", "殿下", "陛下", "兄台", "大侠", "少侠", "壮士",
-    "道友", "前辈", "掌门", "宗主", "将军", "书生", "侠女", "女侠", "朋友",
-  ];
   const hasSuffixHonorific = SUFFIX_HONORIFICS.some((t) => v.endsWith(t));
   const isVariant =
     isHonorificVariant(variantName) ||
@@ -336,4 +368,76 @@ export function shouldAutoCreateCharacterCard(
   min = MIN_CHARACTER_APPEARANCES,
 ): boolean {
   return appearanceCount >= min;
+}
+
+// ─── 实体名 → 角色卡正主归一（填表/合并级联共用入口，v3.x）─────────
+
+/** 角色卡「正主名 + 别名」清单，作为归一解析的注册表 */
+export interface CanonicalCharacter {
+  name: string;
+  aliases?: string[];
+}
+
+/**
+ * 把任意实体名解析为角色卡正主名：同人异称 / 别名 / 称谓变体 / 错字变体 → 正主。
+ * 入参 characters 为「当前所有角色卡的正主名 + 别名」清单（不含已合并软删的脏卡）。
+ *
+ * 解析顺序（安全优先：任一变体解析不到唯一同姓正主即退回原名，绝不误并）：
+ *  1. 精确命中（繁简/大小写归一后）正主名或任一别名 → 正主名；
+ *  2. 变体解析：尊称 / 缩写 / 描述词 / 称谓变体 / 后缀尊称，同姓唯一「非变体」正主才并，歧义 → 不并；
+ *  3. 高度相似（繁简/错别字变体，如 李尘/李麈）→ 正主名；
+ *  4. 都不中 → 返回原名（不是已知角色，保持原样落库，不臆造合并）。
+ *
+ * 典型链路：填表写入「李大师」时，若项目已有正主「李富贵」（别名含 李大师）或
+ * 同姓唯一正主，则自动归一到「李富贵」，使代码级去重自然并回，无需手动点去重。
+ * 纯函数，便于单测（不依赖 prisma）。
+ */
+export function resolveNameToCanonical(characters: CanonicalCharacter[], name: string): string {
+  const target = (name || "").trim();
+  if (!target) return name;
+  const norm = (s: string) => normalizeTraditional((s || "").trim().toLowerCase());
+  const targetNorm = norm(target);
+  if (!targetNorm) return name;
+
+  // 1. 精确命中正主名或别名
+  for (const c of characters) {
+    if (norm(c.name) === targetNorm) return c.name;
+    for (const a of c.aliases || []) {
+      if (norm(a) === targetNorm) return c.name;
+    }
+  }
+
+  // 候选：非变体的正主名（变体不应作为合并目标，避免把「韩先生」当正主去并「韩雪」）
+  const isVariantName = (n: string): boolean =>
+    isHonorificVariant(n) ||
+    isSurnameAbbrevOrDescriptor(n) ||
+    isTitleVariant(n) ||
+    n.trim().length === 1 ||
+    SUFFIX_HONORIFICS.some((t) => n.trim().toLowerCase().endsWith(t));
+  const mainNames = characters.map((c) => c.name).filter((n) => !isVariantName(n));
+
+  // 2. 变体解析（同姓唯一正主才并，歧义 null → 退回原名）
+  const isTargetVariant =
+    isHonorificVariant(target) ||
+    isSurnameAbbrevOrDescriptor(target) ||
+    isTitleVariant(target) ||
+    target.trim().length === 1 ||
+    SUFFIX_HONORIFICS.some((t) => target.trim().toLowerCase().endsWith(t));
+  if (isTargetVariant) {
+    const surname = coreSurname(target);
+    const cands = mainNames
+      .filter((n) => norm(n) !== targetNorm)
+      .filter((n) => coreSurname(n) === surname);
+    if (cands.length === 1) return cands[0];
+  }
+
+  // 3. 高度相似（繁简/错别字变体）
+  for (const c of characters) {
+    if (isSimilarName(c.name, target)) return c.name;
+    for (const a of c.aliases || []) {
+      if (isSimilarName(a, target)) return c.name;
+    }
+  }
+
+  return name;
 }
