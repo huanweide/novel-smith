@@ -15,6 +15,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { asArray } from "@/lib/utils";
 import {
   buildTimelineDigest,
   buildStorylineDigest,
@@ -71,12 +72,30 @@ export async function rebuildProjectDigest(projectId: string): Promise<ProjectDi
   for (const e of allEvents as RawStorylineEvent[]) {
     (eventsByLine[e.storylineId as string] ??= []).push(e);
   }
-  const storylineDigest = buildStorylineDigest(
+  let storylineDigest = buildStorylineDigest(
     (mainLines as Array<{ id: string; title: string | null; description: string | null }>).map(
       (l) => ({ id: l.id, title: l.title, description: l.description }),
     ),
     eventsByLine,
   );
+
+  // P2 回退（P1 实测发现）：项目没建故事线时 storylineDigest 恒为空——"主线在推进什么"这条
+  // 长期记忆整条缺失。回退用各章摘要的关键事件（每章取第 1 条 = 最重要事件）聚合成主线大事件轴。
+  if (!storylineDigest.trim()) {
+    const sums = await prisma.chapterSummary.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+      select: { keyEvents: true },
+    });
+    const lines = sums
+      .map((s) => (asArray<string>(s.keyEvents).filter(Boolean)[0] ?? "").trim())
+      .filter(Boolean)
+      .slice(-12)
+      .map((e, i) => `${i + 1}. ${e}`);
+    if (lines.length) {
+      storylineDigest = lines.join("\n");
+    }
+  }
 
   await prisma.project.update({
     where: { id: projectId },

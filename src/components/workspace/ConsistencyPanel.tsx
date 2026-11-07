@@ -171,6 +171,22 @@ export function ConsistencyPanel({ projectId }: { projectId: string }) {
     }
   };
 
+  // 全书基线互审（P1 新增）：跨章累积矛盾（物品凭空移动/时间线断裂）单章检测抓不到，须整本互审
+  const runAudit = async () => {
+    if (extracting) return;
+    setExtracting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/consistency/audit`, { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) { const _f = describeHttpError(res.status, json); throw new Error(_f.description); }
+      load();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   // 标记冲突状态（POST 更新 status → 从 open 列表移除）
   const resolveConflict = async (conflictId: string, status: "resolved" | "ignored") => {
     try {
@@ -313,6 +329,15 @@ export function ConsistencyPanel({ projectId }: { projectId: string }) {
             >
               <Icon name="refresh" size={10} className={extracting ? "animate-spin" : ""} />
               {extracting ? "抽取中…" : "重抽"}
+            </button>
+            <button
+              onClick={runAudit}
+              disabled={extracting}
+              title="整本互审：把全部基线事实交叉比对，抓跨章累积矛盾（物品凭空移动 / 时间线断裂）——单章检测抓不到这类问题"
+              className="flex items-center gap-1 rounded border border-[var(--nv-warning)]/50 px-2 py-0.5 text-[10px] text-[var(--nv-warning)] hover:bg-[var(--nv-surface-3)] disabled:opacity-50"
+            >
+              <Icon name="shield" size={10} />
+              {extracting ? "审计中…" : "全书互审"}
             </button>
           </div>
         </div>
