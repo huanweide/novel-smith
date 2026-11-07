@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   try {
     const r = await safeJson(req);
     if (!r.ok) return r.response;
-    const { config, adopted = [], mode = "direct", outline } = r.body as {
+    const { config, adopted = [], mode = "direct", outline, rawOutlineText } = r.body as {
       config?: BuildConfig;
       adopted?: AdoptedItem[];
       mode?: "direct" | "ai_refine";
@@ -40,7 +40,12 @@ export async function POST(req: NextRequest) {
         toneKeywords?: string[];
         styleProfile?: any;
       };
+      rawOutlineText?: string;
     };
+
+    // 大纲章节解析源：LLM 整理结果里的脉络可能为空，回退到用户原始粘贴文本（真机实锤：
+    // 确认写入后工作台大纲树为空——plotOutline 缺失导致章节从未落库）
+    const outlineChapterSource = (outline?.plotOutline || rawOutlineText || "").trim();
 
     if (!config) {
       return NextResponse.json({ error: "缺少构建配置" }, { status: 400 });
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
       data: {
         name: projectName,
         description: config.direction?.slice(0, 500) || `${projectName}的设定`,
-        synopsis: outline?.plotOutline || extractSynopsis(adopted),
+        synopsis: outlineChapterSource || extractSynopsis(adopted),
         genre,
         globalPrompt,
         buildConfig: config as any,
@@ -140,6 +145,58 @@ export async function POST(req: NextRequest) {
         });
       } catch (e) {
         console.error("[explore/create] 大纲三卡写入失败:", e);
+      }
+    }
+
+    // ── 大纲章节落库：从脉络/原始粘贴文本解析「第N章」结构创建 StoryNode ──
+    // 此前 explore 建项目只写角色/世界书/简介，粘贴大纲里明确的章节结构被丢弃，
+    // 用户确认写入后进工作台看到空大纲树（真机实锤）。这里按章节标记切分落库。
+    if (outlineChapterSource.length > 20) {
+      try {
+        const text = outlineChapterSource;
+        const re = /第[0-9一二三四五六七八九十百千零两]+\s*章[:：]?/g;
+        const marks: Array<{ title: string; start: number; end: number }> = [];
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+          marks.push({ title: m[0].trim(), start: m.index, end: m.index + m[0].length });
+        }
+        if (marks.length > 0) {
+          for (let i = 0; i < marks.length; i++) {
+            const chunkStart = marks[i].end;
+            const chunkEnd = i + 1 < marks.length ? marks[i + 1].start : text.length;
+            const chunk = text.slice(chunkStart, chunkEnd).trim();
+            // 标题：章号（去掉自带冒号）+ 第一小句（截 24 字），如「第1章：外卖员林舟在暴雨夜送餐…」
+            const firstClause = chunk.split(/[，。；\n]/)[0]?.trim() || "";
+            const markerClean = marks[i].title.replace(/[:：]\s*$/, "");
+            const title = `${markerClean}${firstClause ? `：${firstClause.slice(0, 24)}` : ""}`;
+            await prisma.storyNode.create({
+              data: {
+                projectId: project.id,
+                parentId: null,
+                type: "chapter",
+                title,
+                order: i,
+                status: "outline_only",
+                outline: `${marks[i].title}${chunk}`,
+              },
+            });
+          }
+        } else {
+          // 无「第N章」标记：整段脉络作为单章大纲，保底不丢内容
+          await prisma.storyNode.create({
+            data: {
+              projectId: project.id,
+              parentId: null,
+              type: "chapter",
+              title: "第一章",
+              order: 0,
+              status: "outline_only",
+              outline: text,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[explore/create] 大纲章节节点写入失败:", e);
       }
     }
 

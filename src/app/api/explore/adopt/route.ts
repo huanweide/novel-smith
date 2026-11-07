@@ -5,7 +5,7 @@
  *
  * v3.1.50 简化原则（用户反馈"已采纳当大纲处理"+ P2003 防御）：
  * 1. 去掉 LLM 二次解析（aiParseToLore / aiParseToCharacter）——卡本身就是结构化文本（来自
- *    chat ADOPT 块或抽卡模式 parseCardsFromReply），直接 card.title + card.content 落库即可。
+ *    chat ADOPT 块），直接 card.title + card.content 落库即可。
  *    避免 LLM 慢/超时/返回无效结构导致的卡死与 500；也满足用户"已采纳内容直接当成大纲写入"的诉求。
  * 2. projectId 校验：旧 session / localStorage 残留的 createdProjectId 可能指向 db 重置后已不存在的
  *    Project（实测多次 P2003 503 真因），加 findUnique 校验，不存在则自动 fallback 建新项目，前端无感。

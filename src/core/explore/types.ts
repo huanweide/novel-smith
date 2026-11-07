@@ -266,8 +266,10 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
 export interface ExploreMessage {
   role: "user" | "agent";
   content: string;
-  /** 抽卡模式下的候选卡片 */
+  /** 候选卡片（每次回复附 3 张，点卡即采纳） */
   cards?: AdoptCard[];
+  /** 步骤切换标记：该消息渲染为聊天流内的步骤分隔芯片 */
+  stepIntro?: ExploreStep;
 }
 
 /** 候选卡片 */

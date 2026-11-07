@@ -18,8 +18,7 @@ const FREE_TALK: ExploreStep = "free_talk";
  * 探讨模式 11 步进度条：
  * - 每步右侧显示该 step 的已采纳数（如"1"），0 不显示
  * - 已完成步骤（count>0）= 成功色 + ✓
- * - 点击已完成步骤 = 跳到下一步（"切换至世界观讨论"那种链式）；点最后一步 → 跳到自由讨论
- * - 点击未完成步骤 = 切到该步（与旧行为一致）
+ * - 点击任意步骤 = 直接切到该步（可回跳继续讨论，大字过渡提示）
  * - 自由讨论步骤始终创意色（独立终点，欢迎随时进）
  * - 当 10 步全完成时，自由讨论步骤变"🎉 全部完成"创意完成态
  */
@@ -35,27 +34,12 @@ export function StepProgress({ currentStep, adopted, onStepChange }: Props) {
   const freeTalkCount = counts[FREE_TALK] || 0;
 
   const handleClick = (step: ExploreStep) => {
-    if (step === FREE_TALK) {
-      onStepChange(FREE_TALK);
-      return;
-    }
-    const idx = ORDERED_STEPS.indexOf(step);
-    const count = counts[step] || 0;
-    if (idx >= 0 && count > 0) {
-      // 已完成 → 跳到下一步（chain 效果）
-      if (idx < ORDERED_STEPS.length - 1) {
-        onStepChange(ORDERED_STEPS[idx + 1]);
-      } else {
-        onStepChange(FREE_TALK);
-      }
-    } else {
-      onStepChange(step);
-    }
+    onStepChange(step);
   };
 
   return (
     <div className="border-b border-[var(--nv-border-2)] bg-[var(--nv-void)]/50 backdrop-blur-sm px-4 py-2.5 shrink-0">
-      <div className="flex items-center justify-start gap-0.5 overflow-x-auto">
+      <div className="no-scrollbar flex items-center justify-start gap-0.5 overflow-x-auto">
         {EXPLORE_STEPS.map((step, i) => {
           const count = counts[step] || 0;
           const done = count > 0;
@@ -63,13 +47,13 @@ export function StepProgress({ currentStep, adopted, onStepChange }: Props) {
           const isFree = step === FREE_TALK;
           const allDone = isFree && orderedDone;
 
-          // 跳转提示（hover title）：已完成时显示"→ 切到 X"
+          // 跳转提示（hover title）：点击 = 直接切到该步
           const nextLabel = (() => {
             if (isFree) return "什么都能聊的自由讨论";
-            const idx = ORDERED_STEPS.indexOf(step);
-            if (idx < 0) return STEP_LABELS[step];
-            if (idx < ORDERED_STEPS.length - 1) return `已完成 ${count} 条 · 点击切换至「${STEP_LABELS[ORDERED_STEPS[idx + 1]]}」`;
-            return `已完成 ${count} 条 · 点击切换至「自由讨论」`;
+            const count2 = counts[step] || 0;
+            return count2 > 0
+              ? `已完成 ${count2} 条 · 点击回跳继续讨论「${STEP_LABELS[step]}」`
+              : `点击开始讨论「${STEP_LABELS[step]}」`;
           })();
 
           // 样式分支（active / allDone / done / free / pending）

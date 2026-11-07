@@ -10,7 +10,7 @@
  *   config?: BuildConfig,
  *   adopted?: AdoptedItem[],
  *   currentStep?: ExploreStep,
- *   mode?: "chat" | "cards"  // 自由对话 / 抽卡模式
+ *   mode?: "chat" | "outline" | "generate_all"  // 自由讨论（默认，附3张候选卡）/ 大纲 / 一键生成
  * }
  * Response: { reply: string, cards?: AdoptCard[] }
  */
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       config?: BuildConfig;
       adopted?: AdoptedItem[];
       currentStep?: ExploreStep;
-      mode?: "chat" | "cards" | "generate_all" | "outline";
+      mode?: "chat" | "generate_all" | "outline";
       enrichPrompt?: string;
       stream?: boolean;
       buildPrompt?: string;
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 构建系统提示词
-    const systemPrompt = buildExploreSystemPrompt(config, adopted, currentStep, mode);
+    const systemPrompt = buildExploreSystemPrompt(config, adopted, currentStep);
 
     // 构建消息列表
     const messages: Array<{ role: string; content: string }> = [
@@ -96,8 +96,8 @@ export async function POST(req: NextRequest) {
     const response = await client.chat({
       model,
       messages: messages as any,
-      temperature: mode === "cards" ? 0.8 : 0.85,
-      maxTokens: mode === "cards" ? 4096 : 3000,
+      temperature: 0.85,
+      maxTokens: 4096,
     });
 
     // 检查是否被内容过滤拦截
@@ -121,20 +121,15 @@ export async function POST(req: NextRequest) {
 
     const reply = response.content;
 
-    // 抽卡模式：解析候选卡片；对话模式：提取 ADOPT 块为可采纳卡片
+    // 自由讨论（已融合抽卡）：提取 ADOPT 块为 3 选 1 候选卡，剥离后气泡只显示干净对话文本
     let cards: AdoptCard[] | undefined;
     let displayReply = reply;
-    if (mode === "cards") {
-      cards = parseCardsFromReply(reply, currentStep);
-    } else if (mode === "chat") {
-      cards = extractAdoptBlocks(reply, currentStep);
-      if (cards.length === 0) {
-        const fb = extractFallbackCard(reply, currentStep);
-        if (fb) cards = [fb];
-      }
-      // 剥离 ADOPT 块，让对话气泡显示干净的对话文本，卡片单独渲染在气泡下方
-      displayReply = stripAdoptBlocks(reply);
+    cards = extractAdoptBlocks(reply, currentStep);
+    if (cards.length === 0) {
+      const fb = extractFallbackCard(reply, currentStep);
+      if (fb) cards = [fb];
     }
+    displayReply = stripAdoptBlocks(reply);
 
     return NextResponse.json({ reply: displayReply, cards });
   } catch (err) {
@@ -149,7 +144,6 @@ function buildExploreSystemPrompt(
   config?: BuildConfig,
   adopted?: AdoptedItem[],
   currentStep?: ExploreStep,
-  mode?: string,
 ): string {
   const stepLabel = STEP_LABELS[currentStep || "opening"];
   const stepDesc = STEP_DESCRIPTIONS[currentStep || "opening"];
@@ -190,29 +184,17 @@ function buildExploreSystemPrompt(
     }
   }
 
-  // 输出格式
-  if (mode === "cards") {
-    parts.push(``);
-    parts.push(`【抽卡模式——参考工作区抽卡格式】`);
-    parts.push(`为当前步骤生成3张候选卡。每张卡是一个具体的、可用的设定方案，且有鲜明差异。`);
-    parts.push(`格式：每张卡用 ## 标题开头，内容2-4句具体描述（不是空话，是直接能用的设定），卡之间用 --- 分隔。`);
-    parts.push(`要求：`);
-    parts.push(`- 3张卡方向必须明显不同（如：经典稳妥 / 创意反转 / 高风险高回报），给用户真正的选择空间`);
-    parts.push(`- 内容具体且出彩——拒绝"主角很强"这种空话，要"主角拥有万象摹写之能，触摸他人可复制其最强技能，但每次复制消耗一年寿元"`);
-    parts.push(`- 有记忆点、有戏剧张力，避免老套套路；贴合用户已填配置和已采纳设定，不自相矛盾`);
-  } else {
-    // 自由讨论 / 标准对话：去僵化、给抉择，但保留一键采纳能力
-    parts.push(``);
-    parts.push(`【对话规则——自由、自然、把抉择交给用户】`);
-    parts.push(`1. 以作家搭档的身份和用户聊天，不是客服也不是顾问；有来有回，可以发散、可以质疑、可以跑题`);
-    parts.push(`2. 回复长短随内容而定：一句话点子可以极短，展开一个设定也可以写得很长——不要自我设限字数，也不要为了凑字数而啰嗦`);
-    parts.push(`3. 遇到关键分歧点，主动给出 2-3 个明显不同的方向/方案，让用户拍板（例如"A 走暗黑复仇线 / B 走轻松成长线 / C 走群像权谋线，你想走哪条？"），不要替用户替到底`);
-    parts.push(`4. 如果用户的某个设定与前文矛盾，点出来并给替代方案，但别打断讨论节奏`);
-    parts.push(`5. 聊出一个【具体、可落库的设定点】（角色/势力/能力/金手指/世界规则/核心冲突/情节钩子）时，可以在末尾用可选的 ADOPT 块输出，方便用户一键采纳：`);
-    parts.push(`   <ADOPT title="设定点标题（≤20字，点明是什么，例如：主角·苏砚的复制异能）">2-4句具体描述，直接能用的设定，不要空话套话。</ADOPT>`);
-    parts.push(`6. ADOPT 块不是必须的——纯讨论、还在发散想法时，完全可以不输出；一次回复可以有 0 个或多个 ADOPT 块`);
-    parts.push(`7. 不要硬性推进"下一步"：用户想聊多久聊多久、想聊哪聊哪，你只需顺着他的思路走`);
-  }
+  // 输出格式：自由讨论（已融合抽卡 3 选 1）
+  parts.push(``);
+  parts.push(`【对话规则——自由、自然、末尾固定 3 选 1】`);
+  parts.push(`1. 以作家搭档的身份和用户聊天，不是客服也不是顾问；有来有回，可以发散、可以质疑、可以跑题`);
+  parts.push(`2. 回复长短随内容而定：一句话点子可以极短，展开一个设定也可以写得很长——不要自我设限字数，也不要为了凑字数而啰嗦`);
+  parts.push(`3. 每次回复的末尾，固定附上 3 张候选卡（ADOPT 块）：三个方向/方案必须明显不同（如：经典稳妥 / 创意反转 / 高风险高回报），让用户挑一个拍板。卡片内容要具体、可直接采用——拒绝"主角很强"这种空话，要"主角拥有万象摹写之能，触摸他人可复制其最强技能，但每次复制消耗一年寿元"`);
+  parts.push(`4. 如果用户的某个设定与前文矛盾，点出来并给替代方案，但别打断讨论节奏`);
+  parts.push(`5. 候选卡格式（每张一个 ADOPT 块）：`);
+  parts.push(`   <ADOPT title="设定点标题（≤20字，点明是什么，例如：主角·苏砚的复制异能）">2-4句具体描述，直接能用的设定，不要空话套话。</ADOPT>`);
+  parts.push(`6. 除 3 张候选卡外，聊出其他【具体、可落库的设定点】时也可以追加 ADOPT 块；正文里不要重复卡片内容`);
+  parts.push(`7. 不要硬性推进"下一步"：用户想聊多久聊多久、想聊哪聊哪，你只需顺着他的思路走`);
 
   return parts.join("\n");
 }
@@ -459,44 +441,7 @@ async function handleOutlineStream(
   });
 }
 
-/** 从AI回复中解析候选卡片 */
-function parseCardsFromReply(reply: string, step: ExploreStep): AdoptCard[] {
-  const cards: AdoptCard[] = [];
-  // 按 "---" 或 "##" 分割
-  const sections = reply.split(/\n---\n|\n## /);
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed || trimmed.length < 20) continue;
-
-    // 提取标题（第一行）
-    const lines = trimmed.split("\n");
-    const titleLine = lines[0].replace(/^##\s*/, "").trim();
-    const content = lines.slice(1).join("\n").trim() || trimmed;
-
-    if (titleLine.length < 2) continue;
-
-    cards.push({
-      id: `card_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      title: titleLine.slice(0, 60),
-      content: content.slice(0, 300),
-      step,
-    });
-  }
-
-  // 如果没解析出卡片，把整个回复当一张卡
-  if (cards.length === 0 && reply.length > 30) {
-    cards.push({
-      id: `card_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      title: reply.slice(0, 60).split("\n")[0],
-      content: reply.slice(0, 400),
-      step,
-    });
-  }
-
-  return cards.slice(0, 5);
-}
-
-/** 从对话回复中提取 ADOPT 块为可采纳卡片（对话模式专用） */
+/** 从对话回复中提取 ADOPT 块为可采纳卡片（3 选 1 候选卡） */
 function extractAdoptBlocks(reply: string, step: ExploreStep): AdoptCard[] {
   const re = /<ADOPT\s+title="([^"]+)"\s*>([\s\S]*?)<\/ADOPT>/gi;
   const cards: AdoptCard[] = [];

@@ -6,7 +6,6 @@ import { BuildConfigPanel } from "@/components/explore/BuildConfigPanel";
 import { AdoptedContentPanel } from "@/components/explore/AdoptedContentPanel";
 import { ChatPanel } from "@/components/explore/ChatPanel";
 import { OutlinePanel } from "@/components/explore/OutlinePanel";
-import { CardBrowser } from "@/components/explore/CardBrowser";
 import { StepProgress } from "@/components/explore/StepProgress";
 import { Icon } from "@/components/ui/icons";
 import type {
@@ -17,7 +16,7 @@ import type {
   AdoptCard,
 } from "@/core/explore/types";
 import { DEFAULT_BUILD_CONFIG, EXPLORE_STEPS, STEP_LABELS, STEP_DESCRIPTIONS, STEP_LUCIDE, STEP_PROMPTS } from "@/core/explore/types";
-import { toastError, toastCreated } from "@/components/ui/toast";
+import { toastError, toastCreated, toastSubtle } from "@/components/ui/toast";
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useHealth } from "@/hooks/use-health";
@@ -28,12 +27,12 @@ export default function ExplorePage() {
   const [messages, setMessages] = useState<ExploreMessage[]>([
     {
       role: "agent",
-      content: `嗨，我是你的 AI 创作搭子！🖊️\n\n我们从一个轻松的问题开始：你想写一本什么样的书？\n\n可以直接说想法，也可以点上方「抽卡」让 AI 给你灵感——怎么聊都行，聊出什么都能采纳。`,
+      content: `嗨，我是你的 AI 创作搭子！🖊️\n\n我们从一个轻松的问题开始：你想写一本什么样的书？\n\n直接说想法就行——每次回复我都会附 3 张候选卡，挑一个就能继续，聊出什么都能采纳。`,
     },
   ]);
   const [adopted, setAdopted] = useState<AdoptedItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"chat" | "cards" | "outline">("chat");
+  const [mode, setMode] = useState<"chat" | "outline">("chat");
   const [creating, setCreating] = useState(false);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(true);
@@ -51,7 +50,6 @@ export default function ExplorePage() {
   const health = useHealth();
   const aiConfigured = health?.llm.ok ?? null;
   const [adoptStatus, setAdoptStatus] = useState<Record<string, string>>({});
-  const [allCards, setAllCards] = useState<Record<string, AdoptCard[]>>({});
   const [generatingAll, setGeneratingAll] = useState(false);
   // AI 一键构筑：方向提示词弹窗 + 构筑结果预览（右侧待确认区）
   const [buildModalOpen, setBuildModalOpen] = useState(false);
@@ -84,7 +82,8 @@ export default function ExplorePage() {
         if (state.config) setConfig(state.config);
         if (state.createdProjectId)
           setCreatedProjectId(state.createdProjectId);
-        if (state.mode) setMode(state.mode);
+        // 旧版本存过 mode: "cards"（抽卡已融合进自由讨论），消毒为合法值
+        if (state.mode === "chat" || state.mode === "outline") setMode(state.mode);
         if (state.currentStep) setCurrentStep(state.currentStep);
       }
     } catch {
@@ -111,7 +110,7 @@ export default function ExplorePage() {
             if (insp) {
               body += `\n\n你带来的灵感火花是：\n「${decodeURIComponent(insp)}」\n\n你可以直接补充设定，也可以让它自由生长。`;
             } else {
-              body += `\n\n说说你想写什么类型的小说？有什么初步想法？或者试试"抽卡模式"让AI给你灵感。`;
+              body += `\n\n说说你想写什么类型的小说？有什么初步想法？每次回复我都会附 3 张候选卡，挑一个就能继续。`;
             }
             return [{ role: "agent", content: body }];
           }
@@ -155,12 +154,37 @@ export default function ExplorePage() {
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  const adoptedRef = useRef(adopted);
+  adoptedRef.current = adopted;
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      if (!text.trim() || loadingRef.current) return;
+  // ─── 步骤切换过渡（大字闪现 + 聊天流内分隔芯片） ──────────────
+  const [stepFlash, setStepFlash] = useState<{ step: ExploreStep; seq: number } | null>(null);
+  const stepFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashStep = useCallback((step: ExploreStep) => {
+    setStepFlash({ step, seq: Date.now() });
+    if (stepFlashTimer.current) clearTimeout(stepFlashTimer.current);
+    stepFlashTimer.current = setTimeout(() => setStepFlash(null), 1750);
+  }, []);
 
-      const userMsg: ExploreMessage = { role: "user", content: text };
+  const handleStepChange = useCallback((step: ExploreStep) => {
+    setCurrentStep(step);
+    flashStep(step);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "agent",
+        content: `说说你关于${STEP_LABELS[step]}的想法？直接聊就行，聊出好点子点卡片就能收下。`,
+        stepIntro: step,
+      },
+    ]);
+  }, [flashStep]);
+
+  // 底层发送：apiText 发给 LLM，displayText 显示为用户气泡（handleSend 与重摇共用）
+  const sendExplore = useCallback(
+    async (apiText: string, displayText: string) => {
+      if (!apiText.trim() || loadingRef.current) return;
+
+      const userMsg: ExploreMessage = { role: "user", content: displayText };
       setMessages((prev) => [...prev, userMsg]);
       loadingRef.current = true;
       setLoading(true);
@@ -170,7 +194,7 @@ export default function ExplorePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: text,
+            message: apiText,
             history: messagesRef.current.map((m) => ({
               role: m.role,
               content: m.content,
@@ -188,9 +212,18 @@ export default function ExplorePage() {
         }
 
         const data = await res.json();
+        // 新卡去重：与已采纳设定同标题+同内容的卡不再展示，避免"说过了又来一遍"的混乱
+        const rawCards: AdoptCard[] | undefined = Array.isArray(data.cards) ? data.cards : undefined;
+        const newCards = rawCards?.filter(
+          (c) => !adoptedRef.current.some((a) => a.title === c.title && a.content === c.content),
+        );
         setMessages((prev) => [
           ...prev,
-          { role: "agent", content: data.reply || "收到。继续？", cards: data.cards },
+          {
+            role: "agent",
+            content: data.reply || "收到。继续？",
+            cards: newCards && newCards.length > 0 ? newCards : undefined,
+          },
         ]);
       } catch (err: any) {
         setMessages((prev) => [
@@ -202,8 +235,41 @@ export default function ExplorePage() {
         setLoading(false);
       }
     },
-    // handleSend 依赖 config/adopted/currentStep/mode，但不依赖 messages（用 ref 替代）
+    // 依赖 config/adopted/currentStep/mode，但不依赖 messages（用 ref 替代）
     [config, adopted, currentStep, mode],
+  );
+
+  const handleSend = useCallback(
+    (text: string) => sendExplore(text, text),
+    [sendExplore],
+  );
+
+  // 换一批候选卡（重 roll）：重发上一条用户消息，可带重摇提示
+  const handleReroll = useCallback(
+    (hint?: string) => {
+      if (loadingRef.current) return;
+      const lastUser = [...messagesRef.current].reverse().find((m) => m.role === "user");
+      if (!lastUser) return;
+      const apiText = hint
+        ? `${lastUser.content}\n\n（重摇提示：${hint}。请重新给出 3 张方向明显不同的候选卡）`
+        : `${lastUser.content}\n\n（请重新给出 3 张方向明显不同的候选卡，不要重复上一批）`;
+      void sendExplore(apiText, hint ? `🔄 重摇：${hint}` : "🔄 换一批候选卡");
+    },
+    [sendExplore],
+  );
+
+  // 模式切换：切出时给一句提示，避免"点了没反应"的困惑
+  const handleModeChange = useCallback(
+    (m: "chat" | "outline") => {
+      if (m === mode) return;
+      setMode(m);
+      toastSubtle(
+        m === "outline"
+          ? "已切换到大纲模式：粘贴整篇大纲，AI 自动抽取角色与设定"
+          : "已切换到自由讨论：直接聊，AI 每次回复附 3 张候选卡",
+      );
+    },
+    [mode],
   );
 
   // ─── 采纳卡片 ──────────────────────────────────────
@@ -253,12 +319,13 @@ export default function ExplorePage() {
           if (data.projectId && !createdProjectId) {
             setCreatedProjectId(data.projectId);
           }
-          // 自由讨论（chat）模式：采纳设定不强制推进步骤，把节奏交还给用户；
-          // 其他结构化模式保留"采纳即进阶"的引导。
-          if (mode !== "chat") {
-            const currentIdx = EXPLORE_STEPS.indexOf(currentStep);
-            if (currentIdx >= 0 && currentIdx < EXPLORE_STEPS.length - 1) {
-              setCurrentStep(EXPLORE_STEPS[currentIdx + 1]);
+          // 采纳后推进：仅当本次是该步骤的【首条采纳】时自动跳下一步（带大字过渡提示），
+          // 后续补采不打断节奏；最后一步采纳后落回自由讨论。
+          const hadAdoptedInStep = adopted.some((a) => a.step === card.step);
+          if (!hadAdoptedInStep) {
+            const idx = EXPLORE_STEPS.indexOf(card.step);
+            if (idx >= 0 && idx < EXPLORE_STEPS.length - 1) {
+              handleStepChange(EXPLORE_STEPS[idx + 1]);
             }
           }
         } else {
@@ -269,7 +336,7 @@ export default function ExplorePage() {
         setAdoptStatus((prev) => ({ ...prev, [card.id]: "failed" }));
       }
     },
-    [adopted, config, createdProjectId, currentStep, mode],
+    [adopted, config, createdProjectId, handleStepChange],
   );
 
   // ─── 大纲模式 ──────────────────────────────────────
@@ -370,7 +437,7 @@ export default function ExplorePage() {
         const res = await fetch("/api/explore/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config, adopted, mode: "direct", outline: outlineResult }),
+          body: JSON.stringify({ config, adopted, mode: "direct", outline: outlineResult, rawOutlineText: outlineText }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "创建失败");
@@ -420,7 +487,7 @@ export default function ExplorePage() {
       creatingRef.current = false;
       setCreating(false);
     }
-  }, [outlineResult, config, createdProjectId, adopted]);
+  }, [outlineResult, config, createdProjectId, adopted, outlineText]);
 
   // ─── 一键AI构建 ────────────────────────────────────
 
@@ -526,20 +593,6 @@ export default function ExplorePage() {
     [config, adopted],
   );
 
-  // ─── 切换步骤 ──────────────────────────────────────
-
-  const handleStepChange = useCallback((step: ExploreStep) => {
-    setCurrentStep(step);
-    const stepLabel = STEP_LABELS[step];
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "agent",
-        content: `切换至「${stepLabel}」。\n\n说说你关于${stepLabel}的想法？`,
-      },
-    ]);
-  }, []);
-
   // ─── 深入探讨已采纳内容 ──────────────────────────────
   const handleDeepDive = useCallback(
     async (item: AdoptedItem) => {
@@ -573,9 +626,18 @@ export default function ExplorePage() {
           throw new Error(errData.error || `响应失败 (${res.status})`);
         }
         const data = await res.json();
+        // 新卡去重：与已采纳设定同标题+同内容的卡不再展示，避免"说过了又来一遍"的混乱
+        const rawCards: AdoptCard[] | undefined = Array.isArray(data.cards) ? data.cards : undefined;
+        const newCards = rawCards?.filter(
+          (c) => !adoptedRef.current.some((a) => a.title === c.title && a.content === c.content),
+        );
         setMessages((prev) => [
           ...prev,
-          { role: "agent", content: data.reply || "收到。继续？", cards: data.cards },
+          {
+            role: "agent",
+            content: data.reply || "收到。继续？",
+            cards: newCards && newCards.length > 0 ? newCards : undefined,
+          },
         ]);
       } catch (err: any) {
         setMessages((prev) => [
@@ -590,7 +652,7 @@ export default function ExplorePage() {
     [adopted, config],
   );
 
-  // 点击引导条的示例提问：先切回对话模式，确保用户看得到这次发送（否则在抽卡/大纲模式下消息会发到后台却看不见）
+  // 点击引导条的示例提问：先切回对话模式，确保用户看得到这次发送（大纲模式下消息会发到后台却看不见）
   const handleGuideSend = useCallback((text: string) => {
     if (mode !== "chat") setMode("chat");
     handleSend(text);
@@ -598,6 +660,20 @@ export default function ExplorePage() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--nv-void)] text-[var(--nv-text-secondary)] animate-in fade-in overflow-hidden">
+      {/* ── 步骤切换大字过渡（全屏居中闪现 1.75s） ── */}
+      {stepFlash && (
+        <div key={stepFlash.seq} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <div className="animate-[nf-step-flash_1.75s_ease-in-out_both] flex flex-col items-center gap-2.5 px-10 py-7 rounded-3xl bg-[var(--nv-abyss)]/85 border border-[var(--nv-creative)]/30 shadow-[0_0_70px_var(--nv-creative-soft)] backdrop-blur-md">
+            <span className="w-12 h-12 rounded-2xl bg-[var(--nv-creative)]/15 border border-[var(--nv-creative)]/30 flex items-center justify-center">
+              <Icon name={STEP_LUCIDE[stepFlash.step]} size={24} className="text-[var(--nv-creative)]" />
+            </span>
+            <span className="text-2xl font-bold tracking-wide text-[var(--nv-text-primary)]">
+              切换至「{STEP_LABELS[stepFlash.step]}」
+            </span>
+            <span className="text-[11px] text-[var(--nv-text-tertiary)]">点击顶部进度条可随时回跳继续讨论</span>
+          </div>
+        </div>
+      )}
       {/* ── 顶栏 ── */}
       <header className="sticky top-0 z-10 border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/80 px-5 py-3 backdrop-blur-sm shrink-0" inert={leftDrawerOpen || rightDrawerOpen}>
         <div className="max-w-full mx-auto flex items-center justify-between">
@@ -619,21 +695,23 @@ export default function ExplorePage() {
           </div>
           {/* 全局模式切换 */}
           <div className="mr-2 flex items-center gap-0.5 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-0.5">
-            {(["chat", "cards", "outline"] as const).map((m) => {
+            {(["chat", "outline"] as const).map((m) => {
               const active = mode === m;
-              const labels: Record<string, React.ReactNode> = { chat: <span className="flex items-center gap-1"><Icon name="message" size={12} /> 自由讨论</span>, cards: <span className="flex items-center gap-1"><Icon name="grid" size={12} /> 抽卡</span>, outline: <span className="flex items-center gap-1"><Icon name="clipboard" size={12} /> 大纲</span> };
+              const labels: Record<string, React.ReactNode> = { chat: <span className="flex items-center gap-1"><Icon name="message" size={12} /> 自由讨论</span>, outline: <span className="flex items-center gap-1"><Icon name="clipboard" size={12} /> 大纲</span> };
+              const titles: Record<string, string> = { chat: "自由讨论：聊天式构建，每次回复附 3 张候选卡", outline: "大纲模式：粘贴整篇大纲，一键抽取角色与设定" };
               return (
                 <button
                   key={m}
-                  onClick={() => setMode(m)}
+                  onClick={() => handleModeChange(m)}
+                  title={titles[m]}
                   className={`rounded-lg px-2.5 py-1 text-[10px] font-medium transition-all duration-200 active:scale-95 ${
                   active
                     ? m === "chat"
                       ? "bg-[var(--nv-creative)]/20 text-[var(--nv-creative)] shadow-[0_0_12px_var(--nv-creative-soft)]"
                       : "bg-[var(--nv-primary-soft)] text-[var(--nv-primary)] shadow-sm"
                     : m === "chat"
-                      ? "text-[var(--nv-creative)]/70 hover:text-[var(--nv-creative)]"
-                      : "text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
+                      ? "text-[var(--nv-creative)]/70 hover:text-[var(--nv-creative)] hover:bg-[var(--nv-creative)]/10"
+                      : "text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-3)]"
                 }`}
                 >
                   {labels[m]}
@@ -685,7 +763,6 @@ export default function ExplorePage() {
               onClick={() => {
                 setConfig(DEFAULT_BUILD_CONFIG);
                 setAdopted([]);
-                setAllCards({});
                 setMessages([messages[0]]);
                 setCreatedProjectId(null);
                 setCurrentStep("opening");
@@ -755,17 +832,9 @@ export default function ExplorePage() {
                 aiConfigured={aiConfigured}
                 onSend={handleSend}
                 onStepChange={handleStepChange}
-                onModeChange={setMode}
+                onModeChange={handleModeChange}
                 onAdoptCard={handleAdoptCard}
-              />
-              <CardBrowser
-                allCards={allCards}
-                adoptStatus={adoptStatus}
-                onAdoptCard={handleAdoptCard}
-                onAdoptAll={async () => {
-                  const cards = Object.values(allCards).flat();
-                  await Promise.all(cards.map((card) => handleAdoptCard(card)));
-                }}
+                onReroll={handleReroll}
               />
             </>
           )}
@@ -804,14 +873,14 @@ export default function ExplorePage() {
         </aside>
         {/* 窄屏抽屉遮罩 */}
         {(leftDrawerOpen || rightDrawerOpen) && (
-          <div aria-hidden="true" className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => { setLeftDrawerOpen(false); setRightDrawerOpen(false); }} />
+          <div aria-hidden="true" className="fixed inset-0 z-30 bg-[var(--nv-veil)] lg:hidden" onClick={() => { setLeftDrawerOpen(false); setRightDrawerOpen(false); }} />
         )}
       </div>
 
       {/* ── AI 一键构筑：方向提示词弹窗 ── */}
       {buildModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="一键构筑所有设定">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setBuildModalOpen(false)} />
+          <div className="absolute inset-0 bg-[var(--nv-veil)] backdrop-blur-[2px]" onClick={() => setBuildModalOpen(false)} />
           <div className="relative w-full max-w-md rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-5 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-2.5 mb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--nv-creative)]/15 border border-[var(--nv-creative)]/30">
@@ -857,52 +926,61 @@ export default function ExplorePage() {
   );
 }
 
-// ─── 子组件：构思步骤引导（让新手清楚每一步该聊什么） ──
+// ─── 子组件：构思步骤引导（默认收起为单行，点击展开说明与示例） ──
 function StepGuide({ step, aiConfigured, onSend }: { step: ExploreStep; aiConfigured: boolean | null; onSend: (text: string) => void }) {
   const prompts = STEP_PROMPTS[step];
   const blocked = aiConfigured === false;
+  const [open, setOpen] = useState(false);
   return (
-    <section className="border-b border-[var(--nv-border-2)] bg-[var(--nv-surface-1)]/60 px-5 py-3 shrink-0">
-      <div className="max-w-full mx-auto flex flex-col gap-2.5">
-        <div className="flex items-start gap-2.5">
-          <Icon name={STEP_LUCIDE[step]} size={20} className="text-[var(--nv-text-secondary)] leading-none mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold text-[var(--nv-primary)] tracking-wider uppercase">我们在聊</span>
-              <span className="text-sm font-bold text-[var(--nv-text-primary)]">{STEP_LABELS[step]}</span>
-            </div>
-            <p className="text-xs text-[var(--nv-text-tertiary)] leading-relaxed mt-1">
-              {STEP_DESCRIPTIONS[step]}
-            </p>
-          </div>
-        </div>
-        {blocked ? (
-          <div className="flex flex-wrap items-center gap-1.5 pl-7">
-            <span className="text-[11px] px-2.5 py-1 rounded-full border border-warning/30 bg-warning/[0.08] text-warning">
-              AI 未配置：先去设置页填 Key，才能与 AI 探讨并采纳设定
-            </span>
-            <Link
-              href="/settings"
-              className="text-[11px] px-2.5 py-1 rounded-full border border-warning/30 bg-warning/15 text-warning hover:bg-warning/25 transition-colors duration-150"
-            >
-              去设置页 →
-            </Link>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-1.5 pl-7">
-            {prompts.map((p, i) => (
-              <button
-                key={i}
-                onClick={() => onSend(p)}
-                disabled={aiConfigured === null}
-                className="text-[11px] px-2.5 py-1 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-secondary)] hover:border-[var(--nv-primary)]/40 hover:text-[var(--nv-primary)] transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+    <section className="border-b border-[var(--nv-border-2)] bg-[var(--nv-surface-1)]/60 shrink-0">
+      {/* 收起态：单行紧凑条，与下方状态条同风格 */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-5 py-1.5 flex items-center gap-2 text-left hover:bg-[var(--nv-surface-2)]/60 transition-colors duration-150"
+        title={open ? "收起引导" : "展开本步说明与示例提问"}
+      >
+        <Icon name={STEP_LUCIDE[step]} size={14} className="text-[var(--nv-creative)] shrink-0" />
+        <span className="text-[10px] font-semibold text-[var(--nv-primary)] tracking-wider uppercase shrink-0">我们在聊</span>
+        <span className="text-xs font-bold text-[var(--nv-text-primary)] shrink-0">{STEP_LABELS[step]}</span>
+        <span className="text-[11px] text-[var(--nv-text-tertiary)] truncate flex-1 min-w-0">{STEP_DESCRIPTIONS[step]}</span>
+        <Icon
+          name="chevronDown"
+          size={14}
+          className={`text-[var(--nv-text-muted)] shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {/* 展开态：完整说明 + 可一键发送的示例提问 */}
+      {open && (
+        <div className="px-5 pb-3 flex flex-col gap-2.5 animate-[nf-card-in_0.3s_ease-out_both]">
+          <p className="text-xs text-[var(--nv-text-tertiary)] leading-relaxed pl-6">{STEP_DESCRIPTIONS[step]}</p>
+          {blocked ? (
+            <div className="flex flex-wrap items-center gap-1.5 pl-6">
+              <span className="text-[11px] px-2.5 py-1 rounded-full border border-warning/30 bg-warning/[0.08] text-warning">
+                AI 未配置：先去设置页填 Key，才能与 AI 探讨并采纳设定
+              </span>
+              <Link
+                href="/settings"
+                className="text-[11px] px-2.5 py-1 rounded-full border border-warning/30 bg-warning/15 text-warning hover:bg-warning/25 transition-colors duration-150"
               >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+                去设置页 →
+              </Link>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 pl-6">
+              {prompts.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => onSend(p)}
+                  disabled={aiConfigured === null}
+                  className="text-[11px] px-2.5 py-1 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-secondary)] hover:border-[var(--nv-primary)]/40 hover:text-[var(--nv-primary)] transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
