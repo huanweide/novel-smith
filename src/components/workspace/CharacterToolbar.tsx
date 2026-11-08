@@ -63,12 +63,11 @@ export function CharacterToolbar({
           placeholder={`1-${filtered.length}`}
           onSelect={onRange}
         />
-        {selectedIds.size > 0 && !expanding && (
+        {selectedIds.size > 0 && (
           <button onClick={onClear} className={`${base} ${neutral}`} title="清空勾选">
             清空({selectedIds.size})
           </button>
         )}
-        <span className="ml-auto text-[10px] text-[var(--nv-text-tertiary)]">已选 {selectedIds.size}</span>
       </div>
       {/* 第二行：AI 加工（扩展 / 打标）——输入标签名后「打标」点亮 */}
       <div className="flex items-center gap-1">
@@ -87,7 +86,7 @@ export function CharacterToolbar({
         <input
           value={newTag}
           onChange={(e) => onNewTagChange(e.target.value)}
-          placeholder="新建标签名…"
+          placeholder="标签名…"
           aria-label="新建标签名"
           className="flex-1 min-w-0 text-xs px-2 h-6 rounded border border-[var(--nv-border-1)] bg-transparent text-[var(--nv-text-primary)] placeholder:text-[var(--nv-text-tertiary)] focus:outline-none focus:border-[var(--nv-primary)]"
         />

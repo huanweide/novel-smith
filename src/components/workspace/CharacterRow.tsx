@@ -34,10 +34,12 @@ function CharacterRowImpl({
   lastAppearance?: LastAppearance | null;
   onJumpToChapter?: (nodeId: string) => void;
 }) {
+  // 展示用标签（过滤系统标签），最多显示 3 个防拥挤
+  const visibleTags = asArray<string>(character.tags).filter(t => !t.startsWith("📥") && !t.startsWith("📝") && t !== "🗂 已合并");
   return (
     <div
       className={
-        "flex items-center gap-2 py-1 px-2 rounded text-xs text-[var(--nv-text-secondary)] hover:shadow-[inset_2px_0_0_0_var(--nv-border-3)] transition-all duration-150 group " +
+        "flex items-center gap-2 py-1.5 px-2 rounded-md text-xs text-[var(--nv-text-secondary)] transition-all duration-150 group " +
         (selected
           ? "bg-[var(--nv-accent)]/10 ring-1 ring-inset ring-[var(--nv-accent)]/30"
           : "hover:bg-[var(--nv-surface-2)]")
@@ -60,26 +62,26 @@ function CharacterRowImpl({
             onEdit(character);
           }
         }}
-        className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+        className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
       >
-        <span className="w-5 h-5 rounded-full bg-[var(--nv-surface-2)] flex items-center justify-center text-[10px] shrink-0">
+        <span className="w-7 h-7 rounded-full bg-[var(--nv-creative-soft)] text-[var(--nv-creative)] flex items-center justify-center text-xs font-medium shrink-0">
           {character.name[0]}
         </span>
         <div className="flex-1 min-w-0">
-          <span className="truncate block hover:text-[var(--nv-text-primary)] transition-colors">{character.name}</span>
+          <span className="truncate block font-medium text-[var(--nv-text-primary)] hover:text-[var(--nv-creative)] transition-colors">{character.name}</span>
           {lastAppearance && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onJumpToChapter?.(lastAppearance.nodeId); }}
               title={`上次出现在「${lastAppearance.nodeTitle}」，点击跳转该章`}
-              className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-primary)] transition-colors"
+              className="mt-0.5 max-w-full inline-flex items-center gap-0.5 text-[9px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-primary)] transition-colors"
             >
-              <Icon name="history" size={9} className="align-middle" />第{lastAppearance.order}章 · {lastAppearance.nodeTitle}
+              <Icon name="history" size={9} className="shrink-0" /><span className="truncate">第{lastAppearance.order}章 · {lastAppearance.nodeTitle}</span>
             </button>
           )}
-          {asArray<string>(character.tags).filter(t => !t.startsWith("📥") && !t.startsWith("📝") && t !== "🗂 已合并").length > 0 && (
-            <div className="flex gap-0.5 mt-0.5 flex-wrap">
-              {asArray<string>(character.tags).filter(t => !t.startsWith("📥") && !t.startsWith("📝") && t !== "🗂 已合并").slice(0, 5).map((t: string) => (
+          {visibleTags.length > 0 && (
+            <div className="flex gap-0.5 mt-1 flex-wrap">
+              {visibleTags.slice(0, 3).map((t: string) => (
                 <TagChip
                   key={t}
                   label={t}
@@ -88,8 +90,8 @@ function CharacterRowImpl({
                   onClick={() => onTagClick(t)}
                 />
               ))}
-              {asArray<string>(character.tags).filter(t => !t.startsWith("📥") && !t.startsWith("📝") && t !== "🗂 已合并").length > 5 && (
-                <span className="text-[9px] text-[var(--nv-text-tertiary)]">+{asArray<string>(character.tags).filter(t => !t.startsWith("📥") && !t.startsWith("📝") && t !== "🗂 已合并").length - 5}</span>
+              {visibleTags.length > 3 && (
+                <span className="text-[9px] leading-4 text-[var(--nv-text-tertiary)]">+{visibleTags.length - 3}</span>
               )}
             </div>
           )}

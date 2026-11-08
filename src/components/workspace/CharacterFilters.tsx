@@ -45,7 +45,7 @@ export function CharacterFilters({
 
   return (
     <>
-      {/* 搜索 */}
+      {/* 搜索 + 筛选（合并展示：搜索框独占一行，筛选 chips 紧随其后，标签同类合并减少层级） */}
       <div className="mb-1.5">
         <input
           type="text"
@@ -57,8 +57,8 @@ export function CharacterFilters({
         />
       </div>
 
-      {/* 筛选栏：角色定位 + 状态 */}
-      <div className="flex gap-1 mb-1 flex-wrap items-center text-xs">
+      {/* 筛选栏 + 标签（合并为一层 flex-wrap，避免多行堆叠的拥挤感） */}
+      <div className="flex gap-1 mb-1.5 flex-wrap items-center text-xs">
         {([
           { key: "all", label: "全部", count: characters.length },
           ...CHARACTER_ROLE_OPTIONS.map((o) => ({ key: o.value, label: o.label, count: statRole(o.value) })),
@@ -71,7 +71,6 @@ export function CharacterFilters({
             onClick={() => { onRole(roleFilter === o.key ? "all" : o.key); onTag("all"); }}
           />
         ))}
-        <span className="text-[var(--nv-border-3)] mx-0.5">|</span>
         {([
           { key: "alive", label: <span className="flex items-center gap-1"><StatusDot color="green" size={6} /> 存活</span>, count: characters.length - statDead },
           { key: "dead", label: <span className="flex items-center gap-1"><Icon name="skull" size={10} /> 离场</span>, count: statDead },
@@ -84,18 +83,7 @@ export function CharacterFilters({
             onClick={() => { onStatus(statusFilter === o.key ? "all" : o.key); }}
           />
         ))}
-        {(roleFilter !== "all" || tagFilter !== "all" || statusFilter !== "all") && (
-          <TagChip
-            label={<Icon name="x" size={11} />}
-            onClick={() => { onRole("all"); onTag("all"); onStatus("all"); }}
-          />
-        )}
-      </div>
-
-      {/* 标签筛选：具体用户标签 */}
-      <div className="flex gap-1 mb-1.5 flex-wrap items-center text-xs">
-        {allTags.length > 0 && <span className="text-[var(--nv-border-3)] mx-0.5">·</span>}
-        {allTags.slice(0, 12).map(t => (
+        {allTags.slice(0, 8).map(t => (
           <span key={t} className="group/tag relative inline-flex items-center">
             <TagChip
               label={t}
@@ -115,8 +103,14 @@ export function CharacterFilters({
             )}
           </span>
         ))}
-        {allTags.length > 12 && (
-          <span className="text-[9px] text-[var(--nv-text-tertiary)]">+{allTags.length - 12}</span>
+        {allTags.length > 8 && (
+          <span className="text-[9px] text-[var(--nv-text-tertiary)]">+{allTags.length - 8}</span>
+        )}
+        {(roleFilter !== "all" || tagFilter !== "all" || statusFilter !== "all") && (
+          <TagChip
+            label={<Icon name="x" size={11} />}
+            onClick={() => { onRole("all"); onTag("all"); onStatus("all"); }}
+          />
         )}
       </div>
     </>

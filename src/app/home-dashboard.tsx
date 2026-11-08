@@ -81,6 +81,8 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
   // ── 测试残留清理：只识别，绝不自动删 ──
   // 删除走既有 DELETE /api/projects/[id]（软删只写 deletedAt），可从回收站恢复，零数据风险。
   const [hygieneOpen, setHygieneOpen] = useState(false);
+  // 全局功能导览（首页右上角「教程」）：各页面是什么 + 直达入口
+  const [tourOpen, setTourOpen] = useState(false);
   const [hygieneSel, setHygieneSel] = useState<string[]>([]);
   const [hygieneBusy, setHygieneBusy] = useState(false);
 
@@ -208,6 +210,14 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
               <Icon name="sparkles" size={14} /> <span className="whitespace-nowrap">开始创作</span>
             </Link>
             <span className="w-px h-5 bg-[var(--nv-border-2)] mx-0.5" aria-hidden="true" />
+            <button
+              onClick={() => setTourOpen(true)}
+              className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5 text-[var(--nv-accent)] hover:text-[var(--nv-accent)] tooltip-trigger"
+              data-tooltip="功能导览：每个页面是什么、怎么串起来"
+              aria-label="进入教程"
+            >
+              <Icon name="lightbulb" size={13} /> <span className="hidden sm:inline">教程</span>
+            </button>
             <Link href="/dissect" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">
               <Icon name="book" size={13} /> <span className="hidden sm:inline">拆书</span>
             </Link>
@@ -451,6 +461,45 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
           >
             {hygieneBusy ? "处理中…" : `移入回收站${hygieneSel.length ? `（${hygieneSel.length}）` : ""}`}
           </button>
+        </div>
+      </Modal>
+
+      {/* 全局功能导览（教程）：一条主线讲清各页面关系，每条可直达 */}
+      <Modal open={tourOpen} onClose={() => setTourOpen(false)} title="功能导览 · 从灵感到成书" icon="lightbulb" size="md">
+        <div className="space-y-2.5 text-xs text-[var(--nv-text-secondary)] leading-relaxed">
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="sparkles" size={13} className="text-[var(--nv-accent)]" /> 第一步 · 探讨模式</p>
+            <p className="mb-2">从一句话灵感开始，与 AI 对话式聊出世界观、角色和大纲。聊透后采纳，自动变成一本可写作的小说项目。</p>
+            <Link href="/explore" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--nv-accent)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--nv-accent)] hover:bg-[var(--nv-accent)]/20">前往探讨模式 <Icon name="arrowRight" size={11} /></Link>
+          </div>
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="book" size={13} className="text-[var(--nv-creative)]" /> 第二步 · 写作工作台</p>
+            <p className="mb-2">写作主战场：左侧章节树、中间正文、右侧工具箱（润色对照、结构化表格、角色卡、世界书、伏笔管理都在这里）。</p>
+            <p className="text-[10px] text-[var(--nv-text-tertiary)]">进入任意作品即可开始；顶栏的「游戏模式」按钮可随时切换玩法。</p>
+          </div>
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="gamepad" size={13} className="text-[var(--nv-creative)]" /> 第三步 · 游戏模式（游戏本）</p>
+            <p className="mb-2">化身角色亲历你的故事：一章一局，选项/自由行动推进剧情，获得的物品进背包、遇到的角色势力自动记录；跑团检定模式下对抗行动掷骰定成败。</p>
+            <Link href="/gamesaga" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--nv-creative)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--nv-creative)] hover:bg-[var(--nv-creative)]/20">前往游戏本 <Icon name="arrowRight" size={11} /></Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+              <p className="mb-1 font-medium text-[var(--nv-text-primary)]">拆书分析</p>
+              <p className="mb-2 text-[11px]">逆向学习别人的结构与文风，不生成正文。</p>
+              <Link href="/dissect" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 text-[11px] text-[var(--nv-accent)] hover:underline">前往</Link>
+            </div>
+            <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+              <p className="mb-1 font-medium text-[var(--nv-text-primary)]">去 AI 味检测</p>
+              <p className="mb-2 text-[11px]">粘贴文字扫描机器味，逐段给改法。</p>
+              <Link href="/detector" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 text-[11px] text-[var(--nv-accent)] hover:underline">前往</Link>
+            </div>
+            <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+              <p className="mb-1 font-medium text-[var(--nv-text-primary)]">创意工坊</p>
+              <p className="mb-2 text-[11px]">设定库总控台：角色卡/世界书/金句统一管理。</p>
+              <Link href="/workshop" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 text-[11px] text-[var(--nv-accent)] hover:underline">前往</Link>
+            </div>
+          </div>
+          <p className="text-[10px] text-[var(--nv-text-tertiary)]">提示：每个页面内也有自己的小教程（如游戏本顶栏「玩法」、工具箱顶部的「使用教程」），随时可看。</p>
         </div>
       </Modal>
 
