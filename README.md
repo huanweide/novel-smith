@@ -1,4 +1,4 @@
-﻿<!-- badges -->
+<!-- badges -->
 
 [![License](https://img.shields.io/github/license/huanweide/novel-smith)](LICENSE)
 
