@@ -56,6 +56,37 @@ NE|周远征|公安局长|追寻龙陨真相
   });
 });
 
+// ─── P1 万物可交互：转移/损坏标记 + 暗线（谎言与伪装）────────────
+describe("parseGameOutput —— 转移/损坏/暗线（P1）", () => {
+  it("转移与损坏标记解析为 transfer/damage，归属字段=新归属者", () => {
+    const r = parseGameOutput(
+      `老陈把钱包递了过来。\n===角色物品变动===\nCI|转移|神秘钱包|1|主角\nCI|损坏|铁剑|1|李尘\n===新实体===\n`
+    );
+    const tf = r.itemChanges.find((c) => c.name === "神秘钱包");
+    expect(tf?.operation).toBe("transfer");
+    expect(tf?.owner).toBe("主角");
+    const dm = r.itemChanges.find((c) => c.name === "铁剑");
+    expect(dm?.operation).toBe("damage");
+    expect(dm?.owner).toBe("李尘");
+  });
+
+  it("TRICK 暗线解析为 newTricks，且暗线区块绝不残留在 narrative 里（玩家不可见）", () => {
+    const r = parseGameOutput(
+      `他拍了拍胸口：「钥匙在我身上，放心。」\n1. 跟他走\n===暗线===\nTRICK|书房钥匙|陈伯|空盒子，钥匙早被他儿子拿走了\n`
+    );
+    expect(r.newTricks.length).toBe(1);
+    expect(r.newTricks[0]).toMatchObject({ name: "书房钥匙", owner: "陈伯", truth: "空盒子，钥匙早被他儿子拿走了" });
+    expect(r.narrative).not.toContain("暗线");
+    expect(r.narrative).not.toContain("TRICK");
+    expect(r.narrative).not.toContain("空盒子");
+  });
+
+  it("没有暗线区块时 newTricks 为空数组（向后兼容）", () => {
+    const r = parseGameOutput(`普通叙事。\n1. 选项\n`);
+    expect(r.newTricks).toEqual([]);
+  });
+});
+
 // 验证游戏模式「操作中文→英文归一化」：AI 产出中文操作，解析器统一映射为英文枚举，
 // 使引擎/前端/开局路由的 gain/consume/equip/discard 比较全部生效（阿游 P0）。
 describe("parseGameOutput —— 操作中文→英文归一化（阿游 P0）", () => {

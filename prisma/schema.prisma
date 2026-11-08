@@ -573,6 +573,10 @@ model GameSaga {
   npcMemories       Json? // NPC 记忆：{ [characterName]: string[] }
   clues             Json? // 线索册：[{ name, content, round }]
   knownLocations    Json? // 已知地点图谱
+  // 暗账（表层/真相分层）：[{ name, owner, truth, round }]——角色谎称拥有某物/物品是假货/来源可疑时，
+  // AI 在【暗线】区块输出 TRICK 标记落此账。背包 UI 只显示表层账（玩家第一人称不知道）；
+  // 暗账每轮注入 prompt 让 AI 持续记得伏笔，剧情揭露时由 CI 转移/损坏/消耗自然翻转表层账。
+  secretLedger      String @default("[]")
   gameTime          String? // 游戏内时间
   longTermGoals     Json? // 长期目标（跨章主线）
   createdAt         DateTime @default(now())

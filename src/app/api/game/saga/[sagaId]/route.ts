@@ -30,6 +30,8 @@ export async function GET(_req: Request, { params }: Params) {
 
   // 扮演候选（P0-3）：派生本取项目角色卡现值；从零新建用前传快照角色
   let playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }> = [];
+  // 热点名候选（P1 万物可交互）：项目全部角色卡名（含待审——正文人名必须可点，不随审批状态掉链子）
+  let hotspotNames: string[] = [];
   if (saga.projectId) {
     const chars = await getApprovedCharacters(prisma, saga.projectId, { take: 30 });
     playAsCandidates = chars.map((c: any) => ({
@@ -38,6 +40,12 @@ export async function GET(_req: Request, { params }: Params) {
       role: c.role || "",
       brief: (c.background || "").slice(0, 80),
     }));
+    const allChars = await prisma.characterCard.findMany({
+      where: { projectId: saga.projectId },
+      select: { name: true },
+      take: 60,
+    });
+    hotspotNames = allChars.map((c: any) => c.name).filter(Boolean);
   } else if (Array.isArray(snapshot.characters)) {
     playAsCandidates = snapshot.characters.map((c: any) => ({
       id: null,
@@ -45,6 +53,7 @@ export async function GET(_req: Request, { params }: Params) {
       role: c.role || "",
       brief: (c.background || "").slice(0, 80),
     }));
+    hotspotNames = snapshot.characters.map((c: any) => c.name).filter(Boolean);
   }
 
   return NextResponse.json({
@@ -58,6 +67,7 @@ export async function GET(_req: Request, { params }: Params) {
       loreEntries: Array.isArray(snapshot.lore)
         ? snapshot.lore.map((l: any) => ({ title: l.title || "", content: l.content || "" }))
         : [],
+      hotspotNames,
       playAsCharacterId: saga.playAsCharacterId,
       playAsName: saga.playAsName,
       rollMode: saga.rollMode,

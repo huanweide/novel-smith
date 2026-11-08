@@ -3,6 +3,65 @@ import { prisma } from "@/lib/prisma";
 import { getSessionSummary } from "@/core/game/game-engine";
 import { classifyError } from "@/lib/api-error";
 
+// PATCH /api/game/state —— 正文编辑（游戏本内直接修改某一轮叙事）
+// 入参：{ sessionId, round, narrative }
+// 行为：更新该轮 gameState.narrative + wordCount，重算 session.totalWords，
+//       返回重算后的全量摘要（形状与 DELETE/GET 一致），前端整体覆盖即可。
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null);
+    const sessionId = body?.sessionId as string | undefined;
+    const round = body?.round as number | undefined;
+    const narrative = body?.narrative as string | undefined;
+    if (!sessionId || typeof round !== "number" || typeof narrative !== "string") {
+      return NextResponse.json({ ok: false, error: "缺少 sessionId / round / narrative" }, { status: 400 });
+    }
+    if (round < 1) {
+      return NextResponse.json({ ok: false, error: "round 必须为正整数" }, { status: 400 });
+    }
+    const state = await prisma.gameState.findUnique({
+      where: { sessionId_round: { sessionId, round } },
+    });
+    if (!state) {
+      return NextResponse.json({ ok: false, error: `第 ${round} 轮不存在` }, { status: 404 });
+    }
+    await prisma.gameState.update({
+      where: { id: state.id },
+      data: { narrative, wordCount: narrative.length },
+    });
+    // 重算会话累计字数（与 DELETE 回滚同源口径）
+    const totalWords = await prisma.gameState.aggregate({
+      where: { sessionId },
+      _sum: { wordCount: true },
+    });
+    await prisma.gameSession.update({
+      where: { id: sessionId },
+      data: { totalWords: totalWords._sum.wordCount || 0 },
+    });
+    // 返回权威摘要（与 GET 对账接口同形状），前端整体覆盖
+    const summary = await getSessionSummary(sessionId);
+    return NextResponse.json({
+      ok: true,
+      summary: {
+        currentRound: summary.currentRound,
+        totalWords: summary.totalWords,
+        plotProgress: summary.plotProgress,
+        items: summary.items,
+        entities: summary.entities,
+        narrative: summary.allNarrative,
+        options: summary.lastOptions,
+        turns: summary.turns,
+      },
+    });
+  } catch (e) {
+    const info = classifyError(e);
+    return NextResponse.json(
+      { ok: false, error: info.error, code: info.code, hint: info.hint },
+      { status: info.status }
+    );
+  }
+}
+
 // DELETE /api/game/state?sessionId=...&round=N
 // 删除第 N 轮及之后所有 gameState，并回滚 session 的 currentRound/totalWords/plotProgress 到 N-1 状态，
 // 使「回退」操作真正落库（阿游 P0-1）。此前回退仅改前端内存，导出时仍含被回退轮次，导致显示与导出永久错位。

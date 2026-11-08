@@ -41,6 +41,8 @@ interface SagaDetail {
   sourceBookName: string | null;
   synopsis: string;
   loreEntries: Array<{ title: string; content: string }>;
+  /** 热点名候选（P1）：项目/快照全部角色卡名——NE| 漏打时正文人名仍可点 */
+  hotspotNames: string[];
   playAsCharacterId: string | null;
   playAsName: string | null;
   rollMode: string;
@@ -57,10 +59,11 @@ interface GItem {
   source?: string;
   owner?: string;
   equipped?: boolean;
+  damaged?: boolean; // P1：受损（仍存在，可修复/藏内情）
 }
 /** 场景实体（角色/势力/地点/生物） */
 interface GEntity { name: string; type: string; description: string; }
-interface TurnRec { round: number; playerAction: string; }
+interface TurnRec { round: number; playerAction: string; narrative: string; }
 /** 两段式骰子浮层状态 */
 interface DiceState {
   rolling: boolean;
@@ -85,6 +88,33 @@ const QUICK_ACTIONS = [
   { type: "use_item", label: "使用物品", icon: "backpack", desc: "使用背包物品" },
   { type: "rest", label: "休息", icon: "moon", desc: "休息恢复" },
 ];
+
+/**
+ * 万物可交互（语义热点）：把叙事中的实体/物品名渲染为可点击热点，
+ * 点击直接发起「观察：X」行动——正文里的世界不再只是文字。
+ * 名字按长度降序匹配（避免短名抢先命中），两字以下不参与（误匹配率高）。
+ */
+function renderHotspots(text: string, names: string[], onPick: (name: string) => void) {
+  if (!text) return null;
+  const uniq = [...new Set(names.filter((n) => n && n.length >= 2))].sort((a, b) => b.length - a.length);
+  if (uniq.length === 0) return text;
+  const escaped = uniq.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const parts = text.split(new RegExp(`(${escaped})`, "g"));
+  return parts.map((p, i) =>
+    i % 2 === 1 ? (
+      <button
+        key={i}
+        onClick={() => onPick(p)}
+        title={`点击发起行动：观察 ${p}`}
+        className="game-hotspot mx-px rounded px-0.5 text-[#E4B863] underline decoration-dotted underline-offset-2 transition-colors hover:bg-[#E4B863]/15"
+      >
+        {p}
+      </button>
+    ) : (
+      <span key={i}>{p}</span>
+    ),
+  );
+}
 
 function SagaDetailInner() {
   const { sagaId } = useParams<{ sagaId: string }>();
@@ -119,7 +149,7 @@ function SagaDetailInner() {
   const [turns, setTurns] = useState<TurnRec[]>([]);
   const [leftTab, setLeftTab] = useState<"plot" | "characters" | "factions">("plot");
   const [rightTab, setRightTab] = useState<"text" | "backpack" | "world">("text");
-  const [backpackFilter, setBackpackFilter] = useState<"all" | "char">("all");
+  const [backpackFilter, setBackpackFilter] = useState<"all" | "mine" | "companions">("all");
   const [showTutorial, setShowTutorial] = useState(false);
 
   // 发现提示（及时演算）+ 新物品高亮 + 粒子 + 音效
@@ -230,7 +260,7 @@ function SagaDetailInner() {
         firedMarksRef.current.add(key);
         if (op === "获得") {
           fireDiscovery(`获得物品·${name}`);
-          const ownKey = `${name}|${parts[4] || "主角"}`;
+          const ownKey = `${name}|${parts[4] || parts[3] || "主角"}`;
           newItemKeysRef.current = new Set(newItemKeysRef.current).add(ownKey);
           setNewItemKeys(new Set(newItemKeysRef.current));
           setTimeout(() => {
@@ -238,6 +268,10 @@ function SagaDetailInner() {
             setNewItemKeys(new Set(newItemKeysRef.current));
           }, 2600);
           playItemChime();
+        } else if (op === "转移") {
+          fireDiscovery(`${name} → ${parts[3] || "?"}`);
+        } else if (op === "损坏") {
+          fireDiscovery(`${name} 损坏了`);
         } else if (op === "消耗" || op === "丢弃") {
           fireDiscovery(`失去物品·${name}`);
         } else if (op === "装备") {
@@ -324,7 +358,7 @@ function SagaDetailInner() {
         setPlotProgress(done.plotProgress || 0);
         setEntities(done.newEntities || []);
         setItems(done.items ?? []);
-        setTurns([{ round: 1, playerAction: "开始本章" }]);
+        setTurns([{ round: 1, playerAction: "开始本章", narrative: done.narrative || "" }]);
         load(); // 刷新章节列表（会话状态）
       });
     } catch (e: any) {
@@ -437,7 +471,7 @@ function SagaDetailInner() {
         const updated = applyFrontendItemChanges(prevItems as any, done.itemChanges || [], newRound) as unknown as GItem[];
         setItems(updated);
         flagNewItems(prevItems, updated);
-        setTurns((prev) => [...prev, { round: newRound, playerAction: actionText }]);
+        setTurns((prev) => [...prev, { round: newRound, playerAction: actionText, narrative: done.narrative || "" }]);
         load();
       });
     } catch (e: any) {
@@ -470,6 +504,45 @@ function SagaDetailInner() {
     } catch (e: any) {
       toastError(e.message || "回退失败");
       setStatus("playing");
+    }
+  };
+
+  // ── 正文编辑（P1）：逐轮直接修改游戏内叙事，PATCH 落库后用权威摘要覆盖 ──
+  const [editingRound, setEditingRound] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // ── 角色交互（P1 自由操作）：点人/点热点 → 交互菜单（行动即模板，后果由 AI 演）──
+  const [interactChar, setInteractChar] = useState<string | null>(null);
+  const [showGive, setShowGive] = useState(false); // 赠予：展开主角物品选择
+  const interactWith = (name: string, actionType: string, text: string) => {
+    setInteractChar(null);
+    setShowGive(false);
+    void act(actionType, text);
+  };
+  const saveEdit = async () => {
+    if (editingRound == null || !sessionId) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch("/api/game/state", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, round: editingRound, narrative: editDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "保存失败");
+      const sm = data.summary;
+      setTotalWords(sm.totalWords || 0);
+      setNarrative(sm.narrative || "");
+      setItems((sm.items || []) as GItem[]);
+      setEntities((sm.entities || []) as GEntity[]);
+      setTurns((prev) => prev.map((t) => (t.round === editingRound ? { ...t, narrative: editDraft } : t)));
+      setEditingRound(null);
+      toastSuccess(`第 ${editingRound} 轮正文已更新`);
+    } catch (e: any) {
+      toastError(e.message || "保存失败");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -584,6 +657,14 @@ function SagaDetailInner() {
 
   const itemCls = (i: GItem) =>
     newItemKeys.has(`${i.name}|${i.owner || "主角"}`) ? "item-detected relative" : "";
+
+  // 语义热点候选（P1 万物可交互）：场景实体 + 背包物品 + 角色卡名兜底（详情 API 全量返回，含待审）。
+  // 实测 LLM 偶尔漏打 NE| 标记——角色卡名兜底保证正文里的人名必然可点。
+  const hotspotNames = [
+    ...entities.map((e) => e.name),
+    ...items.map((i) => i.name),
+    ...(saga?.hotspotNames || []),
+  ];
 
   if (notFound) {
     return (
@@ -805,13 +886,18 @@ function SagaDetailInner() {
                 <p className="mb-2 font-medium text-[var(--nv-text-primary)]">场景角色</p>
                 {charEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
                 {charEntities.map((e) => (
-                  <div key={e.name} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5">
+                  <button
+                    key={e.name}
+                    onClick={() => setInteractChar(e.name)}
+                    title={`与${e.name}交互（观察/对话/交易/赠予/偷窃/抢夺）`}
+                    className="mt-2 block w-full rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 text-left transition-colors hover:border-[var(--nv-creative-soft)]"
+                  >
                     <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
                       <Icon name="user" size={12} className="text-[var(--nv-text-tertiary)]" />
                       {e.name}
                     </p>
-                    <p className="mt-0.5 text-[var(--nv-text-muted)]">{e.description}</p>
-                  </div>
+                    <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-muted)]">{e.description}</p>
+                  </button>
                 ))}
               </div>
             )}
@@ -890,6 +976,47 @@ function SagaDetailInner() {
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 {streamed ? (
                   <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{streamed}</p>
+                ) : turns.length > 0 ? (
+                  <div className="space-y-5">
+                    {turns.map((t) => (
+                      <div key={t.round} className="group/turn relative">
+                        {editingRound === t.round ? (
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-[var(--nv-text-tertiary)]">编辑第 {t.round} 轮叙事（直接修改游戏内正文，字数同步重算）</p>
+                            <textarea
+                              autoFocus
+                              value={editDraft}
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              rows={Math.min(18, Math.max(4, Math.ceil(editDraft.length / 42)))}
+                              className="input-glass w-full rounded-lg px-3 py-2 text-sm leading-7"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <Button onClick={() => setEditingRound(null)} className="btn-ghost rounded-lg px-3 py-1.5 text-xs">取消</Button>
+                              <Button onClick={saveEdit} disabled={savingEdit || !editDraft.trim()} className="btn-primary rounded-lg px-3 py-1.5 text-xs">
+                                {savingEdit ? "保存中…" : "保存"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">
+                              {renderHotspots(t.narrative, hotspotNames, (n) => setInteractChar(n))}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover/turn:opacity-100">
+                              <span className="text-[10px] text-[var(--nv-text-muted)]">第 {t.round} 轮 · {t.playerAction}</span>
+                              <button
+                                onClick={() => { setEditingRound(t.round); setEditDraft(t.narrative); }}
+                                className="text-[10px] text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-text-primary)]"
+                                title="编辑本轮叙事（直接修改游戏内正文）"
+                              >
+                                <Icon name="pencil" size={10} /> 编辑本轮
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 ) : narrative ? (
                   <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{narrative}</p>
                 ) : status === "generating" ? (
@@ -1000,10 +1127,12 @@ function SagaDetailInner() {
                   <p className="flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
                     <Icon name="backpack" size={13} className="text-[var(--nv-creative)]" /> 当前背包
                   </p>
+                  {/* 三档：全部 / 主角物品 / 同伴背包（按归属者分节） */}
                   <div className="flex items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-0.5">
                     {([
                       { k: "all", label: "全部" },
-                      { k: "char", label: "角色物品" },
+                      { k: "mine", label: "主角" },
+                      { k: "companions", label: "同伴" },
                     ] as const).map(({ k, label }) => (
                       <button
                         key={k}
@@ -1021,54 +1150,110 @@ function SagaDetailInner() {
                 </div>
                 {(() => {
                   const visibleItems =
-                    backpackFilter === "char"
-                      ? items.filter((i) => i.owner && i.owner !== "主角")
-                      : items;
+                    backpackFilter === "mine"
+                      ? items.filter((i) => !i.owner || i.owner === "主角")
+                      : backpackFilter === "companions"
+                        ? items.filter((i) => i.owner && i.owner !== "主角")
+                        : items;
                   const useItem = (i: GItem, verb: "使用" | "装备") =>
                     act("use_item", `${verb}：${i.name}`);
-                  const groups: Array<{ key: string; title: string; list: GItem[]; tone: string; action?: "使用" | "装备" }> = [
-                    { key: "consumable", title: "消耗品", list: visibleItems.filter((i) => i.category === "consumable" || i.category === "other"), tone: "text-[var(--nv-creative)]", action: "使用" },
-                    { key: "equipment", title: "装备", list: visibleItems.filter((i) => i.category === "equipment"), tone: "text-[var(--nv-success)]", action: "装备" },
-                    { key: "quest", title: "任务道具", list: visibleItems.filter((i) => i.category === "quest"), tone: "text-[var(--nv-warning)]" },
-                    { key: "currency", title: "货币", list: visibleItems.filter((i) => i.category === "currency"), tone: "text-accent-label" },
-                  ];
+                  const renderGroups = (list: GItem[]) => {
+                    const groups: Array<{ key: string; title: string; list: GItem[]; tone: string; action?: "使用" | "装备" }> = [
+                      { key: "consumable", title: "消耗品", list: list.filter((i) => i.category === "consumable" || i.category === "other"), tone: "text-[var(--nv-creative)]", action: "使用" },
+                      { key: "equipment", title: "装备", list: list.filter((i) => i.category === "equipment"), tone: "text-[var(--nv-success)]", action: "装备" },
+                      { key: "quest", title: "任务道具", list: list.filter((i) => i.category === "quest"), tone: "text-[var(--nv-warning)]" },
+                      { key: "currency", title: "货币", list: list.filter((i) => i.category === "currency"), tone: "text-accent-label" },
+                    ];
+                    return (
+                      <div className="space-y-1">
+                        {groups.map((g) => g.list.length === 0 ? null : (
+                          <div key={g.key}>
+                            <p className="mb-1 mt-2 text-[10px] uppercase tracking-wider text-[var(--nv-text-tertiary)]">【{g.title}】</p>
+                            {g.list.map((i, idx) => (
+                              <div key={idx} className={`group flex items-center justify-between gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}>
+                                <div className="min-w-0">
+                                  <span className="text-[var(--nv-text-primary)]">{i.name}</span>
+                                  {i.damaged && (
+                                    <span className="ml-1.5 rounded bg-[var(--nv-warning)]/20 px-1 py-0.5 text-[9px] text-[var(--nv-warning)]" title="已损坏——可能影响使用，也可能藏着内情">损</span>
+                                  )}
+                                  <span className={`ml-2 ${g.tone}`}>×{i.quantity}</span>
+                                  <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">
+                                    {i.source}{i.owner && i.owner !== "主角" && backpackFilter === "all" ? ` · 归属：${i.owner}` : ""}
+                                  </p>
+                                </div>
+                                {g.action && (
+                                  <button
+                                    onClick={() => useItem(i, g.action!)}
+                                    disabled={status !== "playing"}
+                                    title={`作为行动${g.action}「${i.name}」`}
+                                    className="shrink-0 rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    {g.action === "装备" && i.equipped ? "已装备" : g.action}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  };
                   if (visibleItems.length === 0) {
                     return (
                       <p className="italic text-[var(--nv-text-muted)]">
-                        {backpackFilter === "char" ? "暂无归属角色的物品" : "背包空空如也，在冒险中获取物品吧"}
+                        {backpackFilter === "companions"
+                          ? "其他角色还没有随身物品——交易、讨要或在剧情里让他们拿到东西"
+                          : backpackFilter === "mine"
+                            ? "你的背包空空如也，在冒险中获取物品吧"
+                            : "目前没有角色持有物品，在冒险中获取吧"}
                       </p>
                     );
                   }
-                  return (
-                    <div className="space-y-1">
-                      {groups.map((g) => g.list.length === 0 ? null : (
-                        <div key={g.key}>
-                          <p className="mb-1 mt-2 text-[10px] uppercase tracking-wider text-[var(--nv-text-tertiary)]">【{g.title}】</p>
-                          {g.list.map((i, idx) => (
-                            <div key={idx} className={`group flex items-center justify-between gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}>
-                              <div className="min-w-0">
-                                <span className="text-[var(--nv-text-primary)]">{i.name}</span>
-                                <span className={`ml-2 ${g.tone}`}>×{i.quantity}</span>
-                                <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">
-                                  {i.source}{i.owner && i.owner !== "主角" ? ` · 归属：${i.owner}` : ""}
-                                </p>
-                              </div>
-                              {g.action && (
+                  // 总账（全部）：按归属者分节——主角置顶，其余角色各成一节（那一节就是 TA 的背包）。
+                  // 每个角色的背包随剧情生长：现在没有≠以后没有，剧情里一拿到自动出现一节。
+                  if (backpackFilter === "all") {
+                    const owners = [...new Set(visibleItems.map((i) => i.owner || "主角"))].sort((a, b) => (a === "主角" ? -1 : b === "主角" ? 1 : a.localeCompare(b)));
+                    return (
+                      <div className="space-y-3">
+                        {owners.map((owner) => (
+                          <div key={owner}>
+                            <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--nv-text-primary)]">
+                              <Icon name={owner === "主角" ? "user" : "building"} size={11} className="text-[var(--nv-text-tertiary)]" />
+                              {owner}{owner === "主角" ? "（你）" : ""}的随身物品
+                              {owner !== "主角" && (
                                 <button
-                                  onClick={() => useItem(i, g.action!)}
-                                  disabled={status !== "playing"}
-                                  title={`作为行动${g.action}「${i.name}」`}
-                                  className="shrink-0 rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                  onClick={() => setInteractChar(owner)}
+                                  className="ml-auto text-[10px] font-normal text-[var(--nv-creative)] transition-opacity hover:underline"
+                                  title={`与${owner}交互`}
                                 >
-                                  {g.action === "装备" && i.equipped ? "已装备" : g.action}
+                                  交互
                                 </button>
                               )}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  );
+                            </p>
+                            {renderGroups(visibleItems.filter((i) => (i.owner || "主角") === owner))}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  if (backpackFilter === "companions") {
+                    const owners = [...new Set(visibleItems.map((i) => i.owner || "主角"))];
+                    return (
+                      <div className="space-y-3">
+                        {owners.map((owner) => (
+                          <div key={owner}>
+                            <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-[var(--nv-text-primary)]">
+                              <Icon name="user" size={11} className="text-[var(--nv-text-tertiary)]" />
+                              {owner}的随身物品
+                              <span className="text-[10px] font-normal text-[var(--nv-text-tertiary)]">({visibleItems.filter((i) => (i.owner || "主角") === owner).length})</span>
+                            </p>
+                            {renderGroups(visibleItems.filter((i) => (i.owner || "主角") === owner))}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return renderGroups(visibleItems);
                 })()}
               </div>
             )}
@@ -1166,6 +1351,103 @@ function SagaDetailInner() {
             </div>
           ) : null}
         </div>
+      )}
+
+      {/* ── 角色交互菜单（P1 自由操作）：查看随身物品（纯 UI）+ 一键行动模板，后果由 AI 演 ── */}
+      {interactChar && (
+        <Modal open onClose={() => { setInteractChar(null); setShowGive(false); }} bare panelClassName="max-w-sm" labelledBy="interact-title">
+          <div className="p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--nv-creative-soft)] text-[var(--nv-creative)]">
+                <Icon name="user" size={16} />
+              </span>
+              <div className="min-w-0">
+                <h2 id="interact-title" className="truncate text-base font-bold text-[var(--nv-text-primary)]">{interactChar}</h2>
+                {(() => {
+                  const ent = entities.find((e) => e.name === interactChar);
+                  return ent?.description ? (
+                    <p className="truncate text-[10px] text-[var(--nv-text-tertiary)]" title={ent.description}>{ent.description}</p>
+                  ) : null;
+                })()}
+              </div>
+              <button onClick={() => { setInteractChar(null); setShowGive(false); }} className="ml-auto text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]" title="关闭">
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+
+            {/* 随身物品（纯 UI 查看：背包总账里 TA 的那一节） */}
+            {(() => {
+              const theirs = items.filter((i) => (i.owner || "主角") === interactChar);
+              return (
+                <div className="mb-3 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nv-text-tertiary)]">随身物品（{theirs.length}）</p>
+                  {theirs.length === 0 ? (
+                    <p className="text-[11px] italic text-[var(--nv-text-muted)]">看起来两手空空——但 TA 说什么你可要自己判断。</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {theirs.map((i, idx) => (
+                        <p key={idx} className="text-[11px] text-[var(--nv-text-secondary)]">
+                          · {i.name} ×{i.quantity}
+                          {i.damaged && <span className="ml-1 rounded bg-[var(--nv-warning)]/20 px-1 text-[9px] text-[var(--nv-warning)]">损</span>}
+                          {i.equipped && <span className="ml-1 rounded bg-[var(--nv-success)]/20 px-1 text-[9px] text-[var(--nv-success)]">装备中</span>}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 行动模板：点了就发，成败由 AI 裁决（跑团模式下偷窃/抢夺自动掷骰） */}
+            <p className="mb-2 text-[10px] text-[var(--nv-text-tertiary)]">选择行动（后果由剧情裁决——跑团模式下对抗行动先掷骰）：</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {([
+                { label: "观察", text: `仔细观察${interactChar}的神态与举动`, type: "observe" },
+                { label: "对话", text: `与${interactChar}交谈`, type: "dialogue" },
+                { label: "交易", text: `尝试与${interactChar}做一笔交易`, type: "custom" },
+                { label: "讨要", text: `试着向${interactChar}讨要一件东西`, type: "custom" },
+                { label: "偷窃", text: `趁${interactChar}不注意，偷偷摸走TA身上的一样东西`, type: "custom" },
+                { label: "抢夺", text: `直接动手抢夺${interactChar}身上的物品`, type: "custom" },
+              ] as const).map((a) => (
+                <button
+                  key={a.label}
+                  onClick={() => interactWith(interactChar, a.type, a.text)}
+                  disabled={status !== "playing"}
+                  className="rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-2 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 赠予：展开主角物品选择 */}
+            <div className="mt-2">
+              <button
+                onClick={() => setShowGive((v) => !v)}
+                disabled={status !== "playing"}
+                className="w-full rounded-lg border border-dashed border-[var(--nv-border-3)] py-1.5 text-xs text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {showGive ? "收起" : `送 ${interactChar} 一件东西`}
+              </button>
+              {showGive && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {items.filter((i) => (i.owner || "主角") === "主角").length === 0 && (
+                    <p className="text-[11px] italic text-[var(--nv-text-muted)]">你的背包是空的，先拿到东西才能送。</p>
+                  )}
+                  {items.filter((i) => (i.owner || "主角") === "主角").map((i, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => interactWith(interactChar, "custom", `把「${i.name}」赠予${interactChar}`)}
+                      className="rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2.5 py-1 text-[11px] text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+                    >
+                      {i.name} ×{i.quantity}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── 玩法教程（本页直达） ── */}

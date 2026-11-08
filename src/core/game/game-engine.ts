@@ -99,6 +99,41 @@ export function applyItemChanges(
           updatedItems[idx] = { ...updatedItems[idx], quantity: q };
         }
       }
+    } else if (change.operation === "transfer") {
+      // P1 万物可交互：归属转移。CI|转移|物品名|数量|新归属——
+      // change.owner = 新归属者；原持有者从账里按物品名查（同名多人时取持量>0 且非新归属的第一人）。
+      const prevOwnerEntry = updatedItems.find(
+        (i) => i.name === change.name && (i.owner || DEFAULT_OWNER) !== owner && i.quantity > 0
+      );
+      // 1) 原持有者扣减
+      if (prevOwnerEntry) {
+        const idx = updatedItems.findIndex((i) => i === prevOwnerEntry);
+        const q = updatedItems[idx].quantity - (change.quantity || 1);
+        if (q <= 0) {
+          updatedItems.splice(idx, 1);
+        } else {
+          updatedItems[idx] = { ...updatedItems[idx], quantity: q };
+        }
+      }
+      // 2) 新归属者入账（已有则加量并保留 acquiredRound，无则新建——damage 状态随物走）
+      const destIdx = updatedItems.findIndex((i) => matches(i, change.name, owner));
+      if (destIdx >= 0) {
+        updatedItems[destIdx] = { ...updatedItems[destIdx], quantity: updatedItems[destIdx].quantity + (change.quantity || 1) };
+      } else {
+        updatedItems.push({
+          name: change.name,
+          quantity: change.quantity || 1,
+          category: prevOwnerEntry?.category || "other",
+          source: `第${round}轮${prevOwnerEntry ? `来自${prevOwnerEntry.owner || DEFAULT_OWNER}` : "转移"}`,
+          acquiredRound: round,
+          owner,
+          damaged: prevOwnerEntry?.damaged,
+        });
+      }
+    } else if (change.operation === "damage") {
+      // P1：受损但仍存在（区别于 destroy 移除）——后续可修复，也可能藏着内情。
+      const idx = updatedItems.findIndex((i) => matches(i, change.name, owner));
+      if (idx >= 0) updatedItems[idx] = { ...updatedItems[idx], damaged: true };
     } else if (change.operation === "skip") {
       // 阿游 P1-1：流转/出售类（典当/抵押/出售经 OP_MAP 归一）。安全跳过，不改动背包。
       // 直接 no-op 返回成功（无告警，属预期行为）。
@@ -339,6 +374,10 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
       totalWords: session.totalWords,
       maxWords: session.maxWords,
       plotProgress: session.plotProgress,
+      // 暗账（P1 谎言与伪装）：未揭露的真相注入 prompt（仅 AI 可见），跨章持久
+      secretLedger: (() => {
+        try { return JSON.parse(saga.secretLedger || "[]"); } catch { return []; }
+      })(),
     };
   }
 
@@ -719,6 +758,24 @@ async function* runLockedTurn(
       },
     }),
   ]);
+
+  // P1 暗账：TRICK 合并写入 saga.secretLedger（跨章持久的伏笔账，仅 AI 可见）。
+  // 按 name+owner 去重：同一伪装重复输出只记一次；真相揭露后 AI 可通过输出空真相行覆盖（简化：先不去除，由 prompt 指引 CI 翻转）。
+  if (session.sagaId && parsed.newTricks.length > 0) {
+    const saga = await prisma.gameSaga.findUnique({ where: { id: session.sagaId }, select: { secretLedger: true } });
+    let ledger: Array<{ name: string; owner: string; truth: string; round: number }> = [];
+    try { ledger = JSON.parse(saga?.secretLedger || "[]"); } catch { /* 坏账当空 */ }
+    let changed = false;
+    for (const t of parsed.newTricks) {
+      if (!ledger.find((s) => s.name === t.name && s.owner === t.owner)) {
+        ledger.push({ name: t.name, owner: t.owner, truth: t.truth, round: newRound });
+        changed = true;
+      }
+    }
+    if (changed) {
+      await prisma.gameSaga.update({ where: { id: session.sagaId }, data: { secretLedger: JSON.stringify(ledger) } });
+    }
+  }
 
   // 9. 产出完整回合结果
   yield {

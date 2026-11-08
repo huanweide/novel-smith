@@ -59,6 +59,7 @@ export interface GameItem {
   acquiredRound: number;
   owner?: string;     // 归属者（谁的物品），默认「主角」
   equipped?: boolean; // 是否已装备（阿游 P0-3）
+  damaged?: boolean;  // P1 万物可交互：受损（仍存在，可修复/藏内情）
 }
 
 // ─── 物品变动记录 ─────────────────────────────────────────────
@@ -142,6 +143,8 @@ export interface GameSessionContext {
   totalWords: number;
   maxWords: number;
   plotProgress: number;
+  // 暗账（表层/真相分层，P1）：仅注入 prompt 给 AI，UI 不显示
+  secretLedger?: Array<{ name: string; owner: string; truth: string; round: number }>;
 }
 
 // ─── 游戏会话摘要（返回给前端）────────────────────────────────

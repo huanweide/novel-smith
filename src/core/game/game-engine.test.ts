@@ -87,6 +87,49 @@ describe("applyItemChanges —— 按 name+owner 隔离（阿游 P1）", () => {
     );
     expect(res.length).toBe(1); // 未新增也未移除（出售不计入背包）
   });
+
+  // ── P1 万物可交互：归属转移 / 损坏 ──
+  it("转移：老陈的神秘钱包转给主角，老陈扣减、主角入账（归属随剧情流动）", () => {
+    const withChen: any[] = [
+      ...prev,
+      { name: "神秘钱包", quantity: 1, category: "other", source: "第1轮获得", acquiredRound: 1, owner: "老陈" },
+    ];
+    const res = applyItemChanges(
+      withChen,
+      [{ operation: "transfer", name: "神秘钱包", quantity: 1, owner: "主角" }],
+      3
+    );
+    // 老陈的钱包已移除
+    expect(res.find((i: any) => i.owner === "老陈" && i.name === "神秘钱包")).toBeUndefined();
+    // 主角的钱包入账
+    const mine = res.find((i: any) => i.owner === "主角" && i.name === "神秘钱包");
+    expect(mine?.quantity).toBe(1);
+    expect(mine?.source).toContain("来自老陈");
+  });
+
+  it("转移：主角的物品转给 NPC，主角扣减、NPC 入账", () => {
+    const res = applyItemChanges(
+      prev,
+      [{ operation: "transfer", name: "怀表", quantity: 1, owner: "林晚" }],
+      3
+    );
+    expect(res.find((i: any) => i.owner === "主角" && i.name === "怀表")?.quantity).toBe(1);
+    const late = res.find((i: any) => i.owner === "林晚" && i.name === "怀表");
+    expect(late?.quantity).toBe(1);
+  });
+
+  it("损坏：标记 damaged 但不移除（坏了还在，可修复/藏内情）", () => {
+    const res = applyItemChanges(
+      prev,
+      [{ operation: "damage", name: "怀表", owner: "主角" }],
+      3
+    );
+    const zh = res.find((i: any) => i.owner === "主角" && i.name === "怀表");
+    expect(zh).toBeDefined();
+    expect(zh?.damaged).toBe(true);
+    // 李尘的不受影响
+    expect(res.find((i: any) => i.owner === "李尘")?.damaged).toBeUndefined();
+  });
 });
 
 // ─── P0-2：abort 后对账回拉使轮次/背包与后端权威态一致 ──────────

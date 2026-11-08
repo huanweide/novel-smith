@@ -66,6 +66,23 @@ const OP_MAP: Record<string, string> = {
   "遗弃": "discard",
   "遗失": "discard",
   "失落": "discard",
+  // 归属转移类（P1 万物可交互）：物品从一方转到另一方（交易/赠予/抢夺/拾遗——旧持有者由引擎按名查账扣减）
+  "转移": "transfer",
+  "转交": "transfer",
+  "交给": "transfer",
+  "给予": "transfer",
+  "赠予": "transfer",
+  "送给": "transfer",
+  "递给": "transfer",
+  "塞给": "transfer",
+  "抢走": "transfer",
+  "夺走": "transfer",
+  "缴了": "transfer",
+  // 损坏类（P1）：物品受损但仍存在（区别于 destroy 销毁移除）——后续可能修复/揭露内情。
+  // 注意：「弄坏/毁坏/砸碎」等彻底损毁语义已映射 destroy（保持既有行为），此处只收「坏了还在」的语义
+  "损坏": "damage",
+  "磨损": "damage",
+  "受损": "damage",
   "丢失": "discard",
   // 卸下类（阿游 P1-1：引擎新增 unequip 分支，仅清 equipped 标记，不删物品）
   "解下": "unequip",
@@ -253,13 +270,22 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
    ===新实体===
    NE|实体名|类型|简要描述
    类型可选：角色、地点、物品、势力、功法、生物、其他
-  7. 如果主角获得/消耗/装备/丢弃物品，输出：
+  7. 物品与归属是流动的：任何人（不只是主角）的物品变动都要打标记——
    ===角色物品变动===
    CI|获得|物品名|数量|归属者（可选，留空默认主角）
    CI|消耗|物品名|数量
    CI|装备|物品名|数量
    CI|丢弃|物品名|数量
-   说明：归属者填「主角」或具体角色名（如「李尘」），用于区分背包里谁的物品；装备/丢弃同样通过 CI| 标记，引擎会真实改变背包状态（阿游 P0-3）。
+   CI|转移|物品名|数量|新归属者（谁把东西给了/卖给了/被抢走了：交易、赠予、抢夺、拾遗都要标记，原持有者由引擎按名查账扣减）
+   CI|损坏|物品名|数量|归属者（东西受损但仍存在——后续可能修复，也可能藏着内情）
+   说明：归属者填「主角」或具体角色名；每个在场角色都可能拥有物品，变动真实入账。
+12. 谎言与伪装（暗线系统）：角色可以撒谎、伪装、吹牛——他声称拥有某物但实际没有，或物品是假货/样品/赃物，或他对某物有隐藏目的。此时：
+   - 表层照常打 CI|获得（背包会显示他有——玩家第一人称看到的只是表象）
+   - 同时在最后单独输出暗线区块（玩家不可见，只有引擎记录）：
+   ===暗线===
+   TRICK|物品名|归属者|真相备注（如「空盒子，里面根本没有钥匙」「是样品，真品在他兄弟手里」「想用它换取信任后偷梁换柱」）
+   - 真相不写进叙事正文；后续剧情揭露时（偷窃发现是空的、鉴定出假货、被人戳穿）正常叙事描写，并用 CI|消耗/损坏/转移 翻转背包——表象与真相的落差就是伏笔的爆点。
+   - 暗线可长期悬置：不必急着揭露，让它在之后的轮次里自然引爆。
 8. 每轮更新情节进度（选项之前输出）：
    【情节进度：X%】
 9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
@@ -273,7 +299,7 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 - 新信息（实体/物品）自然融入叙事，不生硬介绍
 
 {memorySection}
-{historySection}`;
+{historySection}{secretSection}`;
 
 // ─── 用户行动提示词模板 ────────────────────────────────────────
 
@@ -380,14 +406,38 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
           .join("\n")}`
       : "";
 
-  const itemsStr =
-    ctx.items.length > 0
-      ? ctx.items
-          .map((i) => `- ${i.name} ×${i.quantity}（${i.category}）【归属：${i.owner || "主角"}】`)
-          .join("\n")
-      : "（背包空空如也）";
+  // 背包按归属分组展示（P1 万物可交互）：每个在场角色的随身物品一目了然——AI 才能演对交易/搜身/讨要。
+  // 主角置顶，其余角色按名排后；空背包角色不显示（没拥有≠没背包，剧情里拿到会自动出现）。
+  const buildItemsStr = () => {
+    if (ctx.items.length === 0) return "（目前没有任何角色持有物品）";
+    const byOwner = new Map<string, typeof ctx.items>();
+    for (const i of ctx.items) {
+      const o = i.owner || "主角";
+      if (!byOwner.has(o)) byOwner.set(o, []);
+      byOwner.get(o)!.push(i);
+    }
+    const owners = [...byOwner.keys()].sort((a, b) => (a === "主角" ? -1 : b === "主角" ? 1 : a.localeCompare(b)));
+    return owners
+      .map((o) => {
+        const list = byOwner.get(o)!;
+        const badge = o === "主角" ? "（你）" : "";
+        return `【${o}${badge}的随身物品】\n${list
+          .map((i) => `- ${i.name} ×${i.quantity}（${i.category}）${i.damaged ? "[已损坏]" : ""}${i.equipped ? "[已装备]" : ""}`)
+          .join("\n")}`;
+      })
+      .join("\n");
+  };
 
-  const itemsSection = `\n## 背包物品\n${itemsStr}`;
+  const itemsSection = `\n## 随身物品总账（谁的身上有什么——任何角色的物品变动都打 CI 标记）\n${buildItemsStr()}`;
+
+  // 暗线备忘（P1 谎言与伪装）：只注入 prompt，UI 不显示。AI 持续记得每一条未揭露的真相，
+  // 才能在几十轮后自然引爆（偷窃发现是空盒、鉴定出假货、被戳穿）。
+  const secretSection =
+    ctx.secretLedger && ctx.secretLedger.length > 0
+      ? `\n## 暗线备忘（仅你可见，玩家不知道——这些真相尚未揭露）\n${ctx.secretLedger
+          .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
+          .join("\n")}\n记住它们，在合适的剧情节点揭露（揭露时正常叙事 + CI 翻转背包）。`
+      : "";
 
   const historySection =
     ctx.previousTurns.length > 0
@@ -416,7 +466,8 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
     .replace("{plotProgress}", String(ctx.plotProgress))
     .replace("{itemsSection}", itemsSection)
     .replace("{memorySection}", buildMemorySummary(ctx))
-    .replace("{historySection}", historySection);
+    .replace("{historySection}", historySection)
+    .replace("{secretSection}", secretSection);
 }
 
 /**
@@ -455,11 +506,14 @@ export function parseGameOutput(rawOutput: string): {
   newEntities: Array<{ name: string; type: string; description: string }>;
   itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }>;
   plotProgress: number;
+  /** 暗线（P1 谎言与伪装）：TRICK|物品名|归属者|真相备注——表层照常入账，真相只进暗账（玩家不可见） */
+  newTricks: Array<{ name: string; owner: string; truth: string }>;
 } {
   let narrative = rawOutput;
   const options: Array<{ index: number; text: string }> = [];
   const newEntities: Array<{ name: string; type: string; description: string }> = [];
   const itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }> = [];
+  const newTricks: Array<{ name: string; owner: string; truth: string }> = [];
   let plotProgress = -1;
 
   // ── 提取选项（阿游 P1-1 重写）──
@@ -558,6 +612,24 @@ export function parseGameOutput(rawOutput: string): {
     narrative = narrative.replace(ciSection[0], "").trim();
   }
 
+  // ── 提取暗线（TRICK|格式，P1 谎言与伪装）──
+  const trickSection = rawOutput.match(/===暗线===\s*\n([\s\S]*?)(?=\n\n|\n*$|===)/);
+  if (trickSection) {
+    const trickLines = trickSection[1].split("\n").filter((l) => l.startsWith("TRICK|"));
+    for (const line of trickLines) {
+      const parts = line.replace("TRICK|", "").split("|").map((s) => s.trim());
+      if (parts.length >= 3 && parts[0] && parts[2]) {
+        newTricks.push({
+          name: parts[0],
+          owner: parts[1] || "主角",
+          truth: parts[2],
+        });
+      }
+    }
+    // 从 narrative 中移除暗线区块（绝不进正文，玩家不可见）
+    narrative = narrative.replace(trickSection[0], "").trim();
+  }
+
   // ── 提取情节进度 ──
   const progressMatch = rawOutput.match(/【情节进度[：:]\s*(\d+)%?】/);
   if (progressMatch) {
@@ -568,7 +640,7 @@ export function parseGameOutput(rawOutput: string): {
   // 清理多余空行
   narrative = narrative.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { narrative, options, newEntities, itemChanges, plotProgress };
+  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks };
 }
 
 /**

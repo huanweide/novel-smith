@@ -95,6 +95,45 @@ export function applyFrontendItemChanges(
             ? items.filter((_, k) => k !== idx)
             : items.map((i, k) => (k === idx ? { ...i, quantity: q } : i));
       }
+    } else if (change.operation === "transfer") {
+      // P1 万物可交互（与后端 applyItemChanges transfer 对齐）：归属转移。
+      // change.owner = 新归属者；原持有者按物品名查账扣减（同名多人取持量>0 且非新归属的第一人）。
+      const prevOwnerEntry = items.find(
+        (i) => i.name === change.name && (i.owner || DEFAULT_OWNER) !== owner && i.quantity > 0
+      );
+      if (prevOwnerEntry) {
+        const idx = items.findIndex((i) => i === prevOwnerEntry);
+        const q = items[idx].quantity - (change.quantity || 1);
+        items =
+          q <= 0
+            ? items.filter((_, k) => k !== idx)
+            : items.map((i, k) => (k === idx ? { ...i, quantity: q } : i));
+      }
+      const destIdx = items.findIndex(match);
+      if (destIdx >= 0) {
+        items = items.map((i, k) =>
+          k === destIdx ? { ...i, quantity: i.quantity + (change.quantity || 1) } : i
+        );
+      } else {
+        items = [
+          ...items,
+          {
+            name: change.name,
+            quantity: change.quantity || 1,
+            category: prevOwnerEntry?.category || "other",
+            source: `第${newRound}轮${prevOwnerEntry ? `来自${prevOwnerEntry.owner || DEFAULT_OWNER}` : "转移"}`,
+            acquiredRound: newRound,
+            owner,
+            damaged: prevOwnerEntry?.damaged,
+          },
+        ];
+      }
+    } else if (change.operation === "damage") {
+      // P1：受损但仍存在（与后端对齐）。
+      const idx = items.findIndex(match);
+      if (idx >= 0) {
+        items = items.map((i, k) => (k === idx ? { ...i, damaged: true } : i));
+      }
     } else if (change.operation === "skip") {
       // 与后端 game-engine.ts:96-98 对齐：流转/出售类，安全跳过，不改动背包。
       // no-op
