@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { parseGameOutput, buildMemorySummary, buildActionPrompt } from "./game-prompts";
+import {
+  parseGameOutput,
+  buildMemorySummary,
+  buildActionPrompt,
+  buildPersonaContract,
+  buildPersonaRoundAnchor,
+  isConfrontationalAction,
+  rollTier,
+  buildRollDirective,
+} from "./game-prompts";
 import type { GameActionInput, GameSessionContext } from "./types";
 
 // 验证游戏模式「背包物品归属」解析：CI| 格式带归属者字段。
@@ -290,5 +299,68 @@ describe("buildActionPrompt —— 目标指定", () => {
   it("target 与承接选项前缀共存：目标在最前", () => {
     const p = buildActionPrompt({ ...base, selectedOption: 2, selectedOptionText: "追问老头", target: "老头" });
     expect(p.indexOf("【行动目标】")).toBeLessThan(p.indexOf("（承接上一轮"));
+  });
+});
+
+// 视角契约（P0-3 扮演任意角色）：三重防歧义之①②
+describe("buildPersonaContract —— 扮演视角契约", () => {
+  const p = { name: "林振山", role: "antagonist", briefDescription: "赌场老板，守了十年秘密", otherNames: ["林舟", "林晚", "林振山"] };
+
+  it("契约块置顶声明双方扮演边界", () => {
+    const c = buildPersonaContract(p);
+    expect(c).toContain("【视角契约");
+    expect(c).toContain("玩家扮演：**林振山**");
+    expect(c).toContain("除 林振山 外的一切角色");
+    expect(c).toContain("玩家的每一次输入都是 **林振山 的言行与意图**");
+    expect(c).toContain("不得替 林振山 自由行动");
+  });
+
+  it("otherNames 过滤扮演者自身", () => {
+    const c = buildPersonaContract(p);
+    expect(c).toContain("林舟、林晚");
+    expect(c).not.toContain("林舟、林晚、林振山");
+  });
+
+  it("轮锚每轮重申视角", () => {
+    const a = buildPersonaRoundAnchor("林振山");
+    expect(a).toContain("玩家继续扮演 林振山");
+    expect(a).toContain("玩家输入 = 林振山 的言行");
+  });
+});
+
+// Roll 检定（P0-4 跑团模式）：骰在 LLM 前、AI 只演不判
+describe("isConfrontationalAction / rollTier —— 检定判定", () => {
+  it("combat 恒为对抗；观察/休息/选项永不骰", () => {
+    expect(isConfrontationalAction("combat", "")).toBe(true);
+    expect(isConfrontationalAction("observe", "偷袭")).toBe(false);
+    expect(isConfrontationalAction("rest", "偷袭")).toBe(false);
+    expect(isConfrontationalAction("option", "偷袭")).toBe(false);
+  });
+
+  it("自定义行动按关键词命中对抗", () => {
+    expect(isConfrontationalAction("custom", "偷袭老头")).toBe(true);
+    expect(isConfrontationalAction("custom", "说服他交出钥匙")).toBe(true);
+    expect(isConfrontationalAction("custom", "仔细环顾四周")).toBe(false);
+    expect(isConfrontationalAction("dialogue", "和老陈聊天")).toBe(false);
+  });
+
+  it("d100 五档边界正确", () => {
+    expect(rollTier(1).key).toBe("critical_fail");
+    expect(rollTier(5).key).toBe("critical_fail");
+    expect(rollTier(6).key).toBe("fail");
+    expect(rollTier(40).key).toBe("fail");
+    expect(rollTier(41).key).toBe("partial");
+    expect(rollTier(75).key).toBe("partial");
+    expect(rollTier(76).key).toBe("success");
+    expect(rollTier(95).key).toBe("success");
+    expect(rollTier(96).key).toBe("critical_success");
+    expect(rollTier(100).key).toBe("critical_success");
+  });
+
+  it("骰定约束块含既定结果与档位指令", () => {
+    const d = buildRollDirective(87, rollTier(87));
+    expect(d).toContain("d100 = 87");
+    expect(d).toContain("成功");
+    expect(d).toContain("必须如实演绎");
   });
 });

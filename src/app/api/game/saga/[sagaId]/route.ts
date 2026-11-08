@@ -8,6 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getApprovedCharacters } from "@/lib/approved-cards";
 
 type Params = { params: Promise<{ sagaId: string }> };
 
@@ -27,6 +28,25 @@ export async function GET(_req: Request, { params }: Params) {
   let snapshot: any = {};
   try { snapshot = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 忽略 */ }
 
+  // 扮演候选（P0-3）：派生本取项目角色卡现值；从零新建用前传快照角色
+  let playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }> = [];
+  if (saga.projectId) {
+    const chars = await getApprovedCharacters(prisma, saga.projectId, { take: 30 });
+    playAsCandidates = chars.map((c: any) => ({
+      id: c.id ?? null,
+      name: c.name,
+      role: c.role || "",
+      brief: (c.background || "").slice(0, 80),
+    }));
+  } else if (Array.isArray(snapshot.characters)) {
+    playAsCandidates = snapshot.characters.map((c: any) => ({
+      id: null,
+      name: c.name,
+      role: c.role || "",
+      brief: (c.background || "").slice(0, 80),
+    }));
+  }
+
   return NextResponse.json({
     ok: true,
     saga: {
@@ -37,6 +57,7 @@ export async function GET(_req: Request, { params }: Params) {
       playAsCharacterId: saga.playAsCharacterId,
       playAsName: saga.playAsName,
       rollMode: saga.rollMode,
+      playAsCandidates,
       chapters: saga.chapters.map((c) => ({
         id: c.id,
         index: c.index,

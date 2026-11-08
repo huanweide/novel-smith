@@ -16,7 +16,7 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 import { getEffectiveConfig, createLLMClient } from "@/core/llm/client";
 import { evaluateConfirmEligibility, applyConfirm } from "@/core/confirm-guard";
 import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING } from "@/core/story-status";
-import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput } from "./game-prompts";
+import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, isConfrontationalAction, rollTier, buildRollDirective } from "./game-prompts";
 import type { GameActionInput, GameTurnOutput, GameSessionContext, GameEntity, GameItem, GameOption, GameSessionSummary } from "./types";
 
 // 物品变动输入（含可选 owner，用于背包按 name+owner 隔离，阿游 P1）。
@@ -411,6 +411,10 @@ export async function* processGameTurn(input: GameActionInput, signal?: AbortSig
   itemChanges?: { operation: string; name: string; quantity: number }[];
   plotProgress?: number;
   wordCount?: number;
+  /** P0-4 跑团检定：骰面事件 */
+  d100?: number;
+  tier?: string;
+  label?: string;
   error?: string;
 }> {
   // 1. 加载会话和上下文
@@ -450,12 +454,37 @@ async function* runLockedTurn(
   itemChanges?: { operation: string; name: string; quantity: number }[];
   plotProgress?: number;
   wordCount?: number;
+  /** P0-4 跑团检定：骰面事件 */
+  d100?: number;
+  tier?: string;
+  label?: string;
   error?: string;
 }> {
   const ctx = await loadGameContext(session);
 
   // 2. 组装提示词
-  const systemPrompt = buildGameSystemPrompt(ctx);
+  // 视角契约（P0-3）：saga 扮演态每轮注入——系统提示词置顶契约块 + user prompt 轮锚（三重契约之①②）
+  let personaBlock = "";
+  let personaAnchor = "";
+  if (session.sagaId) {
+    const saga = await prisma.gameSaga.findUnique({
+      where: { id: session.sagaId },
+      select: { playAsCharacterId: true, playAsName: true },
+    });
+    const target = (saga?.playAsCharacterId || saga?.playAsName)
+      ? ctx.characters.find((c) => c.name === saga!.playAsName)
+      : undefined;
+    if (target) {
+      personaBlock = buildPersonaContract({
+        name: target.name,
+        role: target.role,
+        briefDescription: target.briefDescription,
+        otherNames: ctx.characters.filter((c) => c.name !== target.name).map((c) => c.name),
+      });
+      personaAnchor = `${buildPersonaRoundAnchor(target.name)}\n\n`;
+    }
+  }
+  const systemPrompt = personaBlock ? `${personaBlock}\n\n${buildGameSystemPrompt(ctx)}` : buildGameSystemPrompt(ctx);
   // 阿游 P1-1：从上一轮 states 取出所选选项文本，让 prompt 显式承接分支
   let selectedOptionText: string | undefined;
   if (input.selectedOption != null && session.states.length > 0) {
@@ -464,7 +493,29 @@ async function* runLockedTurn(
     const hit = opts.find((o: any) => o?.index === input.selectedOption);
     if (hit) selectedOptionText = hit.text;
   }
-  const userPrompt = buildActionPrompt({ ...input, selectedOptionText });
+  const userPromptBase = buildActionPrompt({ ...input, selectedOptionText });
+
+  // 骰子检定（P0-4）：saga 跑团模式下，对抗类行动先掷骰定结果，AI 只演不判。
+  // 骰结果先 yield 给前端（骰面动画/结果卡），再作为硬约束注入 prompt。
+  let rollBlock = "";
+  if (session.sagaId) {
+    const sagaRoll = await prisma.gameSaga.findUnique({
+      where: { id: session.sagaId },
+      select: { rollMode: true },
+    });
+    if (sagaRoll?.rollMode === "tabletop" && isConfrontationalAction(input.actionType, input.actionText)) {
+      const d100 = 1 + Math.floor(Math.random() * 100);
+      const tier = rollTier(d100);
+      rollBlock = buildRollDirective(d100, tier);
+      yield {
+        type: "roll",
+        d100,
+        tier: tier.key,
+        label: tier.label,
+      };
+    }
+  }
+  const userPrompt = personaAnchor + userPromptBase + rollBlock;
 
   // 3. 获取 LLM 配置并创建客户端
   const llmConfig = await getEffectiveConfig();
@@ -746,6 +797,8 @@ export async function* processGameStart(
   let existingContent: string;
   let characters: Array<{ name: string; role: string; currentStatus: string; background?: string }>;
   let loreEntries: Array<{ title: string; content: string }>;
+  let sagaPlayAs: { playAsCharacterId: string | null; playAsName: string | null } | null = null;
+  let personaBlock = "";
 
   if (isSaga) {
     const [chapter, saga] = await Promise.all([
@@ -756,6 +809,7 @@ export async function* processGameStart(
       yield { type: "error", error: "游戏本或章节不存在" };
       return;
     }
+    sagaPlayAs = { playAsCharacterId: saga.playAsCharacterId, playAsName: saga.playAsName };
     let snap: any = {};
     try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
     // 长期资产：派生本实时取项目角色卡/世界书（跨模式共享）；从零新建用前传快照
@@ -821,16 +875,55 @@ export async function* processGameStart(
     plotProgress: 0,
   };
 
-  const systemPrompt = buildGameSystemPrompt(ctx);
+  const systemPromptBase = buildGameSystemPrompt(ctx);
   const userPrompt = existingContent
     ? `【开始游戏】本章已有正文 ${existingContent.length} 字。请从现有正文的结尾自然续接，为游戏开场：简短承接上一段情节，然后给出 3-4 个编号选项让玩家选择接下来的行动。`
     : chapterOutline
       ? `【开始游戏】根据章纲，为本章写一个开场。从"${chapterOutline.slice(0, 80)}..."开始，生成精彩的入场叙事。记住在叙事结束后给出 3-4 个编号选项。`
       : `【开始游戏】为本章写一个精彩的开场。描述场景、氛围和角色的初始状态，然后给出 3-4 个编号选项。`;
 
-  const finalUserPrompt = input.concept
-    ? `${userPrompt}\n\n【构思参考】玩家已采用以下开场构思，请据此展开本章开场叙事，自然融入而非照抄原文：${input.concept}`
-    : userPrompt;
+  // 视角契约（P0-3 扮演任意角色）：saga.playAs 指定扮演者时置顶注入契约 + 每轮锚
+  let personaName: string | null = null;
+  if (isSaga) {
+    const target = characters.find(
+      (c: any) => c.id === (sagaPlayAs?.playAsCharacterId ?? null) || c.name === sagaPlayAs?.playAsName
+    );
+    if (target) {
+      personaName = target.name;
+      personaBlock = buildPersonaContract({
+        name: target.name,
+        role: target.role,
+        briefDescription: target.background || "",
+        otherNames: characters.filter((c: any) => c.name !== target.name).map((c: any) => c.name),
+      });
+    }
+  }
+  const systemPrompt = personaBlock ? `${personaBlock}\n\n${systemPromptBase}` : systemPromptBase;
+
+  // 前情提要（连续扮演的命脉）：saga 已归档章节的结尾部分自动注入开场，
+  // 玩家点「继续下一章」后无缝续玩——不需要任何手动导入/复制。
+  let sagaRecap = "";
+  if (isSaga) {
+    const archived = await prisma.gameSagaChapter.findMany({
+      where: { sagaId: input.sagaId!, status: "archived" },
+      orderBy: { index: "asc" },
+    });
+    if (archived.length > 0) {
+      const parts = archived
+        .slice(-3) // 最近 3 章足够承接；更早的剧情由 AI 在叙事中自然回顾
+        .map((c) => `《${c.title}》（结尾）：…${(c.content || "").slice(-500)}`);
+      sagaRecap = `\n\n【前情提要——前面章节的结尾，本章开场必须自然承接这些情节，不得凭空重启】\n${parts.join("\n\n")}`;
+    }
+  }
+
+  // 三重契约之②：每轮 user prompt 头部重申视角锚（防长上下文漂移）
+  const personaAnchor = personaName ? `${buildPersonaRoundAnchor(personaName)}\n\n` : "";
+
+  const finalUserPrompt = `${personaAnchor}${
+    input.concept
+      ? `${userPrompt}${sagaRecap}\n\n【构思参考】玩家已采用以下开场构思，请据此展开本章开场叙事，自然融入而非照抄原文：${input.concept}`
+      : `${userPrompt}${sagaRecap}`
+  }`;
 
   // 4. 调用 LLM（流式，逐 token 产出）
   const llmConfig = await getEffectiveConfig();

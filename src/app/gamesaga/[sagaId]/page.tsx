@@ -30,8 +30,10 @@ interface SagaDetail {
   title: string;
   projectId: string | null;
   sourceBookName: string | null;
+  playAsCharacterId: string | null;
   playAsName: string | null;
   rollMode: string;
+  playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }>;
   chapters: SagaChapter[];
 }
 interface GameOption { index: number; text: string; }
@@ -53,6 +55,8 @@ function SagaDetailInner() {
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterOutline, setChapterOutline] = useState("");
   const [showNewChapter, setShowNewChapter] = useState(false);
+  // 骰子结果卡（跑团模式，P0-4）
+  const [rollInfo, setRollInfo] = useState<{ d100: number; label: string } | null>(null);
   const streamRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -88,6 +92,8 @@ function SagaDetailInner() {
           if (event.type === "token") {
             streamedText += event.content || "";
             setStreamed(streamedText);
+          } else if (event.type === "roll") {
+            setRollInfo({ d100: event.d100, label: event.label });
           } else if (event.type === "start_done" || event.type === "game_done") {
             done = event;
           } else if (event.type === "error") {
@@ -109,6 +115,7 @@ function SagaDetailInner() {
     setNarrative("");
     setStreamed("");
     setOptions([]);
+    setRollInfo(null);
     const controller = new AbortController();
     streamRef.current = controller;
     try {
@@ -141,6 +148,7 @@ function SagaDetailInner() {
     if (!sessionId || status !== "playing") return;
     setStatus("generating");
     setStreamed("");
+    setRollInfo(null);
     const controller = new AbortController();
     streamRef.current = controller;
     try {
@@ -167,10 +175,41 @@ function SagaDetailInner() {
     }
   };
 
-  // ── 收束本章（归档）──
-  const endChapter = async () => {
+  // ── 收束本章 → 自动建下一章 → 自动开始（连续扮演：一键无缝进入下一章）──
+  const continueNextChapter = async () => {
     if (!sessionId || !activeChapter) return;
-    if (!confirm(`收束《${activeChapter.title}》？本章正文将归档进游戏本，之后不可再行动。`)) return;
+    setStatus("generating");
+    try {
+      const res = await fetch("/api/game/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "收束失败");
+      // 自动建下一章（index 自动递增，前情提要由引擎自动注入开场）
+      const cres = await fetch(`/api/game/saga/${sagaId}/chapter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const cdata = await cres.json();
+      if (!cres.ok) throw new Error(cdata.error || "开新章失败");
+      toastSuccess(`第 ${activeChapter.index} 章已收束，继续第 ${cdata.chapter.index} 章`);
+      setActiveChapter(null);
+      setSessionId(null);
+      await load();
+      // 无缝续玩
+      await startChapter({ ...cdata.chapter, wordCount: 0, sessionRound: 0, sessionWords: 0, sessionId: null, sessionStatus: null });
+    } catch (e: any) {
+      toastError(e.message || "续章失败");
+      setStatus("playing");
+    }
+  };
+
+  // ── 只收束不续章（想停下来时用）──
+  const endOnly = async () => {
+    if (!sessionId) return;
     setStatus("generating");
     try {
       const res = await fetch("/api/game/end", {
@@ -222,6 +261,22 @@ function SagaDetailInner() {
     load();
   };
 
+  // ── 扮演设置（P0-3）：选谁由你来演（局级设置，下一章生效）──
+  const setPlayAs = async (name: string) => {
+    try {
+      const res = await fetch(`/api/game/saga/${sagaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(name ? { playAsName: name, playAsCharacterId: saga?.playAsCandidates.find((c) => c.name === name)?.id ?? null } : { playAsName: null, playAsCharacterId: null }),
+      });
+      if (!res.ok) throw new Error("设置失败");
+      toastSuccess(name ? `下一章起你将扮演「${name}」` : "已恢复默认主角视角");
+      load();
+    } catch (e: any) {
+      toastError(e.message || "设置失败");
+    }
+  };
+
   const deleteChapter = async (c: SagaChapter) => {
     if (!confirm(`删除第 ${c.index} 章「${c.title}」？其全部轮次${c.status === "archived" ? "与正文" : ""}将一并删除。`)) return;
     await fetch(`/api/game/saga/${sagaId}/chapter/${c.id}`, { method: "DELETE" });
@@ -257,9 +312,49 @@ function SagaDetailInner() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setShowNewChapter((v) => !v)} className="btn-ghost h-8 shrink-0 rounded-lg px-3 text-xs">
-          <Icon name="plus" size={12} /> 新章
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* 交互模式开关（P0-4）：自由叙事 / 跑团检定 */}
+          <select
+            value={saga.rollMode || "free"}
+            onChange={async (e) => {
+              const mode = e.target.value;
+              try {
+                const res = await fetch(`/api/game/saga/${sagaId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rollMode: mode }),
+                });
+                if (!res.ok) throw new Error();
+                toastSuccess(mode === "tabletop" ? "跑团检定已开启：对抗行动将掷骰定结果" : "已切换为自由叙事模式");
+                load();
+              } catch {
+                toastError("切换失败");
+              }
+            }}
+            title="自由叙事=AI 裁决一切；跑团检定=对抗行动掷骰定结果，AI 只演不判"
+            className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+          >
+            <option value="free">模式：自由叙事</option>
+            <option value="tabletop">模式：跑团检定</option>
+          </select>
+          {/* 扮演选择（P0-3） */}
+          {saga.playAsCandidates.length > 0 && (
+            <select
+              value={saga.playAsName || ""}
+              onChange={(e) => setPlayAs(e.target.value)}
+              title="选择你扮演的角色（局级设置，下一章生效）"
+              className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+            >
+              <option value="">扮演：默认主角</option>
+              {saga.playAsCandidates.map((c) => (
+                <option key={c.name} value={c.name}>扮演：{c.name}{c.role ? `（${c.role}）` : ""}</option>
+              ))}
+            </select>
+          )}
+          <Button onClick={() => setShowNewChapter((v) => !v)} className="btn-ghost h-8 shrink-0 rounded-lg px-3 text-xs">
+            <Icon name="plus" size={12} /> 新章
+          </Button>
+        </div>
       </div>
 
       {showNewChapter && (
@@ -326,8 +421,18 @@ function SagaDetailInner() {
                 <p className="text-sm font-medium text-[var(--nv-text-primary)]">
                   第 {activeChapter.index} 章 · {activeChapter.title}
                 </p>
+                {rollInfo && (
+                  <span className="rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]" title="跑团检定结果（既定，AI 只演不判）">
+                    🎲 d100={rollInfo.d100} · {rollInfo.label}
+                  </span>
+                )}
                 {status === "playing" && (
-                  <Button onClick={endChapter} className="btn-ghost h-7 rounded-lg px-3 text-xs">收束本章</Button>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={endOnly} className="btn-ghost h-7 rounded-lg px-3 text-xs" title="本章归档，停在这里">停下</Button>
+                    <Button onClick={continueNextChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章并无缝开启下一章（前情自动继承）">
+                      继续下一章 <Icon name="arrowRight" size={12} />
+                    </Button>
+                  </div>
                 )}
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
