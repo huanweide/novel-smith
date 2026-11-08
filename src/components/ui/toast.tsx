@@ -206,7 +206,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               role={t.type === "error" ? "alert" : "status"}
-              className={`surface-floating pointer-events-auto animate-spring rounded-xl border-l-2 ${s.accent} px-4 py-3 shadow-lg`}
+              className={`surface-floating toast-solid pointer-events-auto animate-spring rounded-xl border-l-2 ${s.accent} px-4 py-3 shadow-lg`}
             >
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${s.soft} ${s.text}`}>

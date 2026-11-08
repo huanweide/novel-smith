@@ -128,7 +128,7 @@ export function ConflictBadge({
         <div
           role="dialog"
           aria-label="待处理冲突列表"
-          className="absolute left-0 top-full z-50 mt-1 w-80 max-h-96 overflow-auto rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-2 shadow-lg"
+          className="absolute left-0 top-full z-50 mt-1 w-80 max-h-96 overflow-auto rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-3)] p-2 shadow-xl backdrop-blur-md"
         >
           {loading && (
             <div className="px-2 py-2 text-xs text-[var(--nv-text-tertiary)]">加载中…</div>

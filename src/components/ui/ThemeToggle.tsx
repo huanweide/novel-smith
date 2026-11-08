@@ -195,10 +195,10 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
           aria-haspopup="menu"
           aria-expanded={open}
           title={`界面风格：${cur.name}（${cur.desc}）· 右键快速切换下一档`}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] transition-all duration-300 active:scale-[0.97] px-2.5 py-1.5"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-primary)] font-medium hover:border-[var(--nv-border-3)] transition-all duration-300 active:scale-[0.97] px-2.5 py-1.5"
         >
           <Icon name={cur.icon} size={15} />
-          <span className="text-xs font-medium">{cur.name}</span>
+          <span className="text-xs font-medium whitespace-nowrap">{cur.name}</span>
         </button>
       </div>
       {menu ? createPortal(menu, document.body) : null}

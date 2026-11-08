@@ -248,14 +248,14 @@ export function DetectorPanel() {
           <span className="text-xs text-[var(--nv-text-tertiary)]">已输入 {chars} 字</span>
           <button
             onClick={() => changeText(SAMPLE_TEXT)}
-            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-3)] transition-colors"
           >
             载入示例
           </button>
           <button
             onClick={() => changeText("")}
             disabled={!text}
-            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] transition-colors disabled:opacity-40"
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-3)] transition-colors disabled:opacity-40"
           >
             清空
           </button>

@@ -87,10 +87,10 @@ export function Switch({
           !checked && "bg-[var(--nv-surface-3)]",
           // 关闭态 hover：微微亮起
           !checked && "group-hover:bg-[var(--nv-surface-2)]",
-          // ── 开启态：主题色轨（点亮）──
-          checked && "bg-[var(--nv-primary)]",
+          // ── 开启态：主题柔色浅轨（反色设计——浅轨深滑块，浅色主题下不再是大色块突兀）──
+          checked && "bg-[var(--nv-primary-soft)]",
           // 开启态 hover：轻微加深
-          checked && "group-hover:brightness-110"
+          checked && "group-hover:brightness-105"
         )}
       >
         {/* 滑块（thumb） */}
@@ -106,8 +106,8 @@ export function Switch({
             translate,
             // ── 关闭态滑块：半透明白（熄灭感）──
             !checked && "bg-white/60 shadow-sm",
-            // ── 开启态滑块：纯白 + 柔和光晕（点亮感）──
-            checked && "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.2)]"
+            // ── 开启态滑块：主题色实心 + 柔和同色光晕（点亮感，浅色主题下对比清晰）──
+            checked && "bg-[var(--nv-primary)] shadow-[0_0_0_3px_color-mix(in_oklch,var(--nv-primary)_22%,transparent)]"
           )}
         />
       </button>
