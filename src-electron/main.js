@@ -206,6 +206,9 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowDowngrade = false;
 
+  // 已下载就绪标志：用户点「稍后」后定时重新提醒，避免「更新就绪但再也没人提」的体感（自动更新像消失了）
+  let downloadedReady = false;
+
   autoUpdater.on("update-available", (info) => {
     console.log("[ns] 发现新版本：", info && info.version);
     try {
@@ -223,27 +226,38 @@ function setupAutoUpdater() {
 
   autoUpdater.on("update-downloaded", () => {
     console.log("[ns] 更新已下载完成，等待重启安装");
-    try {
-      dialog
-        .showMessageBox({
-          type: "info",
-          title: "更新已就绪",
-          message: "新版本已下载完成，重启以应用更新？",
-          buttons: ["重启更新", "稍后"],
-          cancelId: 1,
-        })
-        .then(({ response }) => {
-          if (response === 0) autoUpdater.quitAndInstall();
-        })
-        .catch(() => {});
-    } catch {}
+    downloadedReady = true;
+    const remindInstall = () => {
+      try {
+        dialog
+          .showMessageBox({
+            type: "info",
+            title: "更新已就绪",
+            message: "新版本已下载完成，重启以应用更新？",
+            buttons: ["重启更新", "稍后"],
+            cancelId: 1,
+          })
+          .then(({ response }) => {
+            if (response === 0) autoUpdater.quitAndInstall();
+          })
+          .catch(() => {});
+      } catch {}
+    };
+    remindInstall();
+    // 用户点「稍后」：30 分钟后再提醒一次（长驻会话不会错过安装）
+    setInterval(() => {
+      if (downloadedReady) remindInstall();
+    }, 30 * 60 * 1000);
   });
 
   autoUpdater.on("update-not-available", () => console.log("[ns] 当前已是最新版本"));
   autoUpdater.on("error", (e) => console.warn("[ns] 自动更新检查失败：", e && e.message));
 
-  // 启动后静默检查（失败静默忽略）
+  // 启动后静默检查（失败静默忽略）+ 每 4 小时周期检查（长驻桌面会话不错过新版本）
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  setInterval(() => {
+    if (!downloadedReady) autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  }, 4 * 60 * 60 * 1000);
   global.__nsUpdater = autoUpdater;
   globalThis.__nsUpdater = autoUpdater;
 
