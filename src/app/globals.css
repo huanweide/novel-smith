@@ -601,7 +601,7 @@
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(228, 184, 99, 0.72);
   box-shadow: var(--shadow-glass-hover), 0 0 26px rgba(228, 184, 99, 0.30);
-  transform: translateY(-2px);
+  transform: translateY(-1px);   /* 悬浮跳起统一 -1px：溢出容器（滚动条/overflow 裁切）内不再被切边 */
 }
 .btn-primary:active,
 .btn-creative:active {
@@ -624,7 +624,7 @@
   background: rgba(255, 255, 255, 0.14);
   border-color: oklch(0.68 0.18 160 / 0.72);
   box-shadow: var(--shadow-glass-hover), 0 0 26px oklch(0.68 0.18 160 / 0.28);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 .btn-success:active { transform: scale(0.97); }
 
@@ -643,7 +643,7 @@
   background: rgba(255, 255, 255, 0.14);
   border-color: oklch(0.62 0.22 18 / 0.72);
   box-shadow: var(--shadow-glass-hover), 0 0 26px oklch(0.62 0.22 18 / 0.28);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 .btn-danger:active { transform: scale(0.97); }
 
@@ -791,6 +791,7 @@
    ═══════════════════════════════════════════ */
 
 .card-lift {
+  position: relative;   /* hover z-index 生效前提 */
   transition: transform 0.25s var(--ease-out-smooth),
               box-shadow 0.25s var(--ease-out-smooth),
               border-color 0.25s var(--ease-out-smooth);
@@ -798,6 +799,7 @@
 .card-lift:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-hover-lg);
+  z-index: 10;          /* 网格中抬升时不被相邻兄弟卡片压住 */
 }
 
 /* ═══════════════════════════════════════════
@@ -1303,9 +1305,10 @@
               background var(--dur-standard) var(--ease-out-expo);
 }
 .nf-gtile:hover {
-  transform: translateY(-5px);
+  transform: translateY(-3px);
   border-color: color-mix(in oklch, var(--spine, var(--nv-primary)) 50%, transparent);
   box-shadow: var(--shadow-glass-hover), 0 0 30px color-mix(in oklch, var(--spine, var(--nv-primary)) 30%, transparent);
+  z-index: 10;   /* 网格中抬升时不被相邻兄弟 tile 压住 */
   background:
     linear-gradient(155deg, color-mix(in oklch, var(--spine, var(--nv-primary)) 16%, transparent) 0%, transparent 62%),
     color-mix(in oklch, var(--spine, var(--nv-primary)) 6%, var(--nv-abyss));
@@ -1840,9 +1843,10 @@ html.theme-dracula {
   transition: transform 260ms var(--ease-out-smooth, ease), box-shadow 260ms var(--ease-out-smooth, ease), border-color 260ms var(--ease-out-smooth, ease);
 }
 .preset-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: color-mix(in oklch, var(--card-accent) 45%, transparent);
   box-shadow: var(--shadow-glass-hover), 0 0 26px color-mix(in oklch, var(--card-accent) 22%, transparent);
+  z-index: 10;   /* 网格中抬升时不被相邻兄弟卡片压住（preset-card 自带 relative） */
 }
 @media (prefers-reduced-motion: reduce) {
   .preset-card { transition: none; }

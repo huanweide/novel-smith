@@ -201,7 +201,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <p className="hidden sm:block text-[10px] text-[var(--nv-text-tertiary)] tracking-[0.22em]">小说工匠 · 创作引擎</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto py-1 -my-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* py-1 -my-1：给按钮 hover 轻抬（-1px）与光晕留出纵向空间——overflow-x-auto 容器纵向同样裁切， */}
+            {/* 无此呼吸空间时「开始创作」跳起会被容器边缘切掉（负 margin 抵消，布局不变） */}
             <Link href="/explore" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium whitespace-nowrap shrink-0">
               <Icon name="sparkles" size={14} /> <span className="whitespace-nowrap">开始创作</span>
             </Link>
