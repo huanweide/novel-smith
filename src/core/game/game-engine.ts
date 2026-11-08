@@ -500,8 +500,9 @@ async function* runLockedTurn(
   }
   const userPromptBase = buildActionPrompt({ ...input, selectedOptionText });
 
-  // 骰子检定（P0-4 + 检定官进阶）：saga 跑团模式下，对抗类行动先由检定官裁定
+  // 骰子检定（P0-4 + 检定官进阶 + 两段式）：saga 跑团模式下，对抗类行动先由检定官裁定
   // 动态成功率（能力对比/情境修正/连胜连败/重复惩罚），再掷 d100 定结果，AI 只演不判。
+  // 两段式：前端已掷骰（preRolled，含重骰后的最终结果）→ 引擎直接采用，不再重掷。
   let rollBlock = "";
   if (session.sagaId) {
     const sagaRoll = await prisma.gameSaga.findUnique({
@@ -512,31 +513,46 @@ async function* runLockedTurn(
       // 行动指纹（重复检测）
       const actionKey = `${input.actionType}|${(input.actionText || "").slice(0, 40)}|${input.target ?? ""}`;
       const prevStats: RollStats = (sagaRoll.rollStats as any) || { winStreak: 0, loseStreak: 0, lastKey: "", repeatCount: 0 };
-      const adjustments = computeAdjustments(prevStats, actionKey);
 
-      // 检定官上下文：角色能力要点 + 装备 + 最近叙事
-      const personaBrief = personaBlock
-        ? personaBlock.slice(0, 400) // 契约块里已含扮演角色要点
-        : (ctx.characters.find((c) => c.role === "protagonist")?.briefDescription ?? "");
-      const itemsBrief = ctx.items.map((i) => `${i.name}×${i.quantity}${i.equipped ? "（已装备）" : ""}`).join("、");
-      const recentNarrative = ctx.previousTurns.slice(-2).map((t) => t.narrative).join("\n") || ctx.existingContent?.slice(-400) || "";
+      let d100: number;
+      let finalRate: number;
+      let reasons: string[];
 
-      const verdict = await arbitrateRoll({
-        actionText: input.actionText,
-        actionType: input.actionType,
-        target: input.target,
-        personaBrief,
-        recentNarrative,
-        itemsBrief,
-        adjustments,
-      });
+      if (input.preRolled && typeof input.preRolled.d100 === "number" && typeof input.preRolled.successRate === "number") {
+        // 两段式第二段：采用前端掷定的结果
+        d100 = input.preRolled.d100;
+        finalRate = Math.max(1, Math.min(99, Math.round(input.preRolled.successRate)));
+        reasons = input.preRolled.reasons || [];
+      } else {
+        // 旧路径（无预掷）：检定官在本请求内裁定+掷骰
+        const adjustments = computeAdjustments(prevStats, actionKey);
 
-      const d100 = 1 + Math.floor(Math.random() * 100);
-      const judged = judgeRoll(d100, verdict.finalRate);
+        // 检定官上下文：角色能力要点 + 装备 + 最近叙事
+        const personaBrief = personaBlock
+          ? personaBlock.slice(0, 400) // 契约块里已含扮演角色要点
+          : (ctx.characters.find((c) => c.role === "protagonist")?.briefDescription ?? "");
+        const itemsBrief = ctx.items.map((i) => `${i.name}×${i.quantity}${i.equipped ? "（已装备）" : ""}`).join("、");
+        const recentNarrative = ctx.previousTurns.slice(-2).map((t) => t.narrative).join("\n") || ctx.existingContent?.slice(-400) || "";
+
+        const verdict = await arbitrateRoll({
+          actionText: input.actionText,
+          actionType: input.actionType,
+          target: input.target,
+          personaBrief,
+          recentNarrative,
+          itemsBrief,
+          adjustments,
+        });
+        d100 = 1 + Math.floor(Math.random() * 100);
+        finalRate = verdict.finalRate;
+        reasons = verdict.reasons;
+      }
+
+      const judged = judgeRoll(d100, finalRate);
       rollBlock = [
         `\n\n【骰子判定（既定结果，必须如实演绎，不得更改）】`,
-        `检定：d100=${d100}，成功率=${verdict.finalRate}%（${rateLabel(verdict.finalRate)}）→ ${judged.label}。`,
-        verdict.reasons.length > 0 ? `难度依据：${verdict.reasons.join("；")}。` : `裁定：${verdict.note}。`,
+        `检定：d100=${d100}，成功率=${finalRate}%（${rateLabel(finalRate)}）→ ${judged.label}。`,
+        reasons.length > 0 ? `难度依据：${reasons.join("；")}。` : ``,
         `要求：${judged.key === "critical_success" ? "超预期达成，并有意外之喜" : judged.key === "success" ? "顺利达成" : judged.key === "partial" ? "达成目的但付出可见代价（受伤/暴露/结怨/损失）" : judged.key === "fail" ? "行动受阻、被阻止或被反制" : "严重受挫且出人意料（如当场被识破/反被制服/弄巧成拙）"}。把结果演成有趣的故事，不要生硬宣布成败。`,
       ].join("");
 
@@ -545,12 +561,12 @@ async function* runLockedTurn(
         d100,
         tier: judged.key,
         label: judged.label,
-        successRate: verdict.finalRate,
-        reasons: verdict.reasons,
+        successRate: finalRate,
+        reasons,
       };
 
-      // 更新动态状态（防退化三件套的记忆）
-      const nextStats = nextRollStats(prevStats, actionKey, judged.success);
+      // 更新动态状态（防退化三件套的记忆；重骰后的最终结果为准；保留重骰次数）
+      const nextStats = { ...nextRollStats(prevStats, actionKey, judged.success), rerollsLeft: prevStats.rerollsLeft };
       await prisma.gameSaga.update({
         where: { id: session.sagaId },
         data: { rollStats: nextStats as any },

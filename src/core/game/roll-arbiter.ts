@@ -119,6 +119,8 @@ export interface RollStats {
   /** 上次行动指纹（actionType+actionText 前 40 字+target），用于重复检测 */
   lastKey: string;
   repeatCount: number;
+  /** 本章剩余重骰次数（null=未初始化；-1=无限；每次开新章重置） */
+  rerollsLeft?: number;
 }
 
 /**

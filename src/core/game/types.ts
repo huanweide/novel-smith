@@ -95,6 +95,12 @@ export interface GameActionInput {
   selectedOptionText?: string; // 上一轮选项对应的文本（承接分支用，由引擎从 states 补全）
   targetItem?: string;      // 如果用物品，目标物品名
   target?: string;          // 行动目标：本次交互针对的角色/生物/势力/物品名（目标指定，阿游 R-目标）
+  /** 两段式判定：前端已掷的骰（/api/game/roll），引擎直接采用不重掷（AI 只演不判） */
+  preRolled?: {
+    d100: number;
+    successRate: number;
+    reasons?: string[];
+  };
 }
 
 // ─── AI 回合输出 ──────────────────────────────────────────────

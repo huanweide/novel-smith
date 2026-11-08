@@ -14,7 +14,7 @@ import type { GameActionType } from "@/core/game/types";
 import { sseError } from "@/lib/sse-error";
 
 export async function POST(req: Request) {
-  const { sessionId, actionType, actionText, selectedOption, targetItem, target } =
+  const { sessionId, actionType, actionText, selectedOption, targetItem, target, preRolled } =
     await req.json();
 
   if (!sessionId) {
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
             selectedOption,
             targetItem,
             target,
+            preRolled,
           },
           req.signal
         );

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * 游戏本详情（F6 跑团化 P0-1a）
+ * 游戏本详情（F6 跑团化 P0-1a + 两段式骰子）
  * 章节体系（一章一局）+ 轻量游戏循环（流式开场 / 选项 / 行动 / 收束归档）。
- * P0-1b 将把完整游戏页（粒子/背包/目标指定/语义 chips）适配进来替换本轻量循环。
+ * 骰子两段式：对抗行动先掷骰（悬浮动画+可重骰），点「继续」才生成叙事——动画不阻塞页面操作。
  */
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/States";
 import { toastError, toastSuccess } from "@/components/ui/toast";
+import { isConfrontationalAction } from "@/core/game/game-prompts";
 
 interface SagaChapter {
   id: string;
@@ -33,10 +34,16 @@ interface SagaDetail {
   playAsCharacterId: string | null;
   playAsName: string | null;
   rollMode: string;
+  rollDifficulty: string;
   playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }>;
   chapters: SagaChapter[];
 }
 interface GameOption { index: number; text: string; }
+/** 两段式骰子浮层状态 */
+interface DiceState {
+  rolling: boolean;
+  result: { d100: number; label: string; successRate: number; reasons: string[]; rerollsLeft: number; rerollMax: number } | null;
+}
 
 function SagaDetailInner() {
   const { sagaId } = useParams<{ sagaId: string }>();
@@ -57,6 +64,9 @@ function SagaDetailInner() {
   const [showNewChapter, setShowNewChapter] = useState(false);
   // 骰子结果卡（跑团模式，P0-4 + 检定官明细）
   const [rollInfo, setRollInfo] = useState<{ d100: number; label: string; successRate?: number; reasons?: string[] } | null>(null);
+  // 两段式骰子浮层（悬浮动画 + 重骰 + 继续）
+  const [dice, setDice] = useState<DiceState | null>(null);
+  const [diceTick, setDiceTick] = useState(0);
   const streamRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -71,6 +81,13 @@ function SagaDetailInner() {
   }, [sagaId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // 骰子滚动期：数字快速跳动（不知道结果——等它判定的爽感）
+  useEffect(() => {
+    if (!dice?.rolling) return;
+    const t = setInterval(() => setDiceTick(1 + Math.floor(Math.random() * 100)), 90);
+    return () => clearInterval(t);
+  }, [dice?.rolling]);
 
   // ── SSE 通用消费（start / action 共用）──
   const consumeSSE = useCallback(async (res: Response, onDone: (data: any) => void) => {
@@ -143,8 +160,71 @@ function SagaDetailInner() {
     }
   };
 
-  // ── 执行行动 ──
+  // ── 行动入口（两段式分流）：跑团+对抗 → 先掷骰（动画+可重骰），点「继续」才叙事 ──
+  const pendingActionRef = useRef<{ actionType: string; actionText: string; selectedOption?: number } | null>(null);
+
   const act = async (actionType: string, actionText: string, selectedOption?: number) => {
+    if (!sessionId || status !== "playing") return;
+    if (saga?.rollMode === "tabletop" && isConfrontationalAction(actionType, actionText)) {
+      pendingActionRef.current = { actionType, actionText, selectedOption };
+      setDice({ rolling: true, result: null });
+      await doRoll(false);
+      return;
+    }
+    await runAction(actionType, actionText, selectedOption, undefined);
+  };
+
+  // ── 掷骰（第一段）：/api/game/roll，动画 1.6s 后揭晓；isReroll 消耗次数 ──
+  const doRoll = async (isReroll: boolean) => {
+    const p = pendingActionRef.current;
+    if (!p) return;
+    try {
+      const res = await fetch("/api/game/roll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sagaId, actionType: p.actionType, actionText: p.actionText, isReroll }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "掷骰失败");
+      if (data.skipped) {
+        // 非对抗/自由模式兜底：直接叙事
+        setDice(null);
+        await runAction(p.actionType, p.actionText, p.selectedOption, undefined);
+        return;
+      }
+      // 悬浮动画 1.6 秒后揭晓（期间页面完全可操作）
+      setTimeout(() => {
+        setDice({ rolling: false, result: { d100: data.d100, label: data.label, successRate: data.successRate, reasons: data.reasons || [], rerollsLeft: data.rerollsLeft, rerollMax: data.rerollMax } });
+      }, 1600);
+    } catch (e: any) {
+      toastError(e.message || "掷骰失败");
+      setDice(null);
+    }
+  };
+
+  // ── 重骰：消耗次数重掷 ──
+  const reroll = async () => {
+    setDice({ rolling: true, result: null });
+    await doRoll(true);
+  };
+
+  // ── 继续（第二段）：带预掷结果生成叙事 ──
+  const continueAfterRoll = async () => {
+    const p = pendingActionRef.current;
+    const d = dice?.result;
+    if (!p || !d) return;
+    pendingActionRef.current = null;
+    setDice(null);
+    await runAction(p.actionType, p.actionText, p.selectedOption, { d100: d.d100, successRate: d.successRate, reasons: d.reasons });
+  };
+
+  // ── 执行行动（第二段本体）──
+  const runAction = async (
+    actionType: string,
+    actionText: string,
+    selectedOption: number | undefined,
+    preRolled: { d100: number; successRate: number; reasons?: string[] } | undefined
+  ) => {
     if (!sessionId || status !== "playing") return;
     setStatus("generating");
     setStreamed("");
@@ -155,7 +235,7 @@ function SagaDetailInner() {
       const res = await fetch("/api/game/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, actionType, actionText, selectedOption }),
+        body: JSON.stringify({ sessionId, actionType, actionText, selectedOption, preRolled }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -337,6 +417,33 @@ function SagaDetailInner() {
             <option value="free">模式：自由叙事</option>
             <option value="tabletop">模式：跑团检定</option>
           </select>
+          {/* 重骰难度档：简单=无限重骰 / 困难=3 次 / 真实=不可重骰 */}
+          {saga.rollMode === "tabletop" && (
+            <select
+              value={saga.rollDifficulty || "hard"}
+              onChange={async (e) => {
+                try {
+                  const res = await fetch(`/api/game/saga/${sagaId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rollDifficulty: e.target.value }),
+                  });
+                  if (!res.ok) throw new Error();
+                  const label = e.target.value === "easy" ? "简单（无限重骰）" : e.target.value === "real" ? "真实（不可重骰）" : "困难（3 次重骰）";
+                  toastSuccess(`难度已调为${label}`);
+                  load();
+                } catch {
+                  toastError("切换失败");
+                }
+              }}
+              title="简单=无限重骰；困难=每章 3 次重骰；真实=骰出什么是什么，不能重骰"
+              className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+            >
+              <option value="easy">难度：简单</option>
+              <option value="hard">难度：困难</option>
+              <option value="real">难度：真实</option>
+            </select>
+          )}
           {/* 扮演选择（P0-3） */}
           {saga.playAsCandidates.length > 0 && (
             <select
@@ -486,6 +593,58 @@ function SagaDetailInner() {
           )}
         </main>
       </div>
+
+      {/* ── 骰子悬浮判定（两段式）：右下角小面板，动画期间页面完全可操作 ── */}
+      {dice && (
+        <div className="dice-panel-in fixed bottom-24 right-6 z-[90] w-64 rounded-2xl border border-[var(--nv-border-3)] bg-[var(--nv-surface-1)] p-4 shadow-2xl">
+          {dice.rolling ? (
+            <div className="flex flex-col items-center gap-2 py-2">
+              <span className="dice-tumbling text-4xl" aria-hidden>🎲</span>
+              <p className="font-mono text-2xl text-[var(--nv-text-muted)]">{diceTick}</p>
+              <p className="text-xs text-[var(--nv-text-tertiary)]">命运骰子滚动中……</p>
+            </div>
+          ) : dice.result ? (
+            <div className="space-y-2">
+              <div className="dice-reveal flex items-baseline justify-center gap-2">
+                <span className={`font-mono text-3xl font-bold ${
+                  dice.result.label === "失败" || dice.result.label === "大失败"
+                    ? "text-[var(--nv-danger)]"
+                    : dice.result.label === "勉强成功"
+                      ? "text-[var(--nv-warning)]"
+                      : "text-[var(--nv-success)]"
+                }`}>
+                  {dice.result.d100}
+                </span>
+                <span className="text-sm font-medium text-[var(--nv-text-primary)]">{dice.result.label}</span>
+              </div>
+              <p className="text-center text-xs text-[var(--nv-text-tertiary)]">
+                成功率 {dice.result.successRate}%{dice.result.reasons.length > 0 ? ` · ${dice.result.reasons[0]}` : ""}
+              </p>
+              {dice.result.reasons.length > 1 && (
+                <p className="text-center text-[10px] leading-4 text-[var(--nv-text-muted)]" title={dice.result.reasons.join("；")}>
+                  {dice.result.reasons.slice(1, 3).join("；")}
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {dice.result.rerollMax !== 0 && (dice.result.rerollMax === -1 || dice.result.rerollsLeft > 0) ? (
+                  <button
+                    onClick={reroll}
+                    className="rounded-lg border border-[var(--nv-border-2)] px-2.5 py-1 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+                    title="不服就再掷一次"
+                  >
+                    重骰 {dice.result.rerollMax === -1 ? "∞" : `剩 ${dice.result.rerollsLeft}`}
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-[var(--nv-text-muted)]">真实模式 · 骰出什么是什么</span>
+                )}
+                <Button onClick={continueAfterRoll} className="btn-primary h-7 rounded-lg px-3 text-xs">
+                  继续 <Icon name="arrowRight" size={11} />
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

@@ -564,7 +564,9 @@ model GameSaga {
   playAsName        String? // 扮演者名快照
   // 交互模式（P0-4 扩展用）
   rollMode          String   @default("tabletop") // free 自由叙事 | tabletop 跑团检定（默认开：能力动态检定是跑团默认体验）
-  // 检定官动态状态（防滚雪球/防劝退/防卡bug）：{ winStreak, loseStreak, lastKey, repeatCount }
+  // 重骰难度档（用户指定三档）：easy 简单=无限重骰 | hard 困难=有限重骰（默认 3 次） | real 真实=不能重骰
+  rollDifficulty    String   @default("hard")
+  // 检定官动态状态（防滚雪球/防劝退/防卡bug）：{ winStreak, loseStreak, lastKey, repeatCount, rerollsLeft }
   rollStats         Json?
   // 长期扮演动态态（P2 逐步启用）
   relations         Json? // 关系值：{ [characterName]: { level, reason } }
