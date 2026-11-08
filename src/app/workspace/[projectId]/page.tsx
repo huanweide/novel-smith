@@ -1377,9 +1377,9 @@ export default function WorkspacePage() {
             chapterOutlinePrompt={chapterOutlinePrompt} onChapterOutlinePromptChange={handleChapterOutlinePromptChange}
             genStep={genStep} genStepLabels={genStepLabels} chapterOutlineStatus={chapterOutlineStatus}
             onOpenGame={() => {
-              if (selectedNode?.id) {
-                router.push(`/workspace/${project.id}/game/${selectedNode.id}`);
-              }
+              // F6 跑团化 P0-1a：游戏模式入口升级为「游戏本中枢」（自足创作空间）；
+              // 旧章级游戏页路由保留但不再从此进入
+              router.push(`/gamesaga?projectId=${project.id}&projectName=${encodeURIComponent(project.name)}`);
             }}
             onEditCharacter={(id) => { const c = project.characters.find((x) => x.id === id); if (c) setEditingCharacter(c); }}
             onEditLore={(id) => { const l = project.lorebookEntries.find((x) => x.id === id); if (l) setEditingLore(l); }}

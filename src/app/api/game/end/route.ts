@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       success: true,
       nodeId: result.nodeId,
       projectId: result.projectId,
+      sagaChapterId: result.sagaChapterId,
       finalContent: result.finalContent,
       totalWords: result.totalWords,
       status: result.status,

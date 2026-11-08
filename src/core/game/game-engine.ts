@@ -185,6 +185,49 @@ export async function ensureGameSession(
   return session;
 }
 
+/**
+ * 游戏本：创建或恢复某章的会话（一章一局）。
+ * 与 ensureGameSession 平行：node 会话绑小说章节，saga 会话绑 GameSagaChapter。
+ */
+export async function ensureSagaSession(sagaId: string, sagaChapterId: string) {
+  let session = await prisma.gameSession.findFirst({
+    where: { sagaChapterId },
+    include: { states: { orderBy: { round: "asc" } } },
+  });
+  if (!session) {
+    const chapter = await prisma.gameSagaChapter.findUnique({ where: { id: sagaChapterId } });
+    if (!chapter || chapter.sagaId !== sagaId) throw new Error(`游戏本章节 ${sagaChapterId} 不存在`);
+    const saga = await prisma.gameSaga.findUnique({ where: { id: sagaId }, select: { projectId: true } });
+    if (!saga) throw new Error(`游戏本 ${sagaId} 不存在`);
+    session = await prisma.gameSession.create({
+      data: {
+        projectId: saga.projectId,
+        nodeId: null,
+        sagaId,
+        sagaChapterId,
+        status: "active",
+        currentRound: 0,
+        totalWords: 0,
+        maxWords: 3000,
+        plotProgress: 0,
+        originalContentSnapshot: chapter.content || "",
+      },
+      include: { states: { orderBy: { round: "asc" } } },
+    });
+  }
+  return session;
+}
+
+/** 游戏本：重开某章（清轮次重建会话，与 resetGameSession 语义对齐） */
+export async function resetSagaChapterSession(sagaId: string, sagaChapterId: string) {
+  const existing = await prisma.gameSession.findFirst({ where: { sagaChapterId } });
+  if (existing) {
+    await prisma.gameState.deleteMany({ where: { sessionId: existing.id } });
+    await prisma.gameSession.delete({ where: { id: existing.id } });
+  }
+  return ensureSagaSession(sagaId, sagaChapterId);
+}
+
 /** 获取会话摘要（返回给前端） */
 export async function getSessionSummary(sessionId: string): Promise<GameSessionSummary> {
   const session = await prisma.gameSession.findUnique({
@@ -212,6 +255,8 @@ export async function getSessionSummary(sessionId: string): Promise<GameSessionS
     id: session.id,
     projectId: session.projectId,
     nodeId: session.nodeId,
+    sagaId: session.sagaId,
+    sagaChapterId: session.sagaChapterId,
     status: session.status,
     currentRound: session.currentRound,
     totalWords: session.totalWords,
@@ -232,7 +277,73 @@ export async function getSessionSummary(sessionId: string): Promise<GameSessionS
 
 // ─── 上下文加载 ────────────────────────────────────────────────
 
-async function loadGameContext(projectId: string, nodeId: string, session: any): Promise<GameSessionContext> {
+async function loadGameContext(session: any): Promise<GameSessionContext> {
+  // ── 游戏本（Saga）路径：不绑小说章节，章纲/正文来自 GameSagaChapter，
+  //    角色/世界书等长期资产在派生本下实时取项目现值（跨模式共享），从零新建用前传快照。──
+  if (session.sagaChapterId && !session.nodeId) {
+    const [chapter, saga, states] = await Promise.all([
+      prisma.gameSagaChapter.findUnique({ where: { id: session.sagaChapterId } }),
+      prisma.gameSaga.findUnique({ where: { id: session.sagaId! } }),
+      prisma.gameState.findMany({
+        where: { sessionId: session.id },
+        orderBy: { round: "asc" },
+      }),
+    ]);
+    if (!chapter || !saga) throw new Error("游戏本或章节不存在");
+
+    let snap: any = {};
+    try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
+
+    const [characters, loreEntries] = saga.projectId
+      ? await Promise.all([
+          getApprovedCharacters(prisma, saga.projectId, { take: 20 }),
+          getApprovedLore(prisma, saga.projectId, { take: 15 }),
+        ])
+      : [
+          (snap.characters || []) as any[],
+          (snap.lore || []) as any[],
+        ];
+
+    // 合并实体（去重）
+    const entityMap = new Map<string, GameEntity>();
+    for (const s of states) {
+      for (const e of (s.entities as unknown as any[]) || []) {
+        if (!entityMap.has(e.name)) entityMap.set(e.name, e as GameEntity);
+      }
+    }
+    const latestItems: GameItem[] = states.length > 0
+      ? ((states[states.length - 1].items as unknown as any[]) || [])
+      : [];
+
+    return {
+      bookName: snap.bookName || saga.title,
+      chapterTitle: chapter.title,
+      outline: chapter.outline ?? null,
+      existingContent: (chapter.content || "").trim() || null,
+      characters: characters.map((c: any) => ({
+        name: c.name,
+        role: c.role,
+        currentStatus: c.currentStatus,
+        briefDescription: c.background?.slice(0, 100) || "",
+      })),
+      worldLore: loreEntries.map((l: { title: string; content: string }) => ({ title: l.title, content: l.content })),
+      previousTurns: states.map((s: { round: number; playerAction: string; narrative: string }) => ({
+        round: s.round,
+        playerAction: s.playerAction,
+        narrative: s.narrative,
+      })),
+      entities: Array.from(entityMap.values()),
+      items: latestItems,
+      currentRound: session.currentRound,
+      totalWords: session.totalWords,
+      maxWords: session.maxWords,
+      plotProgress: session.plotProgress,
+    };
+  }
+
+  // ── 章节节点路径（小说项目内开游戏，原逻辑）──
+  const projectId = session.projectId as string;
+  const nodeId = session.nodeId as string;
   const [project, node, characters, loreEntries, states] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.storyNode.findUnique({ where: { id: nodeId } }),
@@ -316,9 +427,10 @@ export async function* processGameTurn(input: GameActionInput, signal?: AbortSig
     return;
   }
 
-  // FIX-3：按 nodeId 串行化同 node 的并发回合，避免两个并发请求都读到旧状态、
-  // 后写覆盖先写导致游戏状态（轮次/背包/实体）丢失。不同 node 之间仍并行。
-  yield* withNodeLockGen(session.nodeId, () => runLockedTurn(input, signal, session));
+  // FIX-3：按 nodeId/saga 串行化同目标的并发回合，避免两个并发请求都读到旧状态、
+  // 后写覆盖先写导致游戏状态（轮次/背包/实体）丢失。不同目标之间仍并行。
+  const lockKey = session.nodeId ?? `saga:${session.sagaId}`;
+  yield* withNodeLockGen(lockKey, () => runLockedTurn(input, signal, session));
 }
 
 /**
@@ -340,7 +452,7 @@ async function* runLockedTurn(
   wordCount?: number;
   error?: string;
 }> {
-  const ctx = await loadGameContext(session.projectId, session.nodeId, session);
+  const ctx = await loadGameContext(session);
 
   // 2. 组装提示词
   const systemPrompt = buildGameSystemPrompt(ctx);
@@ -597,7 +709,14 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
  * 这样「开始游戏」期间前端即可实时看到开场叙事逐字流出，不再空等整段生成完。
  */
 export async function* processGameStart(
-  input: { projectId: string; nodeId: string; concept?: string | null },
+  input: {
+    projectId?: string;
+    nodeId?: string;
+    /** 游戏本（Saga）模式：与 nodeId 二选一 */
+    sagaId?: string;
+    sagaChapterId?: string;
+    concept?: string | null;
+  },
   signal?: AbortSignal
 ): AsyncGenerator<{
   type: string;
@@ -614,33 +733,77 @@ export async function* processGameStart(
   currentRound?: number;
   error?: string;
 }> {
-  // 1. 创建或重置会话
-  const session = await resetGameSession(input.projectId, input.nodeId);
+  // 1. 创建或重置会话（双模式：小说章节 node / 游戏本 sagaChapter）
+  const isSaga = !!(input.sagaId && input.sagaChapterId);
+  const session = isSaga
+    ? await resetSagaChapterSession(input.sagaId!, input.sagaChapterId!)
+    : await resetGameSession(input.projectId!, input.nodeId!);
 
-  // 2. 加载上下文
-  const [project, node, characters, loreEntries] = await Promise.all([
-    prisma.project.findUnique({ where: { id: input.projectId } }),
-    prisma.storyNode.findUnique({ where: { id: input.nodeId } }),
-    getApprovedCharacters(prisma, input.projectId, { take: 20 }),
-    getApprovedLore(prisma, input.projectId, { take: 15 }),
-  ]);
+  // 2. 加载上下文（双模式）
+  let bookName: string;
+  let chapterTitle: string;
+  let chapterOutline: string | null;
+  let existingContent: string;
+  let characters: Array<{ name: string; role: string; currentStatus: string; background?: string }>;
+  let loreEntries: Array<{ title: string; content: string }>;
 
-  if (!project || !node) {
-    yield { type: "error", error: "项目或章节不存在" };
-    return;
-  }
-  // #123 软删防复活：已移入回收站的节点不允许开始游戏，避免污染 tombstone
-  if (node.deletedAt) {
-    yield { type: "error", error: "该节点已被删除（回收站），无法开始游戏。如需操作请先从回收站恢复" };
-    return;
+  if (isSaga) {
+    const [chapter, saga] = await Promise.all([
+      prisma.gameSagaChapter.findUnique({ where: { id: input.sagaChapterId! } }),
+      prisma.gameSaga.findUnique({ where: { id: input.sagaId! } }),
+    ]);
+    if (!chapter || !saga) {
+      yield { type: "error", error: "游戏本或章节不存在" };
+      return;
+    }
+    let snap: any = {};
+    try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
+    // 长期资产：派生本实时取项目角色卡/世界书（跨模式共享）；从零新建用前传快照
+    const assets = saga.projectId
+      ? await Promise.all([
+          getApprovedCharacters(prisma, saga.projectId, { take: 20 }),
+          getApprovedLore(prisma, saga.projectId, { take: 15 }),
+        ])
+      : [
+          (snap.characters || []) as any[],
+          (snap.lore || []) as any[],
+        ];
+    bookName = snap.bookName || saga.title;
+    chapterTitle = chapter.title;
+    chapterOutline = chapter.outline ?? null;
+    existingContent = (chapter.content || "").trim();
+    characters = assets[0];
+    loreEntries = assets[1];
+  } else {
+    const [project, node, nodeCharacters, nodeLore] = await Promise.all([
+      prisma.project.findUnique({ where: { id: input.projectId! } }),
+      prisma.storyNode.findUnique({ where: { id: input.nodeId! } }),
+      getApprovedCharacters(prisma, input.projectId!, { take: 20 }),
+      getApprovedLore(prisma, input.projectId!, { take: 15 }),
+    ]);
+
+    if (!project || !node) {
+      yield { type: "error", error: "项目或章节不存在" };
+      return;
+    }
+    // #123 软删防复活：已移入回收站的节点不允许开始游戏，避免污染 tombstone
+    if (node.deletedAt) {
+      yield { type: "error", error: "该节点已被删除（回收站），无法开始游戏。如需操作请先从回收站恢复" };
+      return;
+    }
+    bookName = project.name;
+    chapterTitle = node.title;
+    chapterOutline = node.outline ?? null;
+    existingContent = (node.content || "").trim();
+    characters = nodeCharacters;
+    loreEntries = nodeLore;
   }
 
   // 3. 组装起始提示词
-  const existingContent = (node.content || "").trim();
   const ctx = {
-    bookName: project.name,
-    chapterTitle: node.title,
-    outline: node.outline ?? null,
+    bookName,
+    chapterTitle,
+    outline: chapterOutline,
     existingContent: existingContent || null,
     characters: characters.map((c: { name: string; role: string; currentStatus: string; background?: string }) => ({
       name: c.name,
@@ -661,8 +824,8 @@ export async function* processGameStart(
   const systemPrompt = buildGameSystemPrompt(ctx);
   const userPrompt = existingContent
     ? `【开始游戏】本章已有正文 ${existingContent.length} 字。请从现有正文的结尾自然续接，为游戏开场：简短承接上一段情节，然后给出 3-4 个编号选项让玩家选择接下来的行动。`
-    : node.outline
-      ? `【开始游戏】根据章纲，为本章写一个开场。从"${node.outline.slice(0, 80)}..."开始，生成精彩的入场叙事。记住在叙事结束后给出 3-4 个编号选项。`
+    : chapterOutline
+      ? `【开始游戏】根据章纲，为本章写一个开场。从"${chapterOutline.slice(0, 80)}..."开始，生成精彩的入场叙事。记住在叙事结束后给出 3-4 个编号选项。`
       : `【开始游戏】为本章写一个精彩的开场。描述场景、氛围和角色的初始状态，然后给出 3-4 个编号选项。`;
 
   const finalUserPrompt = input.concept
@@ -737,7 +900,10 @@ export async function* processGameStart(
   }
 
   for (const item of initialItems) {
-    await ensureItemLorebook(session.projectId, item.name, item.owner || "主角");
+    // 世界卡物品联动：仅派生本（有项目）联动；从零新建无项目可挂
+    if (session.projectId) {
+      await ensureItemLorebook(session.projectId, item.name, item.owner || "主角");
+    }
   }
 
   // 用户中途停止：丢弃本轮，不提交空会话态
@@ -795,8 +961,10 @@ export async function* processGameStart(
  * 5. 标记会话完成
  */
 export async function endGameAndExport(sessionId: string): Promise<{
-  nodeId: string;
-  projectId: string;
+  nodeId: string | null;
+  projectId: string | null;
+  /** 游戏本（Saga）模式：归档目标章节 */
+  sagaChapterId: string | null;
   finalContent: string;
   totalWords: number;
   status: string;
@@ -811,12 +979,15 @@ export async function endGameAndExport(sessionId: string): Promise<{
     include: {
       states: { orderBy: { round: "asc" } },
       node: true,
+      sagaChapter: true,
     },
   });
   if (!session) throw new Error("游戏会话不存在");
   if (session.status !== "active") throw new Error("游戏已结束");
+
+  const isSaga = !!(session.sagaChapterId && !session.nodeId);
   // #123 软删防复活：已移入回收站的节点不允许导出游戏叙事，避免污染 tombstone
-  if (session.node?.deletedAt) {
+  if (!isSaga && session.node?.deletedAt) {
     throw new Error("该节点已被删除（回收站），无法导出游戏。如需操作请先从回收站恢复");
   }
 
@@ -826,7 +997,10 @@ export async function endGameAndExport(sessionId: string): Promise<{
   // 关键：必须以「作者进入游戏时刻」的原正文快照（session.originalContentSnapshot）为前置，
   // 而非实时 session.node.content —— 后者在首次导出后已被改写为「原正文+游戏轮次」，
   // 若再次导出会把它当成原正文重复前置，造成堆叠损坏。快照跨 reset 复用，保证多次导出前置同一份原正文。
-  const originalContent = session.originalContentSnapshot || session.node?.content || "";
+  // saga 模式：前置 = 游戏本章收束前的既有正文（chapter.content，会话创建时已快照同值）。
+  const originalContent = isSaga
+    ? session.sagaChapter?.content || session.originalContentSnapshot || ""
+    : session.originalContentSnapshot || session.node?.content || "";
   const existingNarrative = [
     originalContent,
     ...session.states.map((s) => s.narrative),
@@ -835,7 +1009,9 @@ export async function endGameAndExport(sessionId: string): Promise<{
     .join("\n\n");
 
   // 2. 检查章尾悬念钩子
-  const outline = session.node.outline;
+  const outline = isSaga
+    ? session.sagaChapter?.outline ?? null
+    : session.node?.outline ?? null;
   let endingHook: string | null = null;
   if (outline) {
     // 匹配 【章尾悬念】：... 或 - **【章尾悬念】**：...
@@ -897,66 +1073,87 @@ export async function endGameAndExport(sessionId: string): Promise<{
   const finalContent = (existingNarrative + "\n\n" + endingNarrative).trim();
   const finalWordCount = finalContent.length;
 
-  // 5. 轻确认导出：与正式章节确认流程完全统一（Round1 遗留边界 #519）
-  // 先评估质量分并落 drafting（不污染下游、不预置"接受"），
-  // 再按项目「智能审阅」开关走自动确认：开启且达标→applyConfirm（confirmed+自动填表+reviewLogs），
-  // 否则维持 drafting，由用户在确认栏手动定稿。质量分回写供 MonitorPanel 看板可见。
-  const nodeForConfirm = session.node;
-  const el = evaluateConfirmEligibility(
-    { content: finalContent, qualityScore: null },
-    [],
-    true,
-  );
-  const proj = await prisma.project.findUnique({
-    where: { id: session.projectId },
-    select: { autoConfirmEnabled: true },
-  });
-  const autoConfirmOn = proj?.autoConfirmEnabled ?? true;
-
-  // FIX-4 乐观并发校验：导出写回前确认本节点自会话开始以来没被并发修改，
-  // 变了就中止导出（抛错由 /api/game/end 路由收敛为错误响应），避免覆盖并发编辑。
-  try {
-    await assertNodeUnchanged(prisma as any, session.nodeId, {
-      revisionCount: session.node?.revisionCount,
-      updatedAt: session.node?.updatedAt,
-    });
-  } catch (oe) {
-    if (oe instanceof OptimisticLockError) {
-      throw new OptimisticLockError(
-        `游戏导出中止：章节在游戏进行期间被并发修改（${oe.message}），为避免覆盖你的编辑，已取消本次导出。`
-      );
-    }
-    throw oe;
-  }
-
-  await prisma.storyNode.update({
-    where: { id: session.nodeId },
-    data: {
-      content: finalContent,
-      wordCount: finalWordCount,
-      status: STATUS_DRAFTING,
-      qualityScore: el.score ?? null,
-    },
-  });
-
+  // 5. 落库（双模式）：
+  //  - node 模式：轻确认导出，与正式章节确认流程完全统一（Round1 遗留边界 #519）——
+  //    先评估质量分并落 drafting，再按项目「智能审阅」开关走自动确认（Round1 #519）。
+  //  - saga 模式：归档进 GameSagaChapter（content + archived）——游戏本是自足创作空间，
+  //    不碰小说项目任何数据；确认/定稿在游戏本自己的回流动作里做。
   let autoConfirmed = false;
   let autoFilled = false;
-  if (autoConfirmOn && el.eligible) {
-    try {
-      const fillMsg = await applyConfirm({
-        id: session.nodeId,
-        projectId: session.projectId,
+  let qualityScore: number | null = null;
+
+  if (isSaga) {
+    const el = evaluateConfirmEligibility(
+      { content: finalContent, qualityScore: null },
+      [],
+      true,
+    );
+    qualityScore = el.score ?? null;
+    await prisma.gameSagaChapter.update({
+      where: { id: session.sagaChapterId! },
+      data: {
         content: finalContent,
-        order: nodeForConfirm?.order ?? 0,
+        status: "archived",
+      },
+    });
+  } else {
+    const nodeId = session.nodeId!;
+    const nodeForConfirm = session.node;
+    const el = evaluateConfirmEligibility(
+      { content: finalContent, qualityScore: null },
+      [],
+      true,
+    );
+    qualityScore = el.score ?? null;
+    const proj = await prisma.project.findUnique({
+      where: { id: session.projectId! },
+      select: { autoConfirmEnabled: true },
+    });
+    const autoConfirmOn = proj?.autoConfirmEnabled ?? true;
+
+    // FIX-4 乐观并发校验：导出写回前确认本节点自会话开始以来没被并发修改，
+    // 变了就中止导出（抛错由 /api/game/end 路由收敛为错误响应），避免覆盖并发编辑。
+    try {
+      await assertNodeUnchanged(prisma as any, nodeId, {
+        revisionCount: session.node?.revisionCount,
+        updatedAt: session.node?.updatedAt,
       });
-      autoConfirmed = true;
-      // IMP-003：记录导出是否真的回填了设定库，供前端给出明确提示（避免静默改动世界观）
-      autoFilled = typeof fillMsg === "string" && fillMsg.includes("已执行");
-    } catch (acErr) {
-      console.error("[game-light-confirm] 自动确认失败，保持 drafting：", acErr);
+    } catch (oe) {
+      if (oe instanceof OptimisticLockError) {
+        throw new OptimisticLockError(
+          `游戏导出中止：章节在游戏进行期间被并发修改（${oe.message}），为避免覆盖你的编辑，已取消本次导出。`
+        );
+      }
+      throw oe;
     }
+
+    await prisma.storyNode.update({
+      where: { id: nodeId },
+      data: {
+        content: finalContent,
+        wordCount: finalWordCount,
+        status: STATUS_DRAFTING,
+        qualityScore: el.score ?? null,
+      },
+    });
+
+    if (autoConfirmOn && el.eligible) {
+      try {
+        const fillMsg = await applyConfirm({
+          id: nodeId,
+          projectId: session.projectId!,
+          content: finalContent,
+          order: nodeForConfirm?.order ?? 0,
+        });
+        autoConfirmed = true;
+        // IMP-003：记录导出是否真的回填了设定库，供前端给出明确提示（避免静默改动世界观）
+        autoFilled = typeof fillMsg === "string" && fillMsg.includes("已执行");
+      } catch (acErr) {
+        console.error("[game-light-confirm] 自动确认失败，保持 drafting：", acErr);
+      }
+    }
+    // 非自动确认或不达标 → 维持 drafting，由用户在确认栏手动定稿（与正式章节一致）
   }
-  // 非自动确认或不达标 → 维持 drafting，由用户在确认栏手动定稿（与正式章节一致）
 
   // 6. 标记会话完成
   await prisma.gameSession.update({
@@ -967,12 +1164,13 @@ export async function endGameAndExport(sessionId: string): Promise<{
   return {
     nodeId: session.nodeId,
     projectId: session.projectId,
+    sagaChapterId: session.sagaChapterId,
     finalContent,
     totalWords: finalWordCount,
-    status: autoConfirmed ? STATUS_CONFIRMED : STATUS_DRAFTING,
+    status: isSaga ? "archived" : autoConfirmed ? STATUS_CONFIRMED : STATUS_DRAFTING,
     autoConfirmed,
     autoFilled,
-    qualityScore: el.score ?? null,
+    qualityScore,
     originalContent,
   };
 }

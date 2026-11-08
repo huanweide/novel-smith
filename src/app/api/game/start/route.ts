@@ -14,9 +14,12 @@ import { safeJson } from "@/lib/api-body";
 export async function POST(req: Request) {
   const r = await safeJson(req);
   if (!r.ok) return r.response;
-  const { projectId, nodeId, concept } = r.body;
-  if (!projectId || !nodeId) {
-    return NextResponse.json({ error: "缺少 projectId 或 nodeId" }, { status: 400 });
+  const { projectId, nodeId, sagaId, sagaChapterId, concept } = r.body;
+  // 双模式：小说章节（projectId+nodeId）或游戏本章节（sagaId+sagaChapterId）二选一
+  if (sagaId && sagaChapterId) {
+    // saga 模式，参数齐备
+  } else if (!projectId || !nodeId) {
+    return NextResponse.json({ error: "缺少 projectId/nodeId 或 sagaId/sagaChapterId" }, { status: 400 });
   }
 
   // 本地 abort：前端停止时透传到引擎，真正中断 LLM 流
@@ -36,7 +39,10 @@ export async function POST(req: Request) {
       };
 
       try {
-        const gen = processGameStart({ projectId, nodeId, concept }, ac.signal);
+        const gen = processGameStart(
+          sagaId && sagaChapterId ? { sagaId, sagaChapterId, concept } : { projectId, nodeId, concept },
+          ac.signal
+        );
         for await (const event of gen) {
           write(event);
           if (event.type === "error") break;

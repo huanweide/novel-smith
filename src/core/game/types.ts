@@ -142,8 +142,11 @@ export interface GameSessionContext {
 
 export interface GameSessionSummary {
   id: string;
-  projectId: string;
-  nodeId: string;
+  projectId: string | null;
+  nodeId: string | null;
+  /** 游戏本（Saga）关联：node 会话为 null */
+  sagaId?: string | null;
+  sagaChapterId?: string | null;
   status: string;
   currentRound: number;
   totalWords: number;
