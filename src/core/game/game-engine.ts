@@ -16,7 +16,8 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 import { getEffectiveConfig, createLLMClient } from "@/core/llm/client";
 import { evaluateConfirmEligibility, applyConfirm } from "@/core/confirm-guard";
 import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING } from "@/core/story-status";
-import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, isConfrontationalAction, rollTier, buildRollDirective } from "./game-prompts";
+import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, isConfrontationalAction } from "./game-prompts";
+import { arbitrateRoll, computeAdjustments, nextRollStats, judgeRoll, rateLabel, type RollStats } from "./roll-arbiter";
 import type { GameActionInput, GameTurnOutput, GameSessionContext, GameEntity, GameItem, GameOption, GameSessionSummary } from "./types";
 
 // 物品变动输入（含可选 owner，用于背包按 name+owner 隔离，阿游 P1）。
@@ -411,10 +412,12 @@ export async function* processGameTurn(input: GameActionInput, signal?: AbortSig
   itemChanges?: { operation: string; name: string; quantity: number }[];
   plotProgress?: number;
   wordCount?: number;
-  /** P0-4 跑团检定：骰面事件 */
+  /** P0-4 跑团检定：骰面事件（含检定官明细） */
   d100?: number;
   tier?: string;
   label?: string;
+  successRate?: number;
+  reasons?: string[];
   error?: string;
 }> {
   // 1. 加载会话和上下文
@@ -454,10 +457,12 @@ async function* runLockedTurn(
   itemChanges?: { operation: string; name: string; quantity: number }[];
   plotProgress?: number;
   wordCount?: number;
-  /** P0-4 跑团检定：骰面事件 */
+  /** P0-4 跑团检定：骰面事件（含检定官明细） */
   d100?: number;
   tier?: string;
   label?: string;
+  successRate?: number;
+  reasons?: string[];
   error?: string;
 }> {
   const ctx = await loadGameContext(session);
@@ -495,24 +500,61 @@ async function* runLockedTurn(
   }
   const userPromptBase = buildActionPrompt({ ...input, selectedOptionText });
 
-  // 骰子检定（P0-4）：saga 跑团模式下，对抗类行动先掷骰定结果，AI 只演不判。
-  // 骰结果先 yield 给前端（骰面动画/结果卡），再作为硬约束注入 prompt。
+  // 骰子检定（P0-4 + 检定官进阶）：saga 跑团模式下，对抗类行动先由检定官裁定
+  // 动态成功率（能力对比/情境修正/连胜连败/重复惩罚），再掷 d100 定结果，AI 只演不判。
   let rollBlock = "";
   if (session.sagaId) {
     const sagaRoll = await prisma.gameSaga.findUnique({
       where: { id: session.sagaId },
-      select: { rollMode: true },
+      select: { rollMode: true, rollStats: true, playAsName: true, projectId: true },
     });
     if (sagaRoll?.rollMode === "tabletop" && isConfrontationalAction(input.actionType, input.actionText)) {
+      // 行动指纹（重复检测）
+      const actionKey = `${input.actionType}|${(input.actionText || "").slice(0, 40)}|${input.target ?? ""}`;
+      const prevStats: RollStats = (sagaRoll.rollStats as any) || { winStreak: 0, loseStreak: 0, lastKey: "", repeatCount: 0 };
+      const adjustments = computeAdjustments(prevStats, actionKey);
+
+      // 检定官上下文：角色能力要点 + 装备 + 最近叙事
+      const personaBrief = personaBlock
+        ? personaBlock.slice(0, 400) // 契约块里已含扮演角色要点
+        : (ctx.characters.find((c) => c.role === "protagonist")?.briefDescription ?? "");
+      const itemsBrief = ctx.items.map((i) => `${i.name}×${i.quantity}${i.equipped ? "（已装备）" : ""}`).join("、");
+      const recentNarrative = ctx.previousTurns.slice(-2).map((t) => t.narrative).join("\n") || ctx.existingContent?.slice(-400) || "";
+
+      const verdict = await arbitrateRoll({
+        actionText: input.actionText,
+        actionType: input.actionType,
+        target: input.target,
+        personaBrief,
+        recentNarrative,
+        itemsBrief,
+        adjustments,
+      });
+
       const d100 = 1 + Math.floor(Math.random() * 100);
-      const tier = rollTier(d100);
-      rollBlock = buildRollDirective(d100, tier);
+      const judged = judgeRoll(d100, verdict.finalRate);
+      rollBlock = [
+        `\n\n【骰子判定（既定结果，必须如实演绎，不得更改）】`,
+        `检定：d100=${d100}，成功率=${verdict.finalRate}%（${rateLabel(verdict.finalRate)}）→ ${judged.label}。`,
+        verdict.reasons.length > 0 ? `难度依据：${verdict.reasons.join("；")}。` : `裁定：${verdict.note}。`,
+        `要求：${judged.key === "critical_success" ? "超预期达成，并有意外之喜" : judged.key === "success" ? "顺利达成" : judged.key === "partial" ? "达成目的但付出可见代价（受伤/暴露/结怨/损失）" : judged.key === "fail" ? "行动受阻、被阻止或被反制" : "严重受挫且出人意料（如当场被识破/反被制服/弄巧成拙）"}。把结果演成有趣的故事，不要生硬宣布成败。`,
+      ].join("");
+
       yield {
         type: "roll",
         d100,
-        tier: tier.key,
-        label: tier.label,
+        tier: judged.key,
+        label: judged.label,
+        successRate: verdict.finalRate,
+        reasons: verdict.reasons,
       };
+
+      // 更新动态状态（防退化三件套的记忆）
+      const nextStats = nextRollStats(prevStats, actionKey, judged.success);
+      await prisma.gameSaga.update({
+        where: { id: session.sagaId },
+        data: { rollStats: nextStats as any },
+      }).catch(() => {});
     }
   }
   const userPrompt = personaAnchor + userPromptBase + rollBlock;

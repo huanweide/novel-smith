@@ -55,8 +55,8 @@ function SagaDetailInner() {
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterOutline, setChapterOutline] = useState("");
   const [showNewChapter, setShowNewChapter] = useState(false);
-  // 骰子结果卡（跑团模式，P0-4）
-  const [rollInfo, setRollInfo] = useState<{ d100: number; label: string } | null>(null);
+  // 骰子结果卡（跑团模式，P0-4 + 检定官明细）
+  const [rollInfo, setRollInfo] = useState<{ d100: number; label: string; successRate?: number; reasons?: string[] } | null>(null);
   const streamRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -93,7 +93,7 @@ function SagaDetailInner() {
             streamedText += event.content || "";
             setStreamed(streamedText);
           } else if (event.type === "roll") {
-            setRollInfo({ d100: event.d100, label: event.label });
+            setRollInfo({ d100: event.d100, label: event.label, successRate: event.successRate, reasons: event.reasons });
           } else if (event.type === "start_done" || event.type === "game_done") {
             done = event;
           } else if (event.type === "error") {
@@ -422,8 +422,11 @@ function SagaDetailInner() {
                   第 {activeChapter.index} 章 · {activeChapter.title}
                 </p>
                 {rollInfo && (
-                  <span className="rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]" title="跑团检定结果（既定，AI 只演不判）">
-                    🎲 d100={rollInfo.d100} · {rollInfo.label}
+                  <span
+                    className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
+                    title={`检定：d100=${rollInfo.d100}，成功率=${rollInfo.successRate ?? "?"}%（${(rollInfo.reasons || []).join("；")}）——结果既定，AI 只演不判`}
+                  >
+                    🎲 d100={rollInfo.d100} / 成功率{rollInfo.successRate ?? "?"}% · {rollInfo.label}
                   </span>
                 )}
                 {status === "playing" && (
