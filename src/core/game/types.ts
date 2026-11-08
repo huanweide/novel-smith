@@ -94,6 +94,7 @@ export interface GameActionInput {
   selectedOption?: number;  // 如果选了编号选项
   selectedOptionText?: string; // 上一轮选项对应的文本（承接分支用，由引擎从 states 补全）
   targetItem?: string;      // 如果用物品，目标物品名
+  target?: string;          // 行动目标：本次交互针对的角色/生物/势力/物品名（目标指定，阿游 R-目标）
 }
 
 // ─── AI 回合输出 ──────────────────────────────────────────────

@@ -14,7 +14,7 @@ import type { GameActionType } from "@/core/game/types";
 import { sseError } from "@/lib/sse-error";
 
 export async function POST(req: Request) {
-  const { sessionId, actionType, actionText, selectedOption, targetItem } =
+  const { sessionId, actionType, actionText, selectedOption, targetItem, target } =
     await req.json();
 
   if (!sessionId) {
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
             actionText: actionText || "自定义行动",
             selectedOption,
             targetItem,
+            target,
           },
           req.signal
         );

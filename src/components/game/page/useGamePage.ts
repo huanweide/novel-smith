@@ -57,6 +57,32 @@ export function useGamePage() {
     try { return localStorage.getItem("nf-game-tutorial-seen") !== "1"; } catch { return true; }
   });
   const [lorebook, setLorebook] = useState<any[]>([]);
+  // 目标指定（阿游 R-目标）：本次行动针对的角色/生物/势力/物品；候选 = 角色卡 + 游戏实体 + 背包
+  const [gameCharacters, setGameCharacters] = useState<Array<{ name: string; role: string }>>([]);
+  const [actionTarget, setActionTarget] = useState("");
+  // 自定义行动语义（跑团化）：玩家自己的快捷语义 chips，localStorage 持久化，最多 8 个
+  const [customActions, setCustomActions] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("nf-game-custom-actions") || "[]");
+      return Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).slice(0, 8) : [];
+    } catch { return []; }
+  });
+  const addCustomAction = useCallback((text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    setCustomActions((prev) => {
+      const next = prev.includes(t) ? prev : [...prev, t].slice(-8);
+      try { localStorage.setItem("nf-game-custom-actions", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const removeCustomAction = useCallback((text: string) => {
+    setCustomActions((prev) => {
+      const next = prev.filter((x) => x !== text);
+      try { localStorage.setItem("nf-game-custom-actions", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   // 结束导出「影子确认」浮层 + 自动定稿开关（从项目设置读取，确认浮层如实展示）
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [autoConfirmEnabled, setAutoConfirmEnabled] = useState(true);
@@ -212,6 +238,11 @@ export function useGamePage() {
 
       setNodeOutline(node.outline || null);
       setLorebook(projData.lorebookEntries || []);
+      setGameCharacters(
+        (projData.characters || [])
+          .filter((c: any) => c?.name)
+          .map((c: any) => ({ name: c.name, role: c.role || "" }))
+      );
       setTurns([]);
       setEndingNarrative("");
     } catch (err: any) {
@@ -372,7 +403,9 @@ export function useGamePage() {
   const handleAction = async (
     actionType: string,
     actionText: string,
-    selectedOption?: number
+    selectedOption?: number,
+    target?: string,
+    targetItem?: string
   ) => {
     if (!state.sessionId || state.status !== "playing") return;
 
@@ -389,6 +422,8 @@ export function useGamePage() {
           actionType,
           actionText,
           selectedOption,
+          target: target?.trim() || undefined,
+          targetItem: targetItem?.trim() || undefined,
         }),
         signal: controller.signal,
       });
@@ -477,6 +512,7 @@ export function useGamePage() {
           playerAction: actionText,
           actionType,
           narrative: doneData.narrative,
+          target: target?.trim() || undefined,
         },
       ]);
 
@@ -604,5 +640,5 @@ export function useGamePage() {
   const showStartScreen =
     state.status === "ready" || (state.status === "ended" && !state.narrative);
 
-  return { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen };
+  return { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, gameCharacters, actionTarget, setActionTarget, customActions, addCustomAction, removeCustomAction, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen };
 }

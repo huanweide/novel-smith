@@ -393,6 +393,12 @@
   background: rgba(255, 255, 255, 0.92);
   border-color: var(--nv-border-3);
 }
+/* Toast 实底化：白 92% 玻璃叠白卡片上边界消失（实测截图「堆叠看不清」），toast 需要更实底 + 重投影 */
+.light .surface-floating.toast-solid {
+  background: #fffdf8;
+  box-shadow: 0 18px 46px rgba(43, 39, 31, 0.22), 0 4px 14px rgba(43, 39, 31, 0.12);
+  border-color: var(--nv-border-3);
+}
 .light .glass-surface {
   background: rgba(255, 255, 255, 0.7);
   border-color: var(--nv-border-2);

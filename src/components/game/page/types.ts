@@ -27,4 +27,5 @@ export interface TurnRecord {
   playerAction: string;
   narrative: string;
   actionType?: string; // 操作类型徽标（开始/观察/对话/战斗/探索/使用物品/休息/选项/自定义）
+  target?: string;     // 行动目标（目标指定：本次行动针对的角色/物品名，阿游 R-目标）
 }

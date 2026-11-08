@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseGameOutput, buildMemorySummary } from "./game-prompts";
-import type { GameSessionContext } from "./types";
+import { parseGameOutput, buildMemorySummary, buildActionPrompt } from "./game-prompts";
+import type { GameActionInput, GameSessionContext } from "./types";
 
 // 验证游戏模式「背包物品归属」解析：CI| 格式带归属者字段。
 describe("parseGameOutput —— 背包物品归属", () => {
@@ -257,5 +257,38 @@ describe("buildMemorySummary —— 跨轮次记忆摘要（IMP-022）", () => {
       previousTurns: turns.slice(-6), // 全部落在最近 6 轮内
     });
     expect(empty).toBe("");
+  });
+});
+
+// 目标指定（阿游 R-目标）：玩家指定交互对象时注入【行动目标】头部。
+describe("buildActionPrompt —— 目标指定", () => {
+  const base: GameActionInput = {
+    sessionId: "s1",
+    actionType: "dialogue",
+    actionText: "对话",
+  };
+
+  it("有 target 时在 prompt 头部注入【行动目标】", () => {
+    const p = buildActionPrompt({ ...base, target: "林振山" });
+    expect(p).toContain("【行动目标】本次行动针对：林振山");
+    expect(p).toContain("【对话】");
+    // 目标注入必须在行动模板之前
+    expect(p.indexOf("【行动目标】")).toBeLessThan(p.indexOf("【对话】"));
+  });
+
+  it("无 target / 空白 target 时不注入", () => {
+    expect(buildActionPrompt({ ...base })).not.toContain("【行动目标】");
+    expect(buildActionPrompt({ ...base, target: "   " })).not.toContain("【行动目标】");
+  });
+
+  it("target 与自定义文本同时存在：两者都保留", () => {
+    const p = buildActionPrompt({ ...base, actionType: "custom", actionText: "质问钥匙来历", target: "林振山" });
+    expect(p).toContain("【行动目标】本次行动针对：林振山");
+    expect(p).toContain("质问钥匙来历");
+  });
+
+  it("target 与承接选项前缀共存：目标在最前", () => {
+    const p = buildActionPrompt({ ...base, selectedOption: 2, selectedOptionText: "追问老头", target: "老头" });
+    expect(p.indexOf("【行动目标】")).toBeLessThan(p.indexOf("（承接上一轮"));
   });
 });

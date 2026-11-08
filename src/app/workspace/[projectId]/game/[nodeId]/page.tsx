@@ -34,7 +34,13 @@ import type { GameState, TurnRecord } from "@/components/game/page/types";
 import { QUICK_ACTIONS, LEFT_TABS, RIGHT_TABS } from "@/components/game/page/constants";
 
 export default function GamePage() {
-  const { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen } = useGamePage();
+  const { params, router, projectId, nodeId, state, setState, customInput, setCustomInput, turns, setTurns, rightTab, setRightTab, leftTab, setLeftTab, endingNarrative, setEndingNarrative, showOutlineEditor, setShowOutlineEditor, nodeOutline, setNodeOutline, showTutorial, setShowTutorial, lorebook, setLorebook, gameCharacters, actionTarget, setActionTarget, customActions, addCustomAction, removeCustomAction, showEndConfirm, setShowEndConfirm, autoConfirmEnabled, setAutoConfirmEnabled, leftDrawerOpen, setLeftDrawerOpen, rightDrawerOpen, setRightDrawerOpen, leftDrawerRef, rightDrawerRef, leftDrawerTitleId, rightDrawerTitleId, streamRef, autoAdvance, setAutoAdvance, autoAdvanceRef, autoTimerRef, statusRef, particlesRef, discoveryIdRef, discoveries, setDiscoveries, concept, setConcept, conceptLoading, setConceptLoading, conceptError, setConceptError, gameTheme, setGameTheme, denoise, setDenoise, paused, setPaused, newItemKeys, setNewItemKeys, newItemKeysRef, trades, setTrades, tradeIdRef, audioCtxRef, backpackFilter, setBackpackFilter, playItemChime, flagNewItems, flagTrades, initGame, fireDiscoveries, handleConcept, handleStart, reconcileWithBackend, handleAction, handleStop, handleEnd, handleBack, compareState, compareBusy, handleCompareKeep, closeCompare, showStartScreen } = useGamePage();
+
+  // 目标指定选择器开关（阿游 R-目标：行动针对角色/物品）
+  const [showTargetPicker, setShowTargetPicker] = useState(false);
+  // 自定义语义输入（跑团化：玩家自定义快捷动作 chips）
+  const [showCustomActionInput, setShowCustomActionInput] = useState(false);
+  const [customActionDraft, setCustomActionDraft] = useState("");
 
   // ── 加载状态 ────────────────────────────────────────────
   if (state.status === "loading") {
@@ -535,7 +541,7 @@ export default function GamePage() {
                       <button
                         key={opt.index}
                         onClick={() =>
-                          handleAction("option", `选择：${opt.text}`, opt.index)
+                          handleAction("option", `选择：${opt.text}`, opt.index, actionTarget || undefined)
                         }
                         className="group flex w-full items-start gap-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-4 py-3 text-left text-sm text-[var(--nv-text-secondary)] transition-all hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] active:scale-[0.98]"
                       >
@@ -646,15 +652,20 @@ export default function GamePage() {
                       const consumables = visibleItems.filter(
                         (i) => i.category === "consumable" || i.category === "other"
                       );
-                      const equipment = state.items.filter(
+                      // FIX：装备/任务/货币同样只在过滤后的 visibleItems 内取（原先用全量 state.items，
+                      // 「角色物品」tab 下这三组会漏出未归属物品）
+                      const equipment = visibleItems.filter(
                         (i) => i.category === "equipment"
                       );
-                      const questItems = state.items.filter(
+                      const questItems = visibleItems.filter(
                         (i) => i.category === "quest"
                       );
-                      const currency = state.items.filter(
+                      const currency = visibleItems.filter(
                         (i) => i.category === "currency"
                       );
+                      // 道具刻印行动（跑团化）：背包物品一键作为「使用物品」行动发送
+                      const useItem = (i: GameItem, verb: "使用" | "装备") =>
+                        handleAction("use_item", `${verb}：${i.name}`, undefined, actionTarget || undefined, i.name);
                       return (
                         <>
                           {consumables.length > 0 && (
@@ -665,15 +676,25 @@ export default function GamePage() {
                               {consumables.map((i, idx) => (
                                 <div
                                   key={idx}
-                                  className={`rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}
+                                  className={`group flex items-center justify-between gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}
                                 >
-                                  <span className="text-[var(--nv-text-primary)]">{i.name}</span>
-                                  <span className="ml-2 text-[var(--nv-creative)]">
-                                    ×{i.quantity}
-                                  </span>
-                                  <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">
-                                    {i.source}{i.owner ? ` · 归属：${i.owner}` : ""}
-                                  </p>
+                                  <div className="min-w-0">
+                                    <span className="text-[var(--nv-text-primary)]">{i.name}</span>
+                                    <span className="ml-2 text-[var(--nv-creative)]">
+                                      ×{i.quantity}
+                                    </span>
+                                    <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">
+                                      {i.source}{i.owner ? ` · 归属：${i.owner}` : ""}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => useItem(i, "使用")}
+                                    disabled={state.status !== "playing"}
+                                    title={`作为行动使用「${i.name}」`}
+                                    className="shrink-0 rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    使用
+                                  </button>
                                 </div>
                               ))}
                             </>
@@ -686,15 +707,25 @@ export default function GamePage() {
                               {equipment.map((i, idx) => (
                                 <div
                                   key={idx}
-                                  className={`rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}
+                                  className={`group flex items-center justify-between gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}
                                 >
-                                  <span className="text-[var(--nv-text-primary)]">{i.name}</span>
-                                  <span className="ml-2 text-[var(--nv-success)]">
-                                    ×{i.quantity}
-                                  </span>
-                                  {i.owner && (
-                                    <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">归属：{i.owner}</p>
-                                  )}
+                                  <div className="min-w-0">
+                                    <span className="text-[var(--nv-text-primary)]">{i.name}</span>
+                                    <span className="ml-2 text-[var(--nv-success)]">
+                                      ×{i.quantity}
+                                    </span>
+                                    {i.owner && (
+                                      <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">归属：{i.owner}</p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => useItem(i, "装备")}
+                                    disabled={state.status !== "playing"}
+                                    title={`作为行动装备「${i.name}」`}
+                                    className="shrink-0 rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    {i.equipped ? "已装备" : "装备"}
+                                  </button>
                                 </div>
                               ))}
                             </>
@@ -907,13 +938,60 @@ export default function GamePage() {
       {/* ═══ 底部动作栏 ═══ */}
       {(state.status === "playing" || state.status === "generating") && (
         <footer className="relative z-10 border-t border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/80 px-4 py-3 backdrop-blur-sm">
+          {/* 目标指定条（阿游 R-目标）：为快捷动作/自定义输入/选项附加交互对象 */}
+          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2">
+            <div className="relative">
+              {actionTarget ? (
+                <span className="flex items-center gap-1.5 rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]">
+                  <Icon name="target" size={12} className="text-[var(--nv-creative)]" />
+                  目标：{actionTarget}
+                  <button
+                    onClick={() => setActionTarget("")}
+                    title="清除目标"
+                    className="ml-0.5 text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-danger)]"
+                  >
+                    <Icon name="x" size={11} />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setShowTargetPicker((v) => !v)}
+                  disabled={state.status !== "playing"}
+                  title="指定本次行动的交互对象（角色/物品）"
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--nv-border-2)] px-2.5 py-1 text-xs text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Icon name="target" size={12} /> 指定目标
+                </button>
+              )}
+              {showTargetPicker && !actionTarget && (
+                <div className="absolute bottom-full left-0 z-30 mb-2 w-64 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 shadow-xl">
+                  <TargetPicker
+                    characters={gameCharacters}
+                    entities={asArray<GameEntity>(state.entities)}
+                    items={asArray<GameItem>(state.items)}
+                    onPick={(name) => { setActionTarget(name); setShowTargetPicker(false); }}
+                    onClose={() => setShowTargetPicker(false)}
+                  />
+                </div>
+              )}
+            </div>
+            {actionTarget && (
+              <button
+                onClick={() => setShowTargetPicker((v) => !v)}
+                className="text-xs text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-text-secondary)]"
+              >
+                换目标
+              </button>
+            )}
+          </div>
+
           {/* 快捷动作按钮 */}
           <div className="mx-auto flex max-w-3xl gap-2">
             {QUICK_ACTIONS.map((action) => (
               <PointerGlow key={action.type} className="flex-1 rounded-xl">
                 <button
                   key={action.type}
-                  onClick={() => handleAction(action.type, action.label)}
+                  onClick={() => handleAction(action.type, action.label, undefined, actionTarget || undefined)}
                   disabled={state.status !== "playing"}
                   title={action.desc}
                   className="group flex w-full flex-col items-center gap-1 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-1 py-2.5 text-[var(--nv-text-secondary)] transition-all hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
@@ -925,6 +1003,73 @@ export default function GamePage() {
             ))}
           </div>
 
+          {/* 自定义语义 chips（跑团化）：玩家自己的快捷动作，点击即作为自定义行动发送 */}
+          {(customActions.length > 0 || showCustomActionInput) && (
+            <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-1.5">
+              {customActions.map((ca) => (
+                <span key={ca} className="group flex items-center gap-1 rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] py-1 pl-2.5 pr-1 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)]">
+                  <button
+                    onClick={() => handleAction("custom", ca, undefined, actionTarget || undefined)}
+                    disabled={state.status !== "playing"}
+                    title={`自定义行动：${ca}`}
+                    className="disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {ca}
+                  </button>
+                  <button
+                    onClick={() => removeCustomAction(ca)}
+                    title="删除该语义"
+                    className="text-[var(--nv-text-muted)] opacity-0 transition-opacity hover:text-[var(--nv-danger)] group-hover:opacity-100"
+                  >
+                    <Icon name="x" size={10} />
+                  </button>
+                </span>
+              ))}
+              <button
+                onClick={() => setShowCustomActionInput((v) => !v)}
+                disabled={state.status !== "playing"}
+                title="添加自定义行动语义（如：偷袭、说服、讨要物品）"
+                className="rounded-full border border-dashed border-[var(--nv-border-3)] px-2.5 py-1 text-xs text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                + 语义
+              </button>
+              {showCustomActionInput && (
+                <input
+                  autoFocus
+                  type="text"
+                  value={customActionDraft}
+                  onChange={(e) => setCustomActionDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customActionDraft.trim()) {
+                      addCustomAction(customActionDraft.trim());
+                      setCustomActionDraft("");
+                      setShowCustomActionInput(false);
+                    } else if (e.key === "Escape") {
+                      setShowCustomActionInput(false);
+                      setCustomActionDraft("");
+                    }
+                  }}
+                  onBlur={() => { setShowCustomActionInput(false); setCustomActionDraft(""); }}
+                  placeholder="输入语义后回车（如：偷袭）"
+                  maxLength={20}
+                  className="w-44 rounded-full border border-[var(--nv-creative-soft)] bg-[var(--nv-surface-2)] px-3 py-1 text-xs text-[var(--nv-text-primary)] outline-none placeholder:text-[var(--nv-text-muted)]"
+                />
+              )}
+            </div>
+          )}
+          {customActions.length === 0 && !showCustomActionInput && (
+            <div className="mx-auto mt-2 flex max-w-3xl">
+              <button
+                onClick={() => setShowCustomActionInput(true)}
+                disabled={state.status !== "playing"}
+                title="添加自定义行动语义（如：偷袭、说服、讨要物品）"
+                className="rounded-full border border-dashed border-[var(--nv-border-3)] px-2.5 py-1 text-xs text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                + 自定义语义
+              </button>
+            </div>
+          )}
+
           {/* 文本输入框 */}
           <div className="mx-auto mt-3 flex max-w-3xl gap-3">
             <input
@@ -933,16 +1078,16 @@ export default function GamePage() {
               onChange={(e) => setCustomInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && customInput.trim()) {
-                  handleAction("custom", customInput.trim());
+                  handleAction("custom", customInput.trim(), undefined, actionTarget || undefined);
                 }
               }}
-              placeholder="描述你想要的剧情发展，或输入角色的行动..."
+              placeholder={actionTarget ? `对「${actionTarget}」的行动…` : "描述你想要的剧情发展，或输入角色的行动..."}
               disabled={state.status !== "playing"}
               className="flex-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-4 py-2.5 text-sm text-[var(--nv-text-primary)] outline-none transition-colors placeholder:text-[var(--nv-text-muted)] focus:border-[var(--nv-creative-soft)] disabled:cursor-not-allowed disabled:opacity-40"
             />
             <button
               onClick={() => {
-                if (customInput.trim()) handleAction("custom", customInput.trim());
+                if (customInput.trim()) handleAction("custom", customInput.trim(), undefined, actionTarget || undefined);
               }}
               disabled={state.status !== "playing" || !customInput.trim()}
               className="nv-glow-strong btn-creative rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--nv-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
@@ -987,6 +1132,77 @@ export default function GamePage() {
           </button>
         </footer>
       )}
+    </div>
+  );
+}
+
+/**
+ * 目标选择器（阿游 R-目标）：从角色卡 / 场景实体 / 背包物品中选本次行动的交互对象。
+ * 纯展示组件：候选列表 + 点击回调，不含状态。
+ */
+function TargetPicker({
+  characters,
+  entities,
+  items,
+  onPick,
+  onClose,
+}: {
+  characters: Array<{ name: string; role: string }>;
+  entities: GameEntity[];
+  items: GameItem[];
+  onPick: (name: string) => void;
+  onClose: () => void;
+}) {
+  const seen = new Set<string>();
+  const groups: Array<{ label: string; entries: Array<{ name: string; hint: string }> }> = [];
+
+  const push = (label: string, name: string, hint: string) => {
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    let g = groups.find((x) => x.label === label);
+    if (!g) { g = { label, entries: [] }; groups.push(g); }
+    g.entries.push({ name, hint });
+  };
+
+  for (const c of characters.slice(0, 12)) push("角色卡", c.name, c.role || "");
+  const ENTITY_TYPES = new Set(["角色", "生物", "势力", "地点"]);
+  for (const e of entities.slice(0, 20)) {
+    if (ENTITY_TYPES.has(e.type || "") || (e.type || "").includes("角色") || (e.type || "").includes("生物")) {
+      push("场景实体", e.name, e.type || "其他");
+    }
+  }
+  for (const it of items.slice(0, 12)) push("背包物品", it.name, `×${it.quantity}`);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-medium text-[var(--nv-text-primary)]">选择行动目标</span>
+        <button onClick={onClose} className="text-[var(--nv-text-muted)] hover:text-[var(--nv-text-secondary)]" title="关闭">
+          <Icon name="x" size={12} />
+        </button>
+      </div>
+      <div className="max-h-52 space-y-2 overflow-y-auto">
+        {groups.length === 0 && (
+          <p className="py-2 text-xs text-[var(--nv-text-muted)]">暂无可选对象——先观察或探索，实体出现后可指定</p>
+        )}
+        {groups.map((g) => (
+          <div key={g.label}>
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-[var(--nv-text-muted)]">{g.label}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {g.entries.map((e) => (
+                <button
+                  key={`${g.label}-${e.name}`}
+                  onClick={() => onPick(e.name)}
+                  title={e.hint}
+                  className="rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+                >
+                  {e.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

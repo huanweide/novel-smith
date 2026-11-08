@@ -193,6 +193,7 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 8. 每轮更新情节进度（选项之前输出）：
    【情节进度：X%】
 9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
+10. 玩家的行动（尤其是自定义输入）只是「意图声明」，不是既定结果：你必须按剧情合理性、角色能力与当前处境裁决成败——可以失败、被阻止、被反制。明显违背常理或实力悬殊的意图（如凡人妄图一击灭敌、凭空杀人夺宝）不可直接兑现：让剧情给出合理的阻力或反制（如被对方轻松化解、反被制服），也可用幽默化解（如对方一个侧身躲开，把你当成玩笑）。不要生硬拒绝、不要中断叙事，让裁决本身成为有趣的故事。
 
 ## 写作风格要求
 - 每段叙事有明确的推进感，不做无效重复描写
@@ -363,6 +364,12 @@ export function buildActionPrompt(input: GameActionInput): string {
     prompt = `（承接上一轮，玩家选择了选项 ${input.selectedOption}：${input.selectedOptionText}）\n` + prompt;
   } else if (input.selectedOption != null) {
     prompt = `（承接上一轮，玩家选择了选项 ${input.selectedOption}）\n` + prompt;
+  }
+
+  // 目标指定（阿游 R-目标）：玩家明确指定了交互对象（角色/生物/势力/物品），
+  // 注入到 prompt 头部，让 AI 把该对象作为本轮行动的核心受者。
+  if (input.target && input.target.trim()) {
+    prompt = `【行动目标】本次行动针对：${input.target.trim()}。请围绕该对象展开叙事与反应（对方的回应、状态变化等）。\n` + prompt;
   }
 
   return prompt;

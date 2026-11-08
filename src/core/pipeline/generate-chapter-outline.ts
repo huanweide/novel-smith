@@ -24,6 +24,24 @@ import { formatDigest, formatStage } from "@/core/pipeline";
 import { completeText } from "@/core/llm/client";
 import { safeParseAIJson } from "@/lib/json-parser";
 
+/**
+ * 从 LLM 原始输出中提取纯章纲文本。
+ * json:true 下模型可能输出 JSON 信封（{"章纲":...} / {"outline":...} / {"role","content":...}），
+ * 按字段优先级提取；纯文本输出原样返回。导出供单测覆盖。
+ */
+export function extractOutlineText(raw: string): string {
+  const trimmed = (raw || "").trim();
+  const parsed = safeParseAIJson(trimmed);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    for (const key of ["章纲", "outline", "content"]) {
+      const v = obj[key];
+      if (typeof v === "string" && v.trim().length >= 10) return v.trim();
+    }
+  }
+  return trimmed;
+}
+
 export interface ChapterOutlineInput {
   projectId: string;
   nodeId: string;
@@ -285,6 +303,11 @@ ${charBriefs}
     console.error("[generate/chapter-outline] 章纲生成失败:", err);
     throw new OutlineError("llm", "服务器内部错误，请查看日志", err);
   }
+
+  // json:true 下模型可能把章纲包进 JSON 信封（如 {"role":"assistant","content":...,"章纲":...}）。
+  // 不解析会把整包 JSON 字符串存进 node.outline（实测 2026-11-08 批量写作端到端发现）。
+  // 提取优先级：章纲 > outline > content；均无或解析失败 → 按纯文本章纲使用原样返回。
+  outlineText = extractOutlineText(outlineText);
 
   if (!outlineText || outlineText.length < 10) {
     throw new OutlineError("empty", "模型返回空内容，请重试");

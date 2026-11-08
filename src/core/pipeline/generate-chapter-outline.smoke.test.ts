@@ -32,7 +32,7 @@ vi.mock("@/core/pipeline", () => ({ formatDigest: mocks.formatDigest, formatStag
 vi.mock("@/core/llm/client", () => ({ completeText: mocks.completeText }));
 vi.mock("@/lib/prisma", () => ({ prisma: mocks.prisma }));
 
-import { generateChapterOutline, OutlineError } from "./generate-chapter-outline";
+import { generateChapterOutline, OutlineError, extractOutlineText } from "./generate-chapter-outline";
 
 const LOAD_OK = {
   project: { name: "测试之书", genre: ["玄幻"], synopsis: "总纲", authorNote: "" },
@@ -61,5 +61,27 @@ describe("generateChapterOutline 冒烟（P1-8）", () => {
     expect(r.outline).toContain("林风");
     expect(r.selectedCharacters.some((c: any) => c.name === "林风")).toBe(true);
     expect(mocks.prisma.storyNode.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("json:true 下模型输出 JSON 信封 → extractOutlineText 提取「章纲」字段（2026-11-08 批量写作实测回归）", async () => {
+    const envelope = JSON.stringify({
+      role: "assistant",
+      content: "信封 content 版章纲，长度必须超过十个字才合格。",
+      章纲: "「章纲」字段版章纲，长度必须超过十个字才合格。",
+    });
+    expect(extractOutlineText(envelope)).toContain("「章纲」字段版章纲");
+  });
+
+  it("extractOutlineText：仅 content 字段时取 content；纯文本原样返回", () => {
+    const contentOnly = JSON.stringify({ role: "assistant", content: "这是 content 里的章纲，长度超过十个字。" });
+    expect(extractOutlineText(contentOnly)).toContain("content 里的章纲");
+    const plain = "纯文本章纲：林风踏入禁地，遭遇守护兽。";
+    expect(extractOutlineText(plain)).toBe(plain);
+  });
+
+  it("extractOutlineText：JSON 无有效字段 / 空输入 → 原样返回", () => {
+    const noField = JSON.stringify({ selected: ["林风"], reasoning: "选角输出混入" });
+    expect(extractOutlineText(noField)).toBe(noField);
+    expect(extractOutlineText("")).toBe("");
   });
 });
