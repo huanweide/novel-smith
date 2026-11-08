@@ -1,19 +1,26 @@
 "use client";
 
 /**
- * 游戏本详情（F6 跑团化 P0-1a + 两段式骰子）
- * 章节体系（一章一局）+ 轻量游戏循环（流式开场 / 选项 / 行动 / 收束归档）。
+ * 游戏本详情（F6 跑团化 P0-1a + 两段式骰子 + 完整游戏面板）
+ * 章节体系（一章一局）+ 游戏循环（流式开场 / 选项 / 行动 / 收束归档）。
  * 骰子两段式：对抗行动先掷骰（悬浮动画+可重骰），点「继续」才生成叙事——动画不阻塞页面操作。
+ *
+ * 面板移植（与旧游戏模式同源引擎，数据来自同一套 GameSession）：
+ * - 左栏：情节进度（轮次）/ 角色 / 势力
+ * - 右栏：正文进度 / 背包（四类分组+新物品高亮+音效+使用装备）/ 世界（世界观+世界书+章纲）
+ * - 及时演算：token 流中 NE|/CI| 标记实时解析，发现/物品变动即时上屏（不再等轮末）
  */
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Icon } from "@/components/ui/icons";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/States";
+import { Modal } from "@/components/ui/Modal";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { isConfrontationalAction } from "@/core/game/game-prompts";
-import GameParticles from "@/components/game/GameParticles";
+import { applyFrontendItemChanges } from "@/core/game/reconcile";
+import GameParticles, { type GameParticlesHandle } from "@/components/game/GameParticles";
 
 interface SagaChapter {
   id: string;
@@ -32,6 +39,8 @@ interface SagaDetail {
   title: string;
   projectId: string | null;
   sourceBookName: string | null;
+  synopsis: string;
+  loreEntries: Array<{ title: string; content: string }>;
   playAsCharacterId: string | null;
   playAsName: string | null;
   rollMode: string;
@@ -40,11 +49,42 @@ interface SagaDetail {
   chapters: SagaChapter[];
 }
 interface GameOption { index: number; text: string; }
+/** 背包物品（与引擎 applyItemChanges 产物同形） */
+interface GItem {
+  name: string;
+  quantity: number;
+  category?: string; // consumable | equipment | quest | currency | other
+  source?: string;
+  owner?: string;
+  equipped?: boolean;
+}
+/** 场景实体（角色/势力/地点/生物） */
+interface GEntity { name: string; type: string; description: string; }
+interface TurnRec { round: number; playerAction: string; }
 /** 两段式骰子浮层状态 */
 interface DiceState {
   rolling: boolean;
   result: { d100: number; label: string; successRate: number; reasons: string[]; rerollsLeft: number; rerollMax: number } | null;
 }
+
+const LEFT_TABS = [
+  { key: "plot", label: "情节", icon: "book" },
+  { key: "characters", label: "角色", icon: "user" },
+  { key: "factions", label: "势力", icon: "building" },
+] as const;
+const RIGHT_TABS = [
+  { key: "text", label: "正文", icon: "file" },
+  { key: "backpack", label: "背包", icon: "backpack" },
+  { key: "world", label: "世界", icon: "globe" },
+] as const;
+const QUICK_ACTIONS = [
+  { type: "observe", label: "观察", icon: "search", desc: "观察环境/人物" },
+  { type: "dialogue", label: "对话", icon: "message", desc: "与角色交谈" },
+  { type: "combat", label: "战斗", icon: "sword", desc: "进入战斗" },
+  { type: "explore", label: "探索", icon: "map", desc: "探索新区域" },
+  { type: "use_item", label: "使用物品", icon: "backpack", desc: "使用背包物品" },
+  { type: "rest", label: "休息", icon: "moon", desc: "休息恢复" },
+];
 
 function SagaDetailInner() {
   const { sagaId } = useParams<{ sagaId: string }>();
@@ -70,6 +110,29 @@ function SagaDetailInner() {
   const [diceTick, setDiceTick] = useState(0);
   const streamRef = useRef<AbortController | null>(null);
 
+  // ── 游戏面板状态（移植自旧游戏模式，数据源 = 同一引擎的 SSE 事件）──
+  const [round, setRound] = useState(0);
+  const [totalWords, setTotalWords] = useState(0);
+  const [plotProgress, setPlotProgress] = useState(0);
+  const [entities, setEntities] = useState<GEntity[]>([]);
+  const [items, setItems] = useState<GItem[]>([]);
+  const [turns, setTurns] = useState<TurnRec[]>([]);
+  const [leftTab, setLeftTab] = useState<"plot" | "characters" | "factions">("plot");
+  const [rightTab, setRightTab] = useState<"text" | "backpack" | "world">("text");
+  const [backpackFilter, setBackpackFilter] = useState<"all" | "char">("all");
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // 发现提示（及时演算）+ 新物品高亮 + 粒子 + 音效
+  const particlesRef = useRef<GameParticlesHandle>(null);
+  const discoveryIdRef = useRef(0);
+  const [discoveries, setDiscoveries] = useState<Array<{ id: number; label: string }>>([]);
+  const [newItemKeys, setNewItemKeys] = useState<Set<string>>(new Set());
+  const newItemKeysRef = useRef<Set<string>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  // 及时演算扫描缓冲：token 流按行解析 NE|/CI| 标记（不完整行留在缓冲）
+  const markBufRef = useRef("");
+  const firedMarksRef = useRef<Set<string>>(new Set());
+
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/game/saga/${sagaId}`);
@@ -90,7 +153,101 @@ function SagaDetailInner() {
     return () => clearInterval(t);
   }, [dice?.rolling]);
 
-  // ── SSE 通用消费（start / action 共用）──
+  // 物品获得提示音（WebAudio，首次用户手势后可用）
+  const playItemChime = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        audioCtxRef.current = new AC();
+      }
+      const ac = audioCtxRef.current;
+      if (ac.state === "suspended") void ac.resume();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(740, ac.currentTime);
+      o.frequency.exponentialRampToValueAtTime(1180, ac.currentTime + 0.12);
+      g.gain.setValueAtTime(0.0001, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.16, ac.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.34);
+      o.connect(g);
+      g.connect(ac.destination);
+      o.start();
+      o.stop(ac.currentTime + 0.36);
+    } catch {
+      /* 静默：部分浏览器禁用音频时不影响游戏 */
+    }
+  }, []);
+
+  // 发现提示上屏：pill + 粒子爆发（香槟金，与旧游戏模式同款）
+  const fireDiscovery = useCallback((label: string) => {
+    particlesRef.current?.emitBurst({ color: "#E4B863", count: 12 });
+    const id = ++discoveryIdRef.current;
+    setDiscoveries((prev) => [...prev, { id, label }]);
+    setTimeout(() => setDiscoveries((prev) => prev.filter((d) => d.id !== id)), 3200);
+  }, []);
+
+  // 新物品高亮 + 音效 + 自动切到背包页
+  const flagNewItems = useCallback((prevItems: GItem[], nextItems: GItem[]) => {
+    const prevKeys = new Set(prevItems.map((i) => `${i.name}|${i.owner || "主角"}`));
+    const added = nextItems.filter((i) => !prevKeys.has(`${i.name}|${i.owner || "主角"}`));
+    if (added.length === 0) return;
+    playItemChime();
+    for (const it of added) {
+      const key = `${it.name}|${it.owner || "主角"}`;
+      newItemKeysRef.current = new Set(newItemKeysRef.current).add(key);
+      setNewItemKeys(new Set(newItemKeysRef.current));
+      setTimeout(() => {
+        newItemKeysRef.current = new Set([...newItemKeysRef.current].filter((k) => k !== key));
+        setNewItemKeys(new Set(newItemKeysRef.current));
+      }, 2600);
+    }
+    setRightTab("backpack");
+  }, [playItemChime]);
+
+  // ── 及时演算核心：token 流中实时解析 NE|/CI| 标记行 ──
+  // 引擎输出约定：NE|实体名|类型|简要描述；CI|获得|物品名|数量|归属（可选）；CI|消耗/装备/丢弃|物品名|数量
+  const scanGameMarks = useCallback((chunk: string) => {
+    markBufRef.current += chunk;
+    const lines = markBufRef.current.split("\n");
+    markBufRef.current = lines.pop() || "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith("NE|")) {
+        const parts = line.split("|").map((s) => s.trim());
+        const name = parts[1];
+        const type = parts[2] || "实体";
+        if (!name || firedMarksRef.current.has(`NE|${name}`)) continue;
+        firedMarksRef.current.add(`NE|${name}`);
+        fireDiscovery(`发现${type}·${name}`);
+      } else if (line.startsWith("CI|")) {
+        const parts = line.split("|").map((s) => s.trim());
+        const op = parts[1];
+        const name = parts[2];
+        if (!name || !op) continue;
+        const key = `CI|${op}|${name}`;
+        if (firedMarksRef.current.has(key)) continue;
+        firedMarksRef.current.add(key);
+        if (op === "获得") {
+          fireDiscovery(`获得物品·${name}`);
+          const ownKey = `${name}|${parts[4] || "主角"}`;
+          newItemKeysRef.current = new Set(newItemKeysRef.current).add(ownKey);
+          setNewItemKeys(new Set(newItemKeysRef.current));
+          setTimeout(() => {
+            newItemKeysRef.current = new Set([...newItemKeysRef.current].filter((k) => k !== ownKey));
+            setNewItemKeys(new Set(newItemKeysRef.current));
+          }, 2600);
+          playItemChime();
+        } else if (op === "消耗" || op === "丢弃") {
+          fireDiscovery(`失去物品·${name}`);
+        } else if (op === "装备") {
+          fireDiscovery(`装备·${name}`);
+        }
+      }
+    }
+  }, [fireDiscovery, playItemChime]);
+
+  // ── SSE 通用消费（start / action 共用）：token 增量渲染 + 及时演算 + done 回调 ──
   const consumeSSE = useCallback(async (res: Response, onDone: (data: any) => void) => {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -110,6 +267,7 @@ function SagaDetailInner() {
           if (event.type === "token") {
             streamedText += event.content || "";
             setStreamed(streamedText);
+            scanGameMarks(event.content || ""); // 及时演算：标记一出现立即上屏
           } else if (event.type === "roll") {
             setRollInfo({ d100: event.d100, label: event.label, successRate: event.successRate, reasons: event.reasons });
           } else if (event.type === "start_done" || event.type === "game_done") {
@@ -124,9 +282,9 @@ function SagaDetailInner() {
     }
     if (!done) throw new Error("未收到结果");
     onDone(done);
-  }, []);
+  }, [scanGameMarks]);
 
-  // ── 开始本章（开场叙事）──
+  // ── 开始本章（开场叙事；saga 模式 start 会重置本章会话，从头开局）──
   const startChapter = async (chapter: SagaChapter) => {
     setActiveChapter(chapter);
     setStatus("generating");
@@ -134,6 +292,14 @@ function SagaDetailInner() {
     setStreamed("");
     setOptions([]);
     setRollInfo(null);
+    setEntities([]);
+    setItems([]);
+    setTurns([]);
+    setRound(0);
+    setTotalWords(0);
+    setPlotProgress(0);
+    markBufRef.current = "";
+    firedMarksRef.current = new Set();
     const controller = new AbortController();
     streamRef.current = controller;
     try {
@@ -153,6 +319,12 @@ function SagaDetailInner() {
         setNarrative(done.narrative || "");
         setOptions(done.options || []);
         setStreamed("");
+        setRound(done.currentRound || 1);
+        setTotalWords(done.totalWords || 0);
+        setPlotProgress(done.plotProgress || 0);
+        setEntities(done.newEntities || []);
+        setItems(done.items ?? []);
+        setTurns([{ round: 1, playerAction: "开始本章" }]);
         load(); // 刷新章节列表（会话状态）
       });
     } catch (e: any) {
@@ -232,6 +404,7 @@ function SagaDetailInner() {
     setRollInfo(null);
     const controller = new AbortController();
     streamRef.current = controller;
+    const prevItems = items;
     try {
       const res = await fetch("/api/game/action", {
         method: "POST",
@@ -244,10 +417,27 @@ function SagaDetailInner() {
         throw new Error(err.error || "行动失败");
       }
       await consumeSSE(res, (done) => {
+        const newRound = round + 1;
         setStatus("playing");
         setNarrative((prev) => (prev ? `${prev}\n\n${done.narrative}` : done.narrative));
         setOptions(done.options || []);
         setStreamed("");
+        setRound(newRound);
+        setTotalWords((w) => w + (done.wordCount || 0));
+        if (done.plotProgress) setPlotProgress(done.plotProgress);
+        // 实体合并去重（与旧游戏模式同逻辑）
+        setEntities((prev) => {
+          const merged = [...prev];
+          for (const ne of done.newEntities || []) {
+            if (!merged.find((e) => e.name === ne.name)) merged.push(ne);
+          }
+          return merged;
+        });
+        // 背包增量更新（纯函数不可变，与引擎 applyItemChanges 同语义）
+        const updated = applyFrontendItemChanges(prevItems as any, done.itemChanges || [], newRound) as unknown as GItem[];
+        setItems(updated);
+        flagNewItems(prevItems, updated);
+        setTurns((prev) => [...prev, { round: newRound, playerAction: actionText }]);
         load();
       });
     } catch (e: any) {
@@ -365,6 +555,9 @@ function SagaDetailInner() {
     load();
   };
 
+  const itemCls = (i: GItem) =>
+    newItemKeys.has(`${i.name}|${i.owner || "主角"}`) ? "item-detected relative" : "";
+
   if (notFound) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
@@ -377,6 +570,10 @@ function SagaDetailInner() {
     return <div className="flex justify-center py-20"><LoadingDots label="加载游戏本" /></div>;
   }
 
+  const charEntities = entities.filter((e) => e.type === "角色" || (e.type || "").includes("角色"));
+  const factionEntities = entities.filter((e) => e.type === "势力" || (e.type || "").includes("势力"));
+  const activeChapterOutline = activeChapter?.outline || null;
+
   return (
     <div
       data-game-theme="night"
@@ -384,8 +581,24 @@ function SagaDetailInner() {
     >
       {/* 星空粒子背景（吸收旧游戏模式的沉浸氛围） */}
       <div className="pointer-events-none absolute inset-0 z-0">
-        <GameParticles theme="night" />
+        <GameParticles ref={particlesRef} theme="night" />
       </div>
+
+      {/* 检测发现提示层（及时演算：标记一出现立即上屏） */}
+      {discoveries.length > 0 && (
+        <div className="pointer-events-none fixed left-1/2 top-16 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
+          {discoveries.map((d) => (
+            <div
+              key={d.id}
+              className="nf-discovery-pill flex items-center gap-1.5 rounded-full border bg-[var(--nv-surface-1)]/90 px-3 py-1 text-xs font-medium shadow-lg backdrop-blur-sm"
+              style={{ borderColor: "#E4B863", color: "#E4B863" }}
+            >
+              <Icon name="sparkles" size={12} />
+              {d.label}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 顶部：暗色玻璃 */}
       <div className="relative z-10 mb-3 flex items-center justify-between gap-3 border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/60 px-4 py-3 backdrop-blur-sm">
@@ -398,10 +611,15 @@ function SagaDetailInner() {
             <p className="text-xs text-[var(--nv-text-tertiary)]">
               {saga.sourceBookName ? `前传：《${saga.sourceBookName}》 · ` : ""}{saga.chapters.length} 章
               {saga.playAsName ? ` · 扮演 ${saga.playAsName}` : ""}
+              {activeChapter ? ` · 第 ${round} 轮 · ${totalWords} 字` : ""}
             </p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* 玩法教程（本页直达） */}
+          <Button onClick={() => setShowTutorial(true)} className="btn-ghost h-8 rounded-lg px-3 text-xs" title="怎么玩：模式区别 / 背包世界 / 发现提示">
+            <Icon name="lightbulb" size={12} /> 玩法
+          </Button>
           {/* 交互模式开关（P0-4）：自由叙事 / 跑团检定 */}
           <select
             value={saga.rollMode || "free"}
@@ -474,7 +692,7 @@ function SagaDetailInner() {
       </div>
 
       {showNewChapter && (
-        <div className="mb-4 space-y-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-4">
+        <div className="relative z-10 mx-4 mb-3 space-y-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-4">
           <input value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} placeholder="章节名（留空自动「第N章」）" className="input-glass w-full rounded-lg px-3 py-2 text-sm" />
           <textarea value={chapterOutline} onChange={(e) => setChapterOutline(e.target.value)} placeholder="本章章纲（可选：想让这一章发生什么）" rows={3} className="input-glass w-full rounded-lg px-3 py-2 text-sm" />
           <div className="flex gap-2">
@@ -484,46 +702,110 @@ function SagaDetailInner() {
         </div>
       )}
 
-      <div className="relative z-10 flex min-h-0 flex-1 gap-4 px-4 pb-4">
-        {/* 左栏：章节列表（暗色玻璃） */}
-        <aside className="w-56 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 p-2 backdrop-blur-sm">
-          {saga.chapters.map((c) => (
-            <div
-              key={c.id}
-              className={`group rounded-xl border px-3 py-2.5 transition-colors ${
-                activeChapter?.id === c.id
-                  ? "border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)]"
-                  : c.status === "archived"
-                    ? "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/30 opacity-70"
-                    : "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <p className="truncate text-xs font-medium text-[var(--nv-text-primary)]">
-                  {c.index}. {c.title}{c.status === "archived" ? " · 已收束" : ""}
+      <div className="relative z-10 flex min-h-0 flex-1 gap-3 px-4 pb-4">
+        {/* 左栏：章节 + 情节/角色/势力 */}
+        <aside className="hidden w-60 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 backdrop-blur-sm lg:flex">
+          <div className="shrink-0 space-y-1 overflow-y-auto border-b border-[var(--nv-border-2)] p-2" style={{ maxHeight: "34%" }}>
+            {saga.chapters.map((c) => (
+              <div
+                key={c.id}
+                className={`group rounded-xl border px-3 py-2 transition-colors ${
+                  activeChapter?.id === c.id
+                    ? "border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)]"
+                    : c.status === "archived"
+                      ? "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/30 opacity-70"
+                      : "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <p className="truncate text-xs font-medium text-[var(--nv-text-primary)]">
+                    {c.index}. {c.title}{c.status === "archived" ? " · 已收束" : ""}
+                  </p>
+                  <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button onClick={() => renameChapter(c)} title="改名" className="text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]"><Icon name="pencil" size={10} /></button>
+                    <button onClick={() => deleteChapter(c)} title="删除" className="text-[var(--nv-text-muted)] hover:text-[var(--nv-danger)]"><Icon name="trash" size={10} /></button>
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-[var(--nv-text-tertiary)]">
+                  {c.status === "archived" ? `${c.wordCount} 字` : c.sessionRound > 0 ? `第 ${c.sessionRound} 轮 · ${c.sessionWords} 字` : "未开始"}
                 </p>
-                <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button onClick={() => renameChapter(c)} title="改名" className="text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]"><Icon name="pencil" size={10} /></button>
-                  <button onClick={() => deleteChapter(c)} title="删除" className="text-[var(--nv-text-muted)] hover:text-[var(--nv-danger)]"><Icon name="trash" size={10} /></button>
-                </span>
+                {c.status !== "archived" && activeChapter?.id !== c.id && (
+                  <Button
+                    onClick={() => startChapter(c)}
+                    disabled={status === "generating"}
+                    className="btn-ghost mt-1.5 h-6 w-full rounded-md px-2 text-[10px]"
+                  >
+                    {c.sessionRound > 0 ? "重开本章" : "开始本章"}
+                  </Button>
+                )}
               </div>
-              <p className="mt-0.5 text-[10px] text-[var(--nv-text-tertiary)]">
-                {c.status === "archived" ? `${c.wordCount} 字` : c.sessionRound > 0 ? `第 ${c.sessionRound} 轮 · ${c.sessionWords} 字` : "未开始"}
-              </p>
-              {c.status !== "archived" && activeChapter?.id !== c.id && (
-                <Button
-                  onClick={() => startChapter(c)}
-                  disabled={status === "generating"}
-                  className="btn-ghost mt-1.5 h-6 w-full rounded-md px-2 text-[10px]"
-                >
-                  {c.sessionRound > 0 ? "重开本章" : "开始本章"}
-                </Button>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
+          <div className="flex shrink-0 border-b border-[var(--nv-border-2)]">
+            {LEFT_TABS.map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setLeftTab(key)}
+                className={`flex flex-1 items-center justify-center gap-1 py-2 text-xs font-medium transition-colors ${
+                  leftTab === key
+                    ? "border-b-2 border-[var(--nv-creative)] bg-[var(--nv-creative-soft)] text-[var(--nv-creative)]"
+                    : "border-b-2 border-transparent text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
+                }`}
+              >
+                <Icon name={icon} size={12} /> {label}
+              </button>
+            ))}
+          </div>
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 text-xs">
+            {leftTab === "plot" && (
+              <div>
+                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">情节进度</p>
+                <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--nv-surface-2)]">
+                  <div className="h-full rounded-full bg-[var(--nv-creative)] transition-all duration-700" style={{ width: `${plotProgress}%` }} />
+                </div>
+                <p className="text-right text-[var(--nv-creative)]">{plotProgress}%</p>
+                {turns.length === 0 && <p className="mt-4 italic text-[var(--nv-text-muted)]">开始本章后，你的每个行动都会记录在这里</p>}
+                {turns.map((t) => (
+                  <div key={t.round} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5">
+                    <p className="text-[var(--nv-creative)]">第{t.round}轮</p>
+                    <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-tertiary)]">{t.playerAction}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {leftTab === "characters" && (
+              <div>
+                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">场景角色</p>
+                {charEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
+                {charEntities.map((e) => (
+                  <div key={e.name} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5">
+                    <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
+                      <Icon name="user" size={12} className="text-[var(--nv-text-tertiary)]" />
+                      {e.name}
+                    </p>
+                    <p className="mt-0.5 text-[var(--nv-text-muted)]">{e.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {leftTab === "factions" && (
+              <div>
+                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">涉及势力</p>
+                {factionEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">遇到的门派/组织/势力会实时出现在这里</p>}
+                {factionEntities.map((e) => (
+                  <div key={e.name} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5">
+                    <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
+                      <Icon name="building" size={12} className="text-[var(--nv-text-tertiary)]" />
+                      {e.name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </aside>
 
-        {/* 右侧：游戏循环（暗色沉浸） */}
+        {/* 中栏：游戏循环（暗色沉浸） */}
         <main className="flex min-w-0 flex-1 flex-col rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 p-5 backdrop-blur-sm">
           {!activeChapter ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -534,34 +816,43 @@ function SagaDetailInner() {
                 <p className="text-xl font-bold text-[var(--nv-text-primary)]">游戏本已就绪</p>
                 <p className="mt-1.5 text-sm text-[var(--nv-text-secondary)]">从左侧选一章，化身角色亲历这段剧情</p>
               </div>
-              <p className="text-xs text-[var(--nv-text-tertiary)]">
+              <p className="max-w-sm text-xs leading-5 text-[var(--nv-text-tertiary)]">
                 一章一局 · 收束后正文归档 · 新章自动继承前情{saga.rollMode === "tabletop" ? " · 跑团检定已开启" : ""}
+                <br />
+                游玩中获得的物品进入背包，遇到的角色/势力自动记录，发现即时上屏
               </p>
+              {!saga.chapters.some((c) => c.status !== "archived") && (
+                <Button onClick={() => setShowNewChapter(true)} className="btn-primary rounded-xl px-6 py-2 text-sm">
+                  <Icon name="plus" size={14} /> 开启新章
+                </Button>
+              )}
             </div>
           ) : (
             <>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-medium text-[var(--nv-text-primary)]">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-medium text-[var(--nv-text-primary)]">
                   第 {activeChapter.index} 章 · {activeChapter.title}
                 </p>
-                {rollInfo && (
-                  <span
-                    className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
-                    title={`检定：d100=${rollInfo.d100}，成功率=${rollInfo.successRate ?? "?"}%（${(rollInfo.reasons || []).join("；")}）——结果既定，AI 只演不判`}
-                  >
-                    🎲 d100={rollInfo.d100} / 成功率{rollInfo.successRate ?? "?"}% · {rollInfo.label}
-                  </span>
-                )}
-                {status === "playing" && (
-                  <div className="flex items-center gap-2">
-                    <Button onClick={endOnly} className="btn-ghost h-7 rounded-lg px-3 text-xs" title="本章归档，停在这里">停下</Button>
-                    <Button onClick={continueNextChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章并无缝开启下一章（前情自动继承）">
-                      继续下一章 <Icon name="arrowRight" size={12} />
-                    </Button>
-                  </div>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {rollInfo && (
+                    <span
+                      className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
+                      title={`检定：d100=${rollInfo.d100}，成功率=${rollInfo.successRate ?? "?"}%（${(rollInfo.reasons || []).join("；")}）——结果既定，AI 只演不判`}
+                    >
+                      🎲 d100={rollInfo.d100} / 成功率{rollInfo.successRate ?? "?"}% · {rollInfo.label}
+                    </span>
+                  )}
+                  {status === "playing" && (
+                    <>
+                      <Button onClick={endOnly} className="btn-ghost h-7 rounded-lg px-3 text-xs" title="本章归档，停在这里">停下</Button>
+                      <Button onClick={continueNextChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章并无缝开启下一章（前情自动继承）">
+                        继续下一章 <Icon name="arrowRight" size={12} />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 {streamed ? (
                   <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{streamed}</p>
                 ) : narrative ? (
@@ -571,9 +862,9 @@ function SagaDetailInner() {
                 ) : null}
               </div>
 
-              {/* 选项 + 行动区 */}
+              {/* 选项 + 快捷动作 + 输入区 */}
               {status === "playing" && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 shrink-0 space-y-2">
                   {options.length > 0 && (
                     <div className="grid grid-cols-2 gap-2">
                       {options.map((opt) => (
@@ -582,11 +873,27 @@ function SagaDetailInner() {
                           onClick={() => act("option", `选择：${opt.text}`, opt.index)}
                           className="rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-3 py-2 text-left text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
                         >
-                          {opt.index}. {opt.text}
+                          <span className="mr-1.5 font-mono text-[var(--nv-creative)]">{opt.index}.</span>
+                          {opt.text}
                         </button>
                       ))}
                     </div>
                   )}
+                  {/* 快捷动作（移植自旧游戏模式） */}
+                  <div className="flex gap-1.5">
+                    {QUICK_ACTIONS.map((action) => (
+                      <button
+                        key={action.type}
+                        onClick={() => act(action.type, action.label)}
+                        disabled={status !== "playing"}
+                        title={action.desc}
+                        className="group flex flex-1 flex-col items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] py-1.5 text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Icon name={action.icon as IconName} size={14} />
+                        <span className="text-[10px]">{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex gap-2">
                     <input
                       value={customInput}
@@ -608,6 +915,159 @@ function SagaDetailInner() {
             </>
           )}
         </main>
+
+        {/* 右栏：正文 / 背包 / 世界 */}
+        <aside className="hidden w-64 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 backdrop-blur-sm xl:flex">
+          <div className="flex shrink-0 border-b border-[var(--nv-border-2)]">
+            {RIGHT_TABS.map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setRightTab(key)}
+                className={`flex flex-1 items-center justify-center gap-1 py-2 text-xs font-medium transition-colors ${
+                  rightTab === key
+                    ? "border-b-2 border-[var(--nv-creative)] bg-[var(--nv-creative-soft)] text-[var(--nv-creative)]"
+                    : "border-b-2 border-transparent text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
+                }`}
+              >
+                <Icon name={icon} size={12} /> {label}
+              </button>
+            ))}
+          </div>
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 text-xs">
+            {rightTab === "text" && (
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
+                  <Icon name="file" size={13} className="text-[var(--nv-creative)]" /> 正文进度
+                </p>
+                <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--nv-surface-2)]">
+                  <div className="h-full rounded-full bg-[var(--nv-creative)] transition-all duration-700" style={{ width: `${Math.min(100, (totalWords / 3000) * 100)}%` }} />
+                </div>
+                <p className="text-right text-[var(--nv-text-tertiary)]">本轮累计：{totalWords} 字 · 第 {round} 轮</p>
+                <div className="mt-3 whitespace-pre-wrap leading-relaxed text-[var(--nv-text-secondary)] opacity-80">
+                  {narrative || "正文将在游戏互动过程中实时生成…"}
+                </div>
+              </div>
+            )}
+            {rightTab === "backpack" && (
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
+                    <Icon name="backpack" size={13} className="text-[var(--nv-creative)]" /> 当前背包
+                  </p>
+                  <div className="flex items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-0.5">
+                    {([
+                      { k: "all", label: "全部" },
+                      { k: "char", label: "角色物品" },
+                    ] as const).map(({ k, label }) => (
+                      <button
+                        key={k}
+                        onClick={() => setBackpackFilter(k)}
+                        className={`rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
+                          backpackFilter === k
+                            ? "bg-[var(--nv-creative)] text-[var(--nv-text-primary)]"
+                            : "text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(() => {
+                  const visibleItems =
+                    backpackFilter === "char"
+                      ? items.filter((i) => i.owner && i.owner !== "主角")
+                      : items;
+                  const useItem = (i: GItem, verb: "使用" | "装备") =>
+                    act("use_item", `${verb}：${i.name}`);
+                  const groups: Array<{ key: string; title: string; list: GItem[]; tone: string; action?: "使用" | "装备" }> = [
+                    { key: "consumable", title: "消耗品", list: visibleItems.filter((i) => i.category === "consumable" || i.category === "other"), tone: "text-[var(--nv-creative)]", action: "使用" },
+                    { key: "equipment", title: "装备", list: visibleItems.filter((i) => i.category === "equipment"), tone: "text-[var(--nv-success)]", action: "装备" },
+                    { key: "quest", title: "任务道具", list: visibleItems.filter((i) => i.category === "quest"), tone: "text-[var(--nv-warning)]" },
+                    { key: "currency", title: "货币", list: visibleItems.filter((i) => i.category === "currency"), tone: "text-accent-label" },
+                  ];
+                  if (visibleItems.length === 0) {
+                    return (
+                      <p className="italic text-[var(--nv-text-muted)]">
+                        {backpackFilter === "char" ? "暂无归属角色的物品" : "背包空空如也，在冒险中获取物品吧"}
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="space-y-1">
+                      {groups.map((g) => g.list.length === 0 ? null : (
+                        <div key={g.key}>
+                          <p className="mb-1 mt-2 text-[10px] uppercase tracking-wider text-[var(--nv-text-tertiary)]">【{g.title}】</p>
+                          {g.list.map((i, idx) => (
+                            <div key={idx} className={`group flex items-center justify-between gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1 ${itemCls(i)}`}>
+                              <div className="min-w-0">
+                                <span className="text-[var(--nv-text-primary)]">{i.name}</span>
+                                <span className={`ml-2 ${g.tone}`}>×{i.quantity}</span>
+                                <p className="mt-0.5 text-[10px] text-[var(--nv-text-muted)]">
+                                  {i.source}{i.owner && i.owner !== "主角" ? ` · 归属：${i.owner}` : ""}
+                                </p>
+                              </div>
+                              {g.action && (
+                                <button
+                                  onClick={() => useItem(i, g.action!)}
+                                  disabled={status !== "playing"}
+                                  title={`作为行动${g.action}「${i.name}」`}
+                                  className="shrink-0 rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {g.action === "装备" && i.equipped ? "已装备" : g.action}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            {rightTab === "world" && (
+              <div>
+                <p className="mb-3 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
+                  <Icon name="globe" size={13} className="text-[var(--nv-creative)]" /> 世界设定
+                </p>
+                {!saga.synopsis && saga.loreEntries.length === 0 && !activeChapterOutline ? (
+                  <p className="italic text-[var(--nv-text-muted)]">这个世界还没有留下设定——在开场剧情里探索它吧</p>
+                ) : (
+                  <div className="space-y-3">
+                    {saga.synopsis && (
+                      <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-3">
+                        <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nv-text-tertiary)]">
+                          <Icon name="book" size={11} /> 世界观
+                        </p>
+                        <p className="whitespace-pre-wrap leading-relaxed text-[var(--nv-text-secondary)]">{saga.synopsis}</p>
+                      </div>
+                    )}
+                    {activeChapterOutline && (
+                      <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-3">
+                        <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nv-text-tertiary)]">
+                          <Icon name="clipboard" size={11} /> 本章章纲
+                        </p>
+                        <p className="whitespace-pre-wrap leading-relaxed text-[var(--nv-text-secondary)]">{activeChapterOutline}</p>
+                      </div>
+                    )}
+                    {saga.loreEntries.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--nv-text-tertiary)]">世界书 ({saga.loreEntries.length})</p>
+                        {saga.loreEntries.map((e, idx) => (
+                          <div key={idx} className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-3 transition-colors hover:border-[var(--nv-creative-soft)]">
+                            <p className="text-xs font-medium text-[var(--nv-text-primary)]">{e.title}</p>
+                            <p className="mt-1.5 line-clamp-4 text-[11px] leading-relaxed text-[var(--nv-text-tertiary)]">{e.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* ── 骰子悬浮判定（两段式）：右下角小面板，动画期间页面完全可操作 ── */}
@@ -660,6 +1120,40 @@ function SagaDetailInner() {
             </div>
           ) : null}
         </div>
+      )}
+
+      {/* ── 玩法教程（本页直达） ── */}
+      {showTutorial && (
+        <Modal open onClose={() => setShowTutorial(false)} bare panelClassName="max-w-lg" labelledBy="saga-tutorial-title">
+          <div className="p-6">
+            <div className="mb-3 flex items-center gap-2">
+              <Icon name="gamepad" size={22} className="text-[var(--nv-creative)]" />
+              <h2 id="saga-tutorial-title" className="text-lg font-bold text-[var(--nv-text-primary)]">游戏本 · 玩法指引</h2>
+            </div>
+            <div className="space-y-3 text-sm leading-relaxed text-[var(--nv-text-secondary)]">
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">基本玩法</p>
+                <p className="text-xs">左侧选一章点「开始本章」→ 阅读叙事 → 点选项 / 快捷动作 / 自由输入行动 → 剧情实时推进，发现与物品变动即时上屏。</p>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">两种模式有什么区别</p>
+                <p className="text-xs"><span className="text-[var(--nv-text-primary)]">自由叙事</span>：没有骰子，AI 裁决一切行动成败。</p>
+                <p className="text-xs"><span className="text-[var(--nv-text-primary)]">跑团检定</span>：战斗/偷袭/说服等对抗行动先掷骰（d100 对比成功率），骰出什么是什么，AI 只负责把结果演成剧情。难度档决定重骰次数：简单无限 / 困难 3 次 / 真实不可重骰。</p>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">面板速览</p>
+                <p className="text-xs">左栏：章节切换 + 情节进度 + 遇到的角色与势力；右栏：正文累计、背包（物品可一键「使用/装备」作为行动）、世界观与世界书。</p>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">连续游玩</p>
+                <p className="text-xs">一章玩到想收尾时点「继续下一章」：本章自动归档，新章自动继承前情，不用退出重来。</p>
+              </div>
+            </div>
+            <button onClick={() => setShowTutorial(false)} className="mt-5 w-full btn-primary rounded-xl py-2.5 text-sm font-medium">
+              明白了
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

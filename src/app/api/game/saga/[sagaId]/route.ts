@@ -54,6 +54,10 @@ export async function GET(_req: Request, { params }: Params) {
       title: saga.title,
       projectId: saga.projectId,
       sourceBookName: snapshot.bookName || null,
+      synopsis: snapshot.synopsis || "",
+      loreEntries: Array.isArray(snapshot.lore)
+        ? snapshot.lore.map((l: any) => ({ title: l.title || "", content: l.content || "" }))
+        : [],
       playAsCharacterId: saga.playAsCharacterId,
       playAsName: saga.playAsName,
       rollMode: saga.rollMode,
