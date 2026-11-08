@@ -555,6 +555,34 @@ function SagaDetailInner() {
     }
   };
 
+  // ── 继续本章（退出后再进来不丢进度）：GET /api/game/state 拉权威摘要整体恢复 ──
+  // 与「重开本章」（start 会重置会话）严格区分——这是敢退出的前提。
+  const resumeChapter = async (chapter: SagaChapter) => {
+    if (!chapter.sessionId) return;
+    setActiveChapter(chapter);
+    setStatus("generating");
+    setStreamed("");
+    try {
+      const res = await fetch(`/api/game/state?sessionId=${encodeURIComponent(chapter.sessionId)}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.summary) throw new Error(data.error || "恢复进度失败");
+      const sm = data.summary;
+      setSessionId(chapter.sessionId);
+      setRound(sm.currentRound || 0);
+      setTotalWords(sm.totalWords || 0);
+      setPlotProgress(sm.plotProgress || 0);
+      setNarrative(sm.narrative || "");
+      setItems((sm.items || []) as GItem[]);
+      setEntities((sm.entities || []) as GEntity[]);
+      setOptions((sm.options || []) as GameOption[]);
+      setTurns((sm.turns || []).map((t: any) => ({ round: t.round, playerAction: t.playerAction, narrative: t.narrative || "" })));
+      setStatus("playing");
+    } catch (e: any) {
+      toastError(e.message || "恢复进度失败");
+      setStatus("idle");
+    }
+  };
+
   // ── 收束本章 → 自动建下一章 → 自动开始（连续扮演：一键无缝进入下一章）──
   const continueNextChapter = async () => {
     if (!sessionId || !activeChapter) return;
@@ -720,8 +748,13 @@ function SagaDetailInner() {
       {/* 顶部：暗色玻璃 */}
       <div className="relative z-10 mb-3 flex items-center justify-between gap-3 border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/60 px-4 py-3 backdrop-blur-sm">
         <div className="flex min-w-0 items-center gap-3">
-          <button onClick={() => router.push("/gamesaga")} className="text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]" title="返回游戏本">
-            <Icon name="arrowLeft" size={16} />
+          {/* 退出游戏：用户反馈「进去退不出去」——从 16px 图标改为带文字的明显按钮 */}
+          <button
+            onClick={() => router.push("/gamesaga")}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2.5 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+            title="退出游戏模式，返回游戏本列表（进度已保存）"
+          >
+            <Icon name="arrowLeft" size={13} /> 退出
           </button>
           <div className="min-w-0">
             <h1 className="truncate text-lg font-bold text-[var(--nv-text-primary)]">{saga.title}</h1>
@@ -847,13 +880,25 @@ function SagaDetailInner() {
                   {c.status === "archived" ? `${c.wordCount} 字` : c.sessionRound > 0 ? `第 ${c.sessionRound} 轮 · ${c.sessionWords} 字` : "未开始"}
                 </p>
                 {c.status !== "archived" && activeChapter?.id !== c.id && (
-                  <Button
-                    onClick={() => startChapter(c)}
-                    disabled={status === "generating"}
-                    className="btn-ghost mt-1.5 h-6 w-full rounded-md px-2 text-[10px]"
-                  >
-                    {c.sessionRound > 0 ? "重开本章" : "开始本章"}
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => (c.sessionId && c.sessionRound > 0 ? resumeChapter(c) : startChapter(c))}
+                      disabled={status === "generating"}
+                      className={`mt-1.5 h-6 w-full rounded-md px-2 text-[10px] ${c.sessionId && c.sessionRound > 0 ? "btn-primary" : "btn-ghost"}`}
+                    >
+                      {c.sessionId && c.sessionRound > 0 ? "继续本章" : "开始本章"}
+                    </Button>
+                    {c.sessionId && c.sessionRound > 0 && (
+                      <button
+                        onClick={() => { if (confirm(`重开第 ${c.index} 章？本章已有 ${c.sessionRound} 轮进度将被清空（建议先「继续本章」）`)) startChapter(c); }}
+                        disabled={status === "generating"}
+                        className="mt-1 w-full text-[9px] text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-danger)]"
+                        title="清空本章进度，从开场重新开始（不可撤回）"
+                      >
+                        重开本章
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -953,6 +998,12 @@ function SagaDetailInner() {
                   <Icon name="plus" size={14} /> 开启新章
                 </Button>
               )}
+              <button
+                onClick={() => router.push("/gamesaga")}
+                className="text-xs text-[var(--nv-text-tertiary)] underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--nv-text-primary)]"
+              >
+                退出游戏模式，返回游戏本列表
+              </button>
             </div>
           ) : (
             <>

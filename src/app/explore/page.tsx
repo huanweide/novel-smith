@@ -22,6 +22,22 @@ import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useHealth } from "@/hooks/use-health";
 
+/**
+ * 游戏本模式（?as=saga）的步骤说明微调：
+ * 同一套 11 步前置创作流程，只把「写小说」的口径换成「第一视角扮演的舞台」。
+ * 用户定的规矩：游戏模式前置 = 创作模式，不是一句话「简单开始」。
+ */
+const GAME_STEP_DESCRIPTIONS: Partial<Record<ExploreStep, string>> = {
+  protagonist: "你将扮演谁？姓名、性别、年龄、外貌、性格、背景与当前处境。这是你的第一视角——玩家的眼睛和手，其他角色交给 AI 扮演。",
+  golden_finger: "你（这个角色）有什么特殊能力/优势/依仗？规则与限制是什么？跑团检定时会按它裁定成功率的加成与降低。",
+  core_conflict: "你要面对的核心矛盾是什么？谁在追你、挡你、算计你？不解决会怎样？这决定你每轮行动的压力来源。",
+  power_system: "这个世界的力量/战斗体系如何分级？你处于哪一级？对抗时怎么判定强弱？跑团检定需要一个可比较的参照系。",
+  plot_thread: "开局怎么开始？第一幕你正在做什么、遇到什么事——这会成为首章章纲。再给主线一个大致走向，免得玩着没方向。",
+};
+function stepDescription(step: ExploreStep, asGame: boolean): string {
+  return (asGame && GAME_STEP_DESCRIPTIONS[step]) || STEP_DESCRIPTIONS[step];
+}
+
 export default function ExplorePage() {
   const [config, setConfig] = useState<BuildConfig>(DEFAULT_BUILD_CONFIG);
   const [currentStep, setCurrentStep] = useState<ExploreStep>("opening");
@@ -41,6 +57,11 @@ export default function ExplorePage() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   // 探讨模式玩法教程（顶栏「教程」直达）
   const [showTutorial, setShowTutorial] = useState(false);
+  // 产出目标：小说项目（默认） / 游戏本（?as=saga，同一套 11 步，产出第一视角扮演的舞台）
+  const [asGame, setAsGame] = useState(false);
+  useEffect(() => {
+    try { setAsGame(new URLSearchParams(window.location.search).get("as") === "saga"); } catch { /* ignore */ }
+  }, []);
   // 无障碍：窄屏模态抽屉的焦点陷阱（仅抽屉打开时激活，桌面常驻侧栏不受影响）
   const leftDrawerRef = useRef<HTMLElement>(null);
   const rightDrawerRef = useRef<HTMLElement>(null);
@@ -572,6 +593,50 @@ export default function ExplorePage() {
       creatingRef.current = true;
       setCreating(true);
       try {
+        // ── 游戏本：同一套探讨成果，产出物换成「第一视角自由叙事的舞台」──
+        // 世界观测/势力/力量体系/地图 → 世界书词条；主角 → 角色卡（＝玩家的第一视角）；情节脉络 → 首章章纲
+        if (asGame) {
+          const pick = (steps: ExploreStep[]) => adopted.filter((a) => steps.includes(a.step));
+          const join = (list: AdoptedItem[]) =>
+            list.map((i) => `【${STEP_LABELS[i.step]}】${i.title}：${i.content}`).join("\n\n");
+          const title = config.novelName.trim() || pick(["opening"])[0]?.title?.trim() || "未命名游戏本";
+          const synopsis = join(pick(["opening", "worldview", "core_conflict"]));
+          const protagonist = pick(["protagonist"])[0];
+          const protagonistName =
+            config.protagonistName.trim() ||
+            (protagonist ? protagonist.title.split(/[·:：\-—\s]/)[0].trim() : "");
+          const characters = protagonist
+            ? [{ name: protagonistName || "主角", role: "主角", background: protagonist.content }]
+            : [];
+          const lore = pick(["factions", "power_system", "currency", "map", "golden_finger"])
+            .map((a) => ({ title: a.title, content: a.content }));
+          const outline = join(pick(["plot_thread"])) || join(pick(["opening"]));
+
+          const res = await fetch("/api/game/saga", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "explore",
+              title,
+              synopsis,
+              characters,
+              lore,
+              outline,
+              playAsName: protagonistName || undefined,
+              chapterTitle: "第一章",
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const failure = describeHttpError(res.status, data);
+            toastError(failure.description, failure.title);
+            return;
+          }
+          toastCreated(title, "游戏本");
+          window.location.href = `/gamesaga/${data.saga.id}`;
+          return;
+        }
+
         const res = await fetch("/api/explore/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -593,7 +658,7 @@ export default function ExplorePage() {
         setCreating(false);
       }
     },
-    [config, adopted],
+    [config, adopted, asGame],
   );
 
   // ─── 深入探讨已采纳内容 ──────────────────────────────
@@ -814,6 +879,22 @@ export default function ExplorePage() {
         </button>
       </Modal>
 
+      {/* ── 产出目标提示条：游戏本模式（?as=saga）与小说模式共用同一套 11 步，只换口径 ── */}
+      {asGame && (
+        <div className="shrink-0 border-b border-[var(--nv-creative)]/25 bg-[var(--nv-creative)]/[0.08] px-5 py-2">
+          <div className="mx-auto flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+            <Icon name="gamepad" size={13} className="shrink-0 text-[var(--nv-creative)]" />
+            <span className="font-medium text-[var(--nv-text-primary)]">产出：游戏本 · 第一视角自由叙事</span>
+            <span className="text-[var(--nv-text-tertiary)]">
+              和写小说同一套前置创作——聊出世界观、你扮演的角色、势力与力量体系、开局场景，这些会成为游戏的舞台与首章章纲
+            </span>
+            <Link href="/explore" className="ml-auto shrink-0 text-[var(--nv-primary)] hover:underline">
+              改成写小说 →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* ── 11 步探讨进度条 ── */}
       <div inert={leftDrawerOpen || rightDrawerOpen}>
         <StepProgress currentStep={currentStep} adopted={adopted} onStepChange={handleStepChange} />
@@ -821,7 +902,7 @@ export default function ExplorePage() {
 
       {/* ── 构思步骤引导：让新手清楚每一步该聊什么 ── */}
       {mode !== "outline" && (
-        <StepGuide step={currentStep} aiConfigured={aiConfigured} onSend={handleGuideSend} />
+        <StepGuide step={currentStep} asGame={asGame} aiConfigured={aiConfigured} onSend={handleGuideSend} />
       )}
 
       {/* ── 三栏布局 ── */}
@@ -904,6 +985,7 @@ export default function ExplorePage() {
             creating={creating}
             createdProjectId={createdProjectId}
             onCreateProject={handleCreateProject}
+            asGame={asGame}
           />
         </aside>
         {/* 窄屏抽屉遮罩 */}
@@ -962,8 +1044,9 @@ export default function ExplorePage() {
 }
 
 // ─── 子组件：构思步骤引导（默认收起为单行，点击展开说明与示例） ──
-function StepGuide({ step, aiConfigured, onSend }: { step: ExploreStep; aiConfigured: boolean | null; onSend: (text: string) => void }) {
+function StepGuide({ step, aiConfigured, onSend, asGame }: { step: ExploreStep; aiConfigured: boolean | null; onSend: (text: string) => void; asGame?: boolean }) {
   const prompts = STEP_PROMPTS[step];
+  const desc = stepDescription(step, !!asGame);
   const blocked = aiConfigured === false;
   const [open, setOpen] = useState(false);
   return (
@@ -977,7 +1060,7 @@ function StepGuide({ step, aiConfigured, onSend }: { step: ExploreStep; aiConfig
         <Icon name={STEP_LUCIDE[step]} size={14} className="text-[var(--nv-creative)] shrink-0" />
         <span className="text-[10px] font-semibold text-[var(--nv-primary)] tracking-wider uppercase shrink-0">我们在聊</span>
         <span className="text-xs font-bold text-[var(--nv-text-primary)] shrink-0">{STEP_LABELS[step]}</span>
-        <span className="text-[11px] text-[var(--nv-text-tertiary)] truncate flex-1 min-w-0">{STEP_DESCRIPTIONS[step]}</span>
+        <span className="text-[11px] text-[var(--nv-text-tertiary)] truncate flex-1 min-w-0">{desc}</span>
         <Icon
           name="chevronDown"
           size={14}
@@ -987,7 +1070,7 @@ function StepGuide({ step, aiConfigured, onSend }: { step: ExploreStep; aiConfig
       {/* 展开态：完整说明 + 可一键发送的示例提问 */}
       {open && (
         <div className="px-5 pb-3 flex flex-col gap-2.5 animate-[nf-card-in_0.3s_ease-out_both]">
-          <p className="text-xs text-[var(--nv-text-tertiary)] leading-relaxed pl-6">{STEP_DESCRIPTIONS[step]}</p>
+          <p className="text-xs text-[var(--nv-text-tertiary)] leading-relaxed pl-6">{desc}</p>
           {blocked ? (
             <div className="flex flex-wrap items-center gap-1.5 pl-6">
               <span className="text-[11px] px-2.5 py-1 rounded-full border border-warning/30 bg-warning/[0.08] text-warning">

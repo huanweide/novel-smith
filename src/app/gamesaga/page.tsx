@@ -7,6 +7,7 @@
  */
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,6 @@ function SagaListInner() {
 
   const [sagas, setSagas] = useState<SagaItem[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [showFreshInput, setShowFreshInput] = useState(false);
-  const [freshTitle, setFreshTitle] = useState("");
-  const [freshWorld, setFreshWorld] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -70,29 +68,6 @@ function SagaListInner() {
     }
   };
 
-  const createFresh = async () => {
-    const title = freshTitle.trim();
-    if (!title) return;
-    setCreating(true);
-    try {
-      const res = await fetch("/api/game/saga", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "fresh", title, synopsis: freshWorld.trim() || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "创建失败");
-      toastSuccess("游戏本已创建");
-      setShowFreshInput(false);
-      setFreshTitle("");
-      router.push(`/gamesaga/${data.saga.id}`);
-    } catch (e: any) {
-      toastError(e.message || "创建失败");
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const remove = async (saga: SagaItem) => {
     if (!confirm(`删除游戏本「${saga.title}」？其全部章节与进度将一并删除，不可恢复。`)) return;
     try {
@@ -106,7 +81,18 @@ function SagaListInner() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      {/* 顶栏：返回首页（此前只能靠浏览器后退，用户反馈「进去退不出去」） */}
+      <div className="mb-5 flex items-center gap-2">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-3 py-1.5 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-border-3)] hover:text-[var(--nv-text-primary)]"
+        >
+          <Icon name="arrowLeft" size={13} /> 返回首页
+        </Link>
+        <span className="text-[11px] text-[var(--nv-text-muted)]">退出游戏模式不会丢失任何进度</span>
+      </div>
+
       <div className="mb-6 flex items-center gap-3">
         <Icon name="gamepad" size={24} className="text-[var(--nv-creative)]" />
         <div>
@@ -132,38 +118,26 @@ function SagaListInner() {
         </div>
       )}
 
-      {/* 从零新建 */}
+      {/* 新游戏本入口：走探讨模式（创作模式）——世界观/角色/势力/开局都聊出来再进 */}
       <div className="mb-6">
-        {showFreshInput ? (
-          <div className="space-y-2 rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-4">
-            <input
-              autoFocus
-              value={freshTitle}
-              onChange={(e) => setFreshTitle(e.target.value)}
-              placeholder="给这本游戏本起个名字…"
-              className="input-glass w-full rounded-xl px-4 py-2.5 text-sm"
-            />
-            <textarea
-              value={freshWorld}
-              onChange={(e) => setFreshWorld(e.target.value)}
-              rows={3}
-              placeholder="世界观前置（可空）：一句话或几句话描述这是个什么世界、你是谁——比如「修仙世界，你是入门三年的杂役弟子，刚捡到一枚神秘玉符」"
-              className="input-glass w-full rounded-xl px-4 py-2.5 text-sm"
-            />
-            <p className="text-[10px] text-[var(--nv-text-tertiary)]">这段会作为开场的前置设定喂给 AI；想讨论得更细，可以先回首页用「探讨模式」磨世界观，再回来派生。</p>
-            <div className="flex gap-2">
-              <Button onClick={createFresh} disabled={creating || !freshTitle.trim()} className="btn-primary rounded-xl px-4 py-2 text-sm">创建并进入</Button>
-              <Button onClick={() => setShowFreshInput(false)} className="btn-ghost rounded-xl px-4 py-2 text-sm">取消</Button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowFreshInput(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-dashed border-[var(--nv-border-3)] px-4 py-2.5 text-sm text-[var(--nv-text-tertiary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
-          >
-            <Icon name="plus" size={14} /> 从零新建一本游戏本（不依赖任何小说）
-          </button>
-        )}
+        <button
+          onClick={() => router.push("/explore?as=saga")}
+          className="group flex w-full items-start gap-3 rounded-2xl border border-[var(--nv-creative)]/30 bg-[var(--nv-creative)]/[0.06] px-5 py-4 text-left transition-all hover:border-[var(--nv-creative)]/60 hover:bg-[var(--nv-creative)]/[0.1] active:scale-[0.99]"
+        >
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--nv-creative)]/15">
+            <Icon name="plus" size={16} className="text-[var(--nv-creative)]" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[var(--nv-text-primary)]">新建游戏本 · 从创作模式开始</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+              和写小说同一套 11 步探讨：聊出世界观、你扮演的角色、势力与力量体系、开局场景——聊透后一键变成可玩的游戏本（不依赖任何已有小说）
+            </span>
+          </span>
+          <Icon name="arrowRight" size={14} className="ml-auto mt-2 shrink-0 text-[var(--nv-creative)] transition-transform group-hover:translate-x-0.5" />
+        </button>
+        <p className="mt-2 text-[10px] text-[var(--nv-text-muted)]">
+          已有小说的世界？从下方列表进入该书的游戏本（前传冻结）；也可以在工作区顶栏点「游戏模式」。
+        </p>
       </div>
 
       {/* 游戏本列表 */}

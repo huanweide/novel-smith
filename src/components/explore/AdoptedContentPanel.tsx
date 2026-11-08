@@ -20,6 +20,8 @@ interface Props {
   creating: boolean;
   createdProjectId: string | null;
   onCreateProject: (mode: "direct" | "ai_refine") => void;
+  /** 产出目标=游戏本（?as=saga）：底部主按钮改为「创建游戏本 · 进入第一视角」 */
+  asGame?: boolean;
 }
 
 export function AdoptedContentPanel({
@@ -33,6 +35,7 @@ export function AdoptedContentPanel({
   creating,
   createdProjectId,
   onCreateProject,
+  asGame = false,
 }: Props) {
   const router = useRouter();
   // 模式选择（探讨完毕二选一）：小说模式=进写作台；游戏模式=以本项目为前传派生游戏本
@@ -184,16 +187,16 @@ export function AdoptedContentPanel({
         ) : (
           <>
             <p className="text-[9px] text-[var(--nv-text-muted)] text-center">
-              先和 AI 聊出设定并采纳，再选择写作或游玩
+              {asGame ? "先和 AI 聊出世界与你的角色，再进入第一视角" : "先和 AI 聊出设定并采纳，再选择写作或游玩"}
             </p>
             <button
               onClick={() => onCreateProject("direct")}
               disabled={creating || adopted.length === 0}
-              className={`w-full py-3 rounded-xl text-xs font-semibold active:scale-[0.98] btn-primary ${
+              className={`w-full py-3 rounded-xl text-xs font-semibold active:scale-[0.98] ${asGame ? "btn-creative" : "btn-primary"} ${
                 creating || adopted.length === 0 ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
-              {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={13} /> 生成项目 · 开始写小说</span>}
+              {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建中...</span> : asGame ? <span className="flex items-center gap-1"><Icon name="gamepad" size={13} /> 创建游戏本 · 进入第一视角</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={13} /> 生成项目 · 开始写小说</span>}
             </button>
           </>
         )}

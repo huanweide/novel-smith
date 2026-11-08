@@ -19,9 +19,50 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const mode = body.mode === "fresh" ? "fresh" : "derive";
+    const mode = body.mode === "fresh" ? "fresh" : body.mode === "explore" ? "explore" : "derive";
 
-    // ── 从零新建 ──
+    // ── 探讨模式创建（推荐路径）：世界观/角色/势力/力量体系/地图/情节都从探讨成果来 ──
+    // 与「小说项目」同一套前置创作流程，只是产出物是游戏本（第一视角自由叙事的舞台）。
+    if (mode === "explore") {
+      const title = (body.title || "").trim();
+      if (!title) return NextResponse.json({ error: "缺少游戏本名称" }, { status: 400 });
+      const characters = Array.isArray(body.characters) ? body.characters : [];
+      const lore = Array.isArray(body.lore) ? body.lore : [];
+      const snapshot = {
+        bookName: title,
+        synopsis: (body.synopsis || "").trim(),
+        characters: characters.map((c: any) => ({
+          name: c.name || "",
+          role: c.role || "主角",
+          currentStatus: "alive",
+          background: c.background || "",
+        })),
+        lore: lore.map((l: any) => ({ title: l.title || "", content: l.content || "" })),
+        derivedAt: new Date().toISOString(),
+      };
+      const saga = await prisma.gameSaga.create({
+        data: {
+          title,
+          projectId: null,
+          sourceSnapshot: JSON.stringify(snapshot),
+          // 探讨时若指定了主角名，直接作为扮演视角
+          playAsName: (body.playAsName || "").trim() || null,
+          rollMode: body.rollMode === "free" ? "free" : "tabletop",
+        },
+      });
+      // 首章：章纲来自探讨的「情节脉络」，开场即有方向
+      await prisma.gameSagaChapter.create({
+        data: {
+          sagaId: saga.id,
+          index: 1,
+          title: (body.chapterTitle || "").trim() || "第一章",
+          outline: (body.outline || "").trim() || null,
+        },
+      });
+      return NextResponse.json({ ok: true, saga });
+    }
+
+    // ── 从零新建（快捷路径，保留但 UI 不再主推）──
     if (mode === "fresh") {
       const title = (body.title || "").trim();
       if (!title) return NextResponse.json({ error: "缺少游戏本名称" }, { status: 400 });
