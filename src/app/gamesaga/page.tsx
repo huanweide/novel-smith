@@ -35,6 +35,7 @@ function SagaListInner() {
   const [creating, setCreating] = useState(false);
   const [showFreshInput, setShowFreshInput] = useState(false);
   const [freshTitle, setFreshTitle] = useState("");
+  const [freshWorld, setFreshWorld] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +78,7 @@ function SagaListInner() {
       const res = await fetch("/api/game/saga", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "fresh", title }),
+        body: JSON.stringify({ mode: "fresh", title, synopsis: freshWorld.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "创建失败");
@@ -134,17 +135,26 @@ function SagaListInner() {
       {/* 从零新建 */}
       <div className="mb-6">
         {showFreshInput ? (
-          <div className="flex items-center gap-2">
+          <div className="space-y-2 rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-4">
             <input
               autoFocus
               value={freshTitle}
               onChange={(e) => setFreshTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") createFresh(); if (e.key === "Escape") setShowFreshInput(false); }}
               placeholder="给这本游戏本起个名字…"
-              className="input-glass flex-1 rounded-xl px-4 py-2.5 text-sm"
+              className="input-glass w-full rounded-xl px-4 py-2.5 text-sm"
             />
-            <Button onClick={createFresh} disabled={creating || !freshTitle.trim()} className="btn-primary rounded-xl px-4 py-2 text-sm">创建</Button>
-            <Button onClick={() => setShowFreshInput(false)} className="btn-ghost rounded-xl px-4 py-2 text-sm">取消</Button>
+            <textarea
+              value={freshWorld}
+              onChange={(e) => setFreshWorld(e.target.value)}
+              rows={3}
+              placeholder="世界观前置（可空）：一句话或几句话描述这是个什么世界、你是谁——比如「修仙世界，你是入门三年的杂役弟子，刚捡到一枚神秘玉符」"
+              className="input-glass w-full rounded-xl px-4 py-2.5 text-sm"
+            />
+            <p className="text-[10px] text-[var(--nv-text-tertiary)]">这段会作为开场的前置设定喂给 AI；想讨论得更细，可以先回首页用「探讨模式」磨世界观，再回来派生。</p>
+            <div className="flex gap-2">
+              <Button onClick={createFresh} disabled={creating || !freshTitle.trim()} className="btn-primary rounded-xl px-4 py-2 text-sm">创建并进入</Button>
+              <Button onClick={() => setShowFreshInput(false)} className="btn-ghost rounded-xl px-4 py-2 text-sm">取消</Button>
+            </div>
           </div>
         ) : (
           <button

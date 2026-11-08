@@ -389,12 +389,12 @@
   border-color: rgba(15, 18, 30, 0.18);
   box-shadow: var(--shadow-hover-md);
 }
-/* v3.1.168 实底化：0.92 玻璃叠在深色文字上仍透底（用户实测「文字被遮挡/看不清」），
-   提到 0.98 + 重投影——浮层必须完全压住下层内容，对比度才够 */
+/* v3.1.168 二次实底化：0.98 仍被用户实测透底（「更加黑幕还是遮挡」）——
+   下拉浮层直接全不透明 + 深投影，彻底压住下层内容 */
 .light .surface-floating {
-  background: rgba(255, 253, 248, 0.98);
+  background: #fffdf8;
   border-color: var(--nv-border-3);
-  box-shadow: 0 12px 36px rgba(43, 39, 31, 0.18), 0 3px 10px rgba(43, 39, 31, 0.10);
+  box-shadow: 0 16px 44px rgba(43, 39, 31, 0.24), 0 4px 14px rgba(43, 39, 31, 0.13);
 }
 /* Toast 实底化：白 92% 玻璃叠白卡片上边界消失（实测截图「堆叠看不清」），toast 需要更实底 + 重投影 */
 .light .surface-floating.toast-solid {
@@ -1753,6 +1753,25 @@ html.theme-dracula {
   --accent-foreground:#16181D;
   --border:           rgba(15, 23, 42, 0.12);
   --input:            rgba(15, 23, 42, 0.10);
+}
+
+/* —— night/twilight 暗色令牌覆盖（v3.1.168 游戏本移植）：工作区 light 主题下打开游戏本时，
+   --nv-abyss 等仍是白色（light 定义），导致暗色容器变浅灰。补齐暗色 --nv-* 组，
+   使游戏本页面（bg-[var(--nv-abyss)] 等）在 night/twilight 下真正暗下来 —— */
+[data-game-theme="night"],
+[data-game-theme="twilight"] {
+  --nv-void:          var(--game-bg);
+  --nv-abyss:         var(--game-bg-2);
+  --nv-surface-1:     rgba(255, 255, 255, 0.05);
+  --nv-surface-2:     rgba(255, 255, 255, 0.09);
+  --nv-surface-3:     rgba(255, 255, 255, 0.13);
+  --nv-border-1:      rgba(255, 255, 255, 0.08);
+  --nv-border-2:      rgba(255, 255, 255, 0.14);
+  --nv-border-3:      rgba(255, 255, 255, 0.22);
+  --nv-text-primary:  #F0EEE8;
+  --nv-text-secondary:#C9CDD6;
+  --nv-text-tertiary: #8B90A0;
+  --nv-text-muted:    #767B8C;
 }
 
 /* —— 游戏根容器背景：三模式各自渐变天幕，默认沿用虚空底色 —— */

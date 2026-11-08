@@ -1277,6 +1277,10 @@ export default function WorkspacePage() {
         <button onClick={() => setShowProjectSettings(true)} className="text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="项目设定：骨架 / 配置 / 记忆衰减 / 确认交付，统一入口">
           <Icon name="settings" size={13} /> 项目设定
         </button>
+        {/* 游戏模式常驻入口（v3.1.168：用户点名太隐蔽——顶栏显眼位，与沉浸写作并列） */}
+        <button onClick={() => router.push(`/gamesaga?projectId=${project.id}&projectName=${encodeURIComponent(project.name)}`)} className="text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-[var(--nv-creative)]/40 bg-[var(--nv-creative)]/10 text-[var(--nv-creative)] hover:bg-[var(--nv-creative)]/20 transition-colors" title="游戏模式：跑团式扮演这本书（掷骰/道具/跨章连玩），玩出的正文可导出回章节">
+          <Icon name="gamepad" size={13} /> 游戏模式
+        </button>
         <button onClick={() => setZenMode(true)} className="text-xs btn-ghost px-3 py-1.5 rounded-xl flex items-center gap-1.5" title="沉浸写作模式（⌘/Ctrl + . 进入 · 隐藏全部侧栏并全屏正文）">
           <Icon name="maximize" size={13} /> 沉浸写作
         </button>

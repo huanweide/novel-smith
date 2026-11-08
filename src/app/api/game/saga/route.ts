@@ -25,11 +25,17 @@ export async function POST(req: Request) {
     if (mode === "fresh") {
       const title = (body.title || "").trim();
       if (!title) return NextResponse.json({ error: "缺少游戏本名称" }, { status: 400 });
+      // 世界观前置：从零新建时用户输入的一句话/几句话设定，喂给开场 prompt
+      const synopsis = (body.synopsis || "").trim();
       const saga = await prisma.gameSaga.create({
         data: {
           title,
           projectId: null,
-          sourceSnapshot: JSON.stringify({ bookName: title, derivedAt: new Date().toISOString() }),
+          sourceSnapshot: JSON.stringify({
+            bookName: title,
+            synopsis,
+            derivedAt: new Date().toISOString(),
+          }),
         },
       });
       // 首章自动建

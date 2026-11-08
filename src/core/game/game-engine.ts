@@ -857,6 +857,7 @@ export async function* processGameStart(
   let loreEntries: Array<{ title: string; content: string }>;
   let sagaPlayAs: { playAsCharacterId: string | null; playAsName: string | null } | null = null;
   let personaBlock = "";
+  let sagaSynopsis = "";
 
   if (isSaga) {
     const [chapter, saga] = await Promise.all([
@@ -870,6 +871,7 @@ export async function* processGameStart(
     sagaPlayAs = { playAsCharacterId: saga.playAsCharacterId, playAsName: saga.playAsName };
     let snap: any = {};
     try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
+    sagaSynopsis = typeof snap.synopsis === "string" ? snap.synopsis : "";
     // 长期资产：派生本实时取项目角色卡/世界书（跨模式共享）；从零新建用前传快照
     const assets = saga.projectId
       ? await Promise.all([
@@ -977,10 +979,15 @@ export async function* processGameStart(
   // 三重契约之②：每轮 user prompt 头部重申视角锚（防长上下文漂移）
   const personaAnchor = personaName ? `${buildPersonaRoundAnchor(personaName)}\n\n` : "";
 
+  // 世界观前置（从零新建的游戏本）：用户创建时输入的设定，作为开场的硬前置
+  const sagaWorldSeed = isSaga && !chapterOutline && sagaSynopsis
+    ? `\n\n【世界观前置——本次扮演的世界与身份设定，开场必须遵循，不得另起炉灶】\n${sagaSynopsis}`
+    : "";
+
   const finalUserPrompt = `${personaAnchor}${
     input.concept
-      ? `${userPrompt}${sagaRecap}\n\n【构思参考】玩家已采用以下开场构思，请据此展开本章开场叙事，自然融入而非照抄原文：${input.concept}`
-      : `${userPrompt}${sagaRecap}`
+      ? `${userPrompt}${sagaRecap}${sagaWorldSeed}\n\n【构思参考】玩家已采用以下开场构思，请据此展开本章开场叙事，自然融入而非照抄原文：${input.concept}`
+      : `${userPrompt}${sagaRecap}${sagaWorldSeed}`
   }`;
 
   // 4. 调用 LLM（流式，逐 token 产出）

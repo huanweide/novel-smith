@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/States";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { isConfrontationalAction } from "@/core/game/game-prompts";
+import GameParticles from "@/components/game/GameParticles";
 
 interface SagaChapter {
   id: string;
@@ -377,9 +378,17 @@ function SagaDetailInner() {
   }
 
   return (
-    <div className="mx-auto flex h-screen max-w-6xl flex-col px-4 py-6">
-      {/* 顶部 */}
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div
+      data-game-theme="night"
+      className="game-root relative flex h-screen flex-col overflow-hidden bg-[var(--nv-void)] text-[var(--nv-text-secondary)] font-sans"
+    >
+      {/* 星空粒子背景（吸收旧游戏模式的沉浸氛围） */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <GameParticles theme="night" />
+      </div>
+
+      {/* 顶部：暗色玻璃 */}
+      <div className="relative z-10 mb-3 flex items-center justify-between gap-3 border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/60 px-4 py-3 backdrop-blur-sm">
         <div className="flex min-w-0 items-center gap-3">
           <button onClick={() => router.push("/gamesaga")} className="text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]" title="返回游戏本">
             <Icon name="arrowLeft" size={16} />
@@ -414,8 +423,8 @@ function SagaDetailInner() {
             title="自由叙事=AI 裁决一切；跑团检定=对抗行动掷骰定结果，AI 只演不判"
             className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
           >
-            <option value="free">模式：自由叙事</option>
-            <option value="tabletop">模式：跑团检定</option>
+            <option value="free">模式：自由叙事（无骰子）</option>
+            <option value="tabletop">模式：跑团检定（对抗掷骰）</option>
           </select>
           {/* 重骰难度档：简单=无限重骰 / 困难=3 次 / 真实=不可重骰 */}
           {saga.rollMode === "tabletop" && (
@@ -475,9 +484,9 @@ function SagaDetailInner() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-4">
-        {/* 左栏：章节列表 */}
-        <aside className="w-56 shrink-0 space-y-2 overflow-y-auto">
+      <div className="relative z-10 flex min-h-0 flex-1 gap-4 px-4 pb-4">
+        {/* 左栏：章节列表（暗色玻璃） */}
+        <aside className="w-56 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 p-2 backdrop-blur-sm">
           {saga.chapters.map((c) => (
             <div
               key={c.id}
@@ -485,8 +494,8 @@ function SagaDetailInner() {
                 activeChapter?.id === c.id
                   ? "border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)]"
                   : c.status === "archived"
-                    ? "border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] opacity-70"
-                    : "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50"
+                    ? "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/30 opacity-70"
+                    : "border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40"
               }`}
             >
               <div className="flex items-center justify-between gap-1">
@@ -514,13 +523,20 @@ function SagaDetailInner() {
           ))}
         </aside>
 
-        {/* 右侧：游戏循环（轻量版） */}
-        <main className="flex min-w-0 flex-1 flex-col rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-5">
+        {/* 右侧：游戏循环（暗色沉浸） */}
+        <main className="flex min-w-0 flex-1 flex-col rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 p-5 backdrop-blur-sm">
           {!activeChapter ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-              <Icon name="gamepad" size={36} className="text-[var(--nv-creative)] opacity-60" />
-              <p className="text-sm text-[var(--nv-text-secondary)]">从左侧选一章开始扮演</p>
-              <p className="text-xs text-[var(--nv-text-tertiary)]">一章一局 · 收束后正文归档 · 新章自动继承前情</p>
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+              <div className="nv-glow-strong flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--nv-creative)]/15">
+                <Icon name="gamepad" size={44} className="text-[var(--nv-creative)]" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-[var(--nv-text-primary)]">游戏本已就绪</p>
+                <p className="mt-1.5 text-sm text-[var(--nv-text-secondary)]">从左侧选一章，化身角色亲历这段剧情</p>
+              </div>
+              <p className="text-xs text-[var(--nv-text-tertiary)]">
+                一章一局 · 收束后正文归档 · 新章自动继承前情{saga.rollMode === "tabletop" ? " · 跑团检定已开启" : ""}
+              </p>
             </div>
           ) : (
             <>
@@ -596,7 +612,7 @@ function SagaDetailInner() {
 
       {/* ── 骰子悬浮判定（两段式）：右下角小面板，动画期间页面完全可操作 ── */}
       {dice && (
-        <div className="dice-panel-in fixed bottom-24 right-6 z-[90] w-64 rounded-2xl border border-[var(--nv-border-3)] bg-[var(--nv-surface-1)] p-4 shadow-2xl">
+        <div className="dice-panel-in fixed bottom-24 right-6 z-[90] w-64 rounded-2xl border border-[var(--nv-border-3)] bg-[var(--nv-abyss)]/95 shadow-2xl backdrop-blur-md">
           {dice.rolling ? (
             <div className="flex flex-col items-center gap-2 py-2">
               <span className="dice-tumbling text-4xl" aria-hidden>🎲</span>
