@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install
         run: npm ci
@@ -52,7 +52,17 @@ jobs:
       # → electron-builder --win --publish never（只构建，发布交给下一步的 action-gh-release）
       # → check-dist-version（安装包/latest.yml 版本一致性断言）→ rebuild:node（CI 内无需，幂等无害）
       - name: Build installer
-        run: npm run dist
+        run: |
+          npm run dist 2>&1 | Tee-Object -FilePath build-log.txt
+          exit $LASTEXITCODE
+
+      # step 日志匿名拉不到（需 admin），失败时把完整构建日志存成 artifact（匿名可下载）以便诊断
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-log.txt
 
       # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
       - name: Publish GitHub Release
