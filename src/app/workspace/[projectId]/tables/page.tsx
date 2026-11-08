@@ -275,7 +275,12 @@ interface LoreTableT {
             <Link href={`/workspace/${projectId}`} className="btn-ghost text-xs px-3 py-1.5 rounded-xl flex items-center gap-1">
               <Icon name="arrowRight" size={13} className="rotate-180" /> 返回项目
             </Link>
-            <h1 className="text-lg font-bold tracking-tight">结构化表格 · 宝宝流数据库</h1>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">结构化表格</h1>
+              <p className="text-xs text-[var(--nv-text-muted)] mt-0.5">
+                这里是这本书的「记忆库」：AI 写作前会自动来这里查人物、地点、伏笔，防止写着写着忘了设定。下面三个工具都是围绕这个记忆库的便捷操作。
+              </p>
+            </div>
           </div>
           <button onClick={() => setShowCreate(true)} className="btn-primary text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 font-medium">
             <Icon name="sparkles" size={14} /> 新建表格
@@ -287,8 +292,10 @@ interface LoreTableT {
         {/* 自动填表 + 召回预览 */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="surface-elevated rounded-2xl p-5">
-            <h2 className="font-semibold mb-2 flex items-center gap-2"><Icon name="sparkles" size={15} /> 自动填表（LLM 填充）</h2>
-            <p className="text-xs text-[var(--nv-text-muted)] mb-3">粘贴一章正文，DeepSeek 按表格模板自动抽取结构化事实写入（宝宝流国模填表：关COT+严格JSON+失败重试3次）。</p>
+            <h2 className="font-semibold mb-2 flex items-center gap-2"><Icon name="sparkles" size={15} /> 自动填表 —— 粘一章正文，AI 自动登记</h2>
+            <p className="text-xs text-[var(--nv-text-muted)] mb-3">
+              刚写完一章？把正文粘贴进来点一下，AI 会把里面的人物行踪、新地点、新物品自动登记进表格——相当于替 AI 做读书笔记，下一章它就记得了。
+            </p>
             <textarea
               value={chapterText}
               onChange={(e) => setChapterText(e.target.value)}
@@ -319,8 +326,10 @@ interface LoreTableT {
           </div>
 
           <div className="surface-elevated rounded-2xl p-5">
-            <h2 className="font-semibold mb-2">剧情推进 · 记忆召回预览</h2>
-            <p className="text-xs text-[var(--nv-text-muted)] mb-3">输入当前上下文（章节草稿），按世界书绿灯关键词与表格行匹配，预览将注入正文 AI 的记忆片段。</p>
+            <h2 className="font-semibold mb-2">记忆召回预览 —— 看看 AI 写下一章时会「想起什么」</h2>
+            <p className="text-xs text-[var(--nv-text-muted)] mb-3">
+              AI 每次写正文前，都会根据当前剧情从这里挑相关记忆塞进脑子（防止忘记前文）。粘贴一段你的草稿，可以提前检查「它会想起哪些设定」——想起的不对、漏了，就来表格里补。
+            </p>
             <textarea
               value={recallCtx}
               onChange={(e) => setRecallCtx(e.target.value)}
@@ -357,8 +366,10 @@ interface LoreTableT {
 
         {/* 一键填表（首章→最新）+ 自检报告 */}
         <section className="surface-elevated rounded-2xl p-5">
-          <h2 className="font-semibold mb-2 flex items-center gap-2"><Icon name="sparkles" size={15} /> 一键填表（首章→最新）+ 自动自检</h2>
-          <p className="text-xs text-[var(--nv-text-muted)] mb-3">按章节顺序自动从第一章填到最新一章；已填章节自动跳过防重复；填完自动跑「地名正确性 + 信息完整性」自检，列出疑似错误地名与空值。</p>
+          <h2 className="font-semibold mb-2 flex items-center gap-2"><Icon name="sparkles" size={15} /> 一键补全 —— 从第 1 章读到最新章，全部登记完</h2>
+          <p className="text-xs text-[var(--nv-text-muted)] mb-3">
+            懒得逐章粘贴？点一下就行：AI 按顺序把每一章都登记进表格（已经登记过的自动跳过，不会重复），跑完后附一份「体检报告」——错写的地名、漏填的空格，一目了然。章节多时会比较慢，挂着等就好。
+          </p>
           <button onClick={runFillAll} disabled={busy} className="btn-primary text-xs py-2 px-4 rounded-xl disabled:cursor-not-allowed disabled:opacity-50">{busy ? "运行中（可能较慢）…" : "一键填表（首章→最新）"}</button>
           {fillAllResult && (
             <div className={`mt-3 text-xs rounded-xl px-3 py-2 border ${fillAllResult.ok ? "border-[var(--nv-success)]/30 bg-[var(--nv-success)]/10" : "border-[var(--nv-danger)]/40 bg-[var(--nv-danger)]/10"}`}>

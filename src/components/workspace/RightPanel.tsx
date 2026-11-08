@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/Modal";
 import { ContextPreview } from "@/components/editor/ContextPreview";
 import { ChapterWordCountChart } from "./ChapterWordCountChart";
 import { ChapterEntitiesPanel } from "./ChapterEntitiesPanel";
@@ -74,6 +76,9 @@ export function RightPanel(props: RightPanelProps) {
   const { selectedNode, minimized, onMinimize, onExpand, contextRefreshKey, authorNote, onEditCharacter, onEditLore, selectedText, toolboxItems, onJumpToNode, recallMemories = [], codexItems = [], codexStats = null, isGenerating = false } = props;
   // FE-8：project 数据从 store 读取，不再由父组件逐层透传 project 大对象
   const project = useProjectStore((s) => s.project);
+  // 使用教程浮层（v3.1.168）+ 工具箱跳转（hooks 必须在 early return 之前）
+  const [showGuide, setShowGuide] = useState(false);
+  const router = useRouter();
   if (!project) return null;
 
   const [topTab, setTopTab] = useState<TopTab>("ai");
@@ -228,6 +233,35 @@ export function RightPanel(props: RightPanelProps) {
         {/* ── 工具箱 tab（内联网格，按用途分组，替代原顶栏 Modal） ── */}
         {topTab === "toolbox" && (
           <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {/* 快捷入口：游戏模式（跑团扮演）+ 使用教程（v3.1.168） */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => router.push(`/gamesaga?projectId=${project?.id ?? ""}&projectName=${encodeURIComponent(project?.name ?? "")}`)}
+                className="group flex flex-col gap-1.5 rounded-xl border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)]/60 p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-glass-rest)]"
+                title="跑团式互动扮演：一章一章玩下去，正文随时可导出回小说"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--nv-creative)]/15 text-[var(--nv-creative)]">
+                    <Icon name="gamepad" size={15} />
+                  </span>
+                  <span className="text-xs font-medium text-[var(--nv-text-primary)]">游戏模式</span>
+                </div>
+                <p className="line-clamp-2 text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">化身角色亲历剧情：掷骰判定、收集道具、跨章连玩，随时导出成章节</p>
+              </button>
+              <button
+                onClick={() => setShowGuide(true)}
+                className="group flex flex-col gap-1.5 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-2)]"
+                title="整体功能一览：每个区域是干什么的"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--nv-primary)]/10 text-[var(--nv-primary)]">
+                    <Icon name="book" size={15} />
+                  </span>
+                  <span className="text-xs font-medium text-[var(--nv-text-primary)]">使用教程</span>
+                </div>
+                <p className="line-clamp-2 text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">三分钟能用懂：写作台各区域、AI 记忆库、工具箱的作用与关系</p>
+              </button>
+            </div>
             {TOOLBOX_CATEGORIES.map((cat) => {
               const catItems = toolboxItems.filter((i) => i.category === cat);
               if (catItems.length === 0) return null;
@@ -334,6 +368,36 @@ export function RightPanel(props: RightPanelProps) {
             />
           </div>
         )}
+
+        {/* ── 使用教程（整体功能一览）── */}
+        <Modal open={showGuide} onClose={() => setShowGuide(false)} title="写作台使用教程" panelClassName="max-w-xl">
+          <div className="space-y-3 text-xs leading-relaxed text-[var(--nv-text-secondary)]">
+            <p className="rounded-xl bg-[var(--nv-primary)]/10 px-3 py-2 text-[var(--nv-text-primary)]">
+              写作台分三栏：<b>左栏管素材</b>、<b>中间管写作</b>、<b>右栏管辅助</b>。所有 AI 功能共享同一套设定，改一处全书生效。
+            </p>
+            <div>
+              <p className="font-medium text-[var(--nv-text-primary)]">左栏 · 素材库</p>
+              <p>「大纲」是章节树（点章节切换写作对象）；「角色」管人物卡（AI 写作时按人设行事，不会 OOC）；「世界」管世界观词条（写到相关情节自动注入）。</p>
+            </div>
+            <div>
+              <p className="font-medium text-[var(--nv-text-primary)]">中间 · 写作区</p>
+              <p>「生成/重写」按章纲写正文；「微调」按指令改现有内容；选中一段文字会出现快捷改写菜单。顶栏「导出」出 Word/EPUB 成书。</p>
+            </div>
+            <div>
+              <p className="font-medium text-[var(--nv-text-primary)]">右栏 · 辅助区</p>
+              <p>「AI助手」随时问答；「实体」看本章人物/伏笔/一致性检查；「工具箱」是便捷入口合集（下面每个工具与对应页面功能完全相同）；「统计」看全书数据；「发布」做投稿前检查。</p>
+            </div>
+            <div>
+              <p className="font-medium text-[var(--nv-text-primary)]">结构化表格 · AI 的记忆库</p>
+              <p>把正文事实沉淀成表格，AI 写每章前自动查阅——防忘设定、防前后矛盾。入口在工具箱「结构化表格」。</p>
+            </div>
+            <div>
+              <p className="font-medium text-[var(--nv-text-primary)]">游戏模式 · 跑团式扮演</p>
+              <p>不想自己写的时候，化身角色亲历剧情：掷骰判定成败、捡道具、跨章连玩，玩出的正文随时导出成小说章节。入口在工具箱「游戏模式」。</p>
+            </div>
+            <p className="text-[var(--nv-text-tertiary)]">提示：每个按钮的详细说明，把鼠标悬停在按钮上即可看到。</p>
+          </div>
+        </Modal>
       </div>
     </aside>
   );

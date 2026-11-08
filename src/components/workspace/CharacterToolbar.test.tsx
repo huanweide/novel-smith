@@ -52,17 +52,17 @@ describe("CharacterToolbar（v2.0.4 自建标签 + 工具条按钮）", () => {
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
 
-  it("打标到选中按钮（标签非空 + 选中非空时可用）调用 onApplyTags", () => {
+  it("打标按钮（标签非空 + 选中非空时可用）调用 onApplyTags", () => {
     const onApplyTags = vi.fn();
     render(<CharacterToolbar {...baseProps} onApplyTags={onApplyTags} />);
-    fireEvent.click(screen.getByRole("button", { name: /打标到选中/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打标" }));
     expect(onApplyTags).toHaveBeenCalledTimes(1);
   });
 
   it("清空按钮（选中非空时可见）调用 onClear", () => {
     const onClear = vi.fn();
     render(<CharacterToolbar {...baseProps} onClear={onClear} />);
-    fireEvent.click(screen.getByRole("button", { name: "清空" }));
+    fireEvent.click(screen.getByRole("button", { name: /清空/ }));
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 });
