@@ -285,6 +285,7 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
    ===暗线===
    TRICK|物品名|归属者|真相备注（如「空盒子，里面根本没有钥匙」「是样品，真品在他兄弟手里」「想用它换取信任后偷梁换柱」）
    - 真相不写进叙事正文；后续剧情揭露时（偷窃发现是空的、鉴定出假货、被人戳穿）正常叙事描写，并用 CI|消耗/损坏/转移 翻转背包——表象与真相的落差就是伏笔的爆点。
+   - 真相已揭露时（本轮叙事里玩家已经知道内情了），额外输出一行：REVEAL|物品名|归属者——引擎会把这条暗线销账，避免重复揭露。
    - 暗线可长期悬置：不必急着揭露，让它在之后的轮次里自然引爆。
 8. 每轮更新情节进度（选项之前输出）：
    【情节进度：X%】
@@ -508,12 +509,15 @@ export function parseGameOutput(rawOutput: string): {
   plotProgress: number;
   /** 暗线（P1 谎言与伪装）：TRICK|物品名|归属者|真相备注——表层照常入账，真相只进暗账（玩家不可见） */
   newTricks: Array<{ name: string; owner: string; truth: string }>;
+  /** 暗线销账（P1）：REVEAL|物品名|归属者——真相已揭露，引擎从暗账移除该条 */
+  newReveals: Array<{ name: string; owner: string }>;
 } {
   let narrative = rawOutput;
   const options: Array<{ index: number; text: string }> = [];
   const newEntities: Array<{ name: string; type: string; description: string }> = [];
   const itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }> = [];
   const newTricks: Array<{ name: string; owner: string; truth: string }> = [];
+  const newReveals: Array<{ name: string; owner: string }> = [];
   let plotProgress = -1;
 
   // ── 提取选项（阿游 P1-1 重写）──
@@ -626,6 +630,12 @@ export function parseGameOutput(rawOutput: string): {
         });
       }
     }
+    // 销账：REVEAL|物品名|归属者（真相已揭露，引擎从暗账移除）
+    const revealLines = trickSection[1].split("\n").filter((l) => l.startsWith("REVEAL|"));
+    for (const line of revealLines) {
+      const parts = line.replace("REVEAL|", "").split("|").map((s) => s.trim());
+      if (parts[0]) newReveals.push({ name: parts[0], owner: parts[1] || "" });
+    }
     // 从 narrative 中移除暗线区块（绝不进正文，玩家不可见）
     narrative = narrative.replace(trickSection[0], "").trim();
   }
@@ -640,7 +650,7 @@ export function parseGameOutput(rawOutput: string): {
   // 清理多余空行
   narrative = narrative.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks };
+  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals };
 }
 
 /**

@@ -760,8 +760,8 @@ async function* runLockedTurn(
   ]);
 
   // P1 暗账：TRICK 合并写入 saga.secretLedger（跨章持久的伏笔账，仅 AI 可见）。
-  // 按 name+owner 去重：同一伪装重复输出只记一次；真相揭露后 AI 可通过输出空真相行覆盖（简化：先不去除，由 prompt 指引 CI 翻转）。
-  if (session.sagaId && parsed.newTricks.length > 0) {
+  // 按 name+owner 去重：同一伪装重复输出只记一次；REVEAL 销账（真相已揭露，移除该条避免重复注入/重复揭露）。
+  if (session.sagaId && (parsed.newTricks.length > 0 || parsed.newReveals.length > 0)) {
     const saga = await prisma.gameSaga.findUnique({ where: { id: session.sagaId }, select: { secretLedger: true } });
     let ledger: Array<{ name: string; owner: string; truth: string; round: number }> = [];
     try { ledger = JSON.parse(saga?.secretLedger || "[]"); } catch { /* 坏账当空 */ }
@@ -772,8 +772,26 @@ async function* runLockedTurn(
         changed = true;
       }
     }
+    for (const r of parsed.newReveals) {
+      const before = ledger.length;
+      ledger = ledger.filter((s) => !(s.name === r.name && (!r.owner || s.owner === r.owner)));
+      if (ledger.length !== before) changed = true;
+    }
     if (changed) {
       await prisma.gameSaga.update({ where: { id: session.sagaId }, data: { secretLedger: JSON.stringify(ledger) } });
+    }
+  }
+
+  // P1 世界卡联动（回合路径补齐，与开局路径 ensureItemLorebook 对齐）：
+  // 回合内获得/转移的物品同步建/更新世界书词条（归属随剧情流动），长期资产跨模式共享。
+  if (session.projectId) {
+    for (const change of parsed.itemChanges) {
+      if (change.operation === "gain") {
+        await ensureItemLorebook(session.projectId, change.name, change.owner || "主角");
+      } else if (change.operation === "transfer") {
+        // 转移：为新归属建/更新词条（原持有者词条保留历史，不删——揭露伏笔时可翻旧账）
+        await ensureItemLorebook(session.projectId, change.name, change.owner || "主角");
+      }
     }
   }
 

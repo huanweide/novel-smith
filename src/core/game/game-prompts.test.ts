@@ -85,6 +85,14 @@ describe("parseGameOutput —— 转移/损坏/暗线（P1）", () => {
     const r = parseGameOutput(`普通叙事。\n1. 选项\n`);
     expect(r.newTricks).toEqual([]);
   });
+
+  it("REVEAL 销账：真相已揭露时解析出 newReveals（引擎从暗账移除，避免重复揭露）", () => {
+    const r = parseGameOutput(
+      `盒子打开——空的。陈伯的钥匙根本不存在。\n1. 追问陈伯\n===暗线===\nREVEAL|书房钥匙|陈伯\n`
+    );
+    expect(r.newReveals).toEqual([{ name: "书房钥匙", owner: "陈伯" }]);
+    expect(r.narrative).not.toContain("REVEAL");
+  });
 });
 
 // 验证游戏模式「操作中文→英文归一化」：AI 产出中文操作，解析器统一映射为英文枚举，

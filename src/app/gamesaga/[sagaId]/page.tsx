@@ -116,6 +116,15 @@ function renderHotspots(text: string, names: string[], onPick: (name: string) =>
   );
 }
 
+/**
+ * 流式显示截断：结构区块（===新实体/角色物品变动/暗线===、【情节进度】）都在正文之后，
+ * 出现即截断——暗线（TRICK|…）绝不能在流式期闪现给玩家（轮末 parse 只对落库正文生效）。
+ */
+function hideStructBlocks(raw: string) {
+  const idx = raw.search(/(===|【情节进度)/);
+  return idx >= 0 ? raw.slice(0, idx) : raw;
+}
+
 function SagaDetailInner() {
   const { sagaId } = useParams<{ sagaId: string }>();
   const router = useRouter();
@@ -300,8 +309,8 @@ function SagaDetailInner() {
           const event = JSON.parse(line.slice(6));
           if (event.type === "token") {
             streamedText += event.content || "";
-            setStreamed(streamedText);
-            scanGameMarks(event.content || ""); // 及时演算：标记一出现立即上屏
+            setStreamed(hideStructBlocks(streamedText)); // 及时演算扫描用完整文本，显示用截断文本
+            scanGameMarks(event.content || "");
           } else if (event.type === "roll") {
             setRollInfo({ d100: event.d100, label: event.label, successRate: event.successRate, reasons: event.reasons });
           } else if (event.type === "start_done" || event.type === "game_done") {
@@ -874,10 +883,15 @@ function SagaDetailInner() {
                 <p className="text-right text-[var(--nv-creative)]">{plotProgress}%</p>
                 {turns.length === 0 && <p className="mt-4 italic text-[var(--nv-text-muted)]">开始本章后，你的每个行动都会记录在这里</p>}
                 {turns.map((t) => (
-                  <div key={t.round} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5">
+                  <button
+                    key={t.round}
+                    onClick={() => document.getElementById(`turn-${t.round}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    title="点击跳到这一轮的正文"
+                    className="mt-2 block w-full rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 text-left transition-colors hover:border-[var(--nv-creative-soft)]"
+                  >
                     <p className="text-[var(--nv-creative)]">第{t.round}轮</p>
                     <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-tertiary)]">{t.playerAction}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -979,7 +993,7 @@ function SagaDetailInner() {
                 ) : turns.length > 0 ? (
                   <div className="space-y-5">
                     {turns.map((t) => (
-                      <div key={t.round} className="group/turn relative">
+                      <div key={t.round} id={`turn-${t.round}`} className="group/turn relative scroll-mt-4">
                         {editingRound === t.round ? (
                           <div className="space-y-2">
                             <p className="text-[10px] text-[var(--nv-text-tertiary)]">编辑第 {t.round} 轮叙事（直接修改游戏内正文，字数同步重算）</p>
