@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { AdoptedItem } from "@/core/explore/types";
 import { STEP_LABELS, STEP_LUCIDE } from "@/core/explore/types";
 import { Icon } from "@/components/ui/icons";
+import { toastError } from "@/components/ui/toast";
 
 interface Props {
   adopted: AdoptedItem[];
@@ -32,6 +34,26 @@ export function AdoptedContentPanel({
   createdProjectId,
   onCreateProject,
 }: Props) {
+  const router = useRouter();
+  // 模式选择（探讨完毕二选一）：小说模式=进写作台；游戏模式=以本项目为前传派生游戏本
+  const [creatingGame, setCreatingGame] = useState(false);
+  const startGameMode = async () => {
+    if (!createdProjectId || creatingGame) return;
+    setCreatingGame(true);
+    try {
+      const res = await fetch("/api/game/saga", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "derive", projectId: createdProjectId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "创建游戏本失败");
+      router.push(`/gamesaga/${data.saga.id}`);
+    } catch (e: any) {
+      toastError(e.message || "创建游戏本失败");
+      setCreatingGame(false);
+    }
+  };
   const grouped: Record<string, AdoptedItem[]> = {};
   for (const item of adopted) {
     if (!grouped[item.step]) grouped[item.step] = [];
@@ -123,26 +145,36 @@ export function AdoptedContentPanel({
         )}
       </div>
 
-      {/* 底部操作 */}
+      {/* 底部操作：探讨完毕二选一——小说模式（写作台）/ 游戏模式（跑团扮演） */}
       <div className="border-t border-[var(--nv-border-2)] pt-4 space-y-2 shrink-0">
         {createdProjectId ? (
           <div className="space-y-2.5">
             <div className="flex items-center justify-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-success" />
               <span className="text-xs text-success font-medium">
-                项目运行中
+                项目运行中 · 选择进入方式
               </span>
             </div>
               <Link
                 href={`/workspace/${createdProjectId}`}
                 className="btn-success w-full py-3 text-xs font-semibold text-center block rounded-xl active:scale-[0.98]"
               >
-                进入写作台 →
+                小说模式 · 进入写作台 →
               </Link>
+            <button
+              onClick={startGameMode}
+              disabled={creatingGame}
+              title="以刚聊出的设定为前传，化身角色亲历剧情（一章一局，可掷骰检定）"
+              className={`w-full py-2.5 rounded-xl text-xs font-medium active:scale-[0.98] btn-creative ${
+                creatingGame ? "opacity-60 cursor-not-allowed" : ""
+              }`}
+            >
+              {creatingGame ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建游戏本...</span> : <span className="flex items-center gap-1"><Icon name="gamepad" size={13} /> 游戏模式 · 化身角色亲历剧情</span>}
+            </button>
             <button
               onClick={() => onCreateProject("ai_refine")}
               disabled={creating || adopted.length === 0}
-              className={`w-full py-2.5 rounded-xl text-xs font-medium active:scale-[0.98] btn-creative ${
+              className={`w-full py-2.5 rounded-xl text-xs font-medium active:scale-[0.98] btn-ghost ${
                 creating || adopted.length === 0 ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
@@ -152,7 +184,7 @@ export function AdoptedContentPanel({
         ) : (
           <>
             <p className="text-[9px] text-[var(--nv-text-muted)] text-center">
-              先和 AI 聊出设定并采纳，再进入写作台
+              先和 AI 聊出设定并采纳，再选择写作或游玩
             </p>
             <button
               onClick={() => onCreateProject("direct")}
@@ -161,7 +193,7 @@ export function AdoptedContentPanel({
                 creating || adopted.length === 0 ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
-              {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={13} /> 进入写作台 · 开始写小说</span>}
+              {creating ? <span className="flex items-center gap-1"><Icon name="loader" size={12} className="animate-spin" /> 创建中...</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={13} /> 生成项目 · 开始写小说</span>}
             </button>
           </>
         )}
