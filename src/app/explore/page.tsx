@@ -15,7 +15,8 @@ import type {
   AdoptedItem,
   AdoptCard,
 } from "@/core/explore/types";
-import { DEFAULT_BUILD_CONFIG, EXPLORE_STEPS, STEP_LABELS, STEP_DESCRIPTIONS, STEP_LUCIDE, STEP_PROMPTS } from "@/core/explore/types";
+import { DEFAULT_BUILD_CONFIG, EXPLORE_STEPS, STEP_LABELS, STEP_DESCRIPTIONS, STEP_LUCIDE, STEP_PROMPTS, EXPLORE_SNAPSHOT_KIND, EXPLORE_SNAPSHOT_VERSION } from "@/core/explore/types";
+import type { ExploreSnapshot } from "@/core/explore/types";
 import { toastError, toastCreated, toastSubtle } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/Modal";
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
@@ -57,10 +58,17 @@ export default function ExplorePage() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   // 探讨模式玩法教程（顶栏「教程」直达）
   const [showTutorial, setShowTutorial] = useState(false);
-  // 产出目标：小说项目（默认） / 游戏本（?as=saga，同一套 11 步，产出第一视角扮演的舞台）
-  const [asGame, setAsGame] = useState(false);
+  // 产出目标：小说（默认）/ 游戏本 —— 两种模式共用同一套 11 步探讨，只换创建时的映射与界面口径。
+  // modeChosen=false 时展示「选择创作模式」首屏（不让用户稀里糊涂从一句话开始）。
+  const [produceMode, setProduceMode] = useState<"novel" | "game" | null>(null);
+  const [modeChosen, setModeChosen] = useState(false);
+  const asGame = produceMode === "game";
   useEffect(() => {
-    try { setAsGame(new URLSearchParams(window.location.search).get("as") === "saga"); } catch { /* ignore */ }
+    try {
+      const p = new URLSearchParams(window.location.search).get("as");
+      if (p === "saga" || p === "game") { setProduceMode("game"); setModeChosen(true); }
+      else if (p === "novel") { setProduceMode("novel"); setModeChosen(true); }
+    } catch { /* ignore */ }
   }, []);
   // 无障碍：窄屏模态抽屉的焦点陷阱（仅抽屉打开时激活，桌面常驻侧栏不受影响）
   const leftDrawerRef = useRef<HTMLElement>(null);
@@ -109,6 +117,14 @@ export default function ExplorePage() {
         // 旧版本存过 mode: "cards"（抽卡已融合进自由讨论），消毒为合法值
         if (state.mode === "chat" || state.mode === "outline") setMode(state.mode);
         if (state.currentStep) setCurrentStep(state.currentStep);
+        // 产出目标（旧数据没有该字段时按小说处理，不打扰）
+        if (state.produceMode === "novel" || state.produceMode === "game") {
+          setProduceMode(state.produceMode);
+          setModeChosen(true);
+        } else if (state.adopted?.length || (state.messages?.length || 0) > 1) {
+          setProduceMode("novel");
+          setModeChosen(true);
+        }
       }
     } catch {
       /* localStorage 损坏，忽略 */
@@ -157,6 +173,7 @@ export default function ExplorePage() {
           createdProjectId,
           mode,
           currentStep,
+          produceMode,
         });
         if (payload !== lastSavedRef.current) {
           lastSavedRef.current = payload;
@@ -167,7 +184,7 @@ export default function ExplorePage() {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [messages, adopted, config, createdProjectId, mode, currentStep]);
+  }, [messages, adopted, config, createdProjectId, mode, currentStep, produceMode]);
 
   // ── ref 防抖 guard ──
   const loadingRef = useRef(false);
@@ -585,6 +602,69 @@ export default function ExplorePage() {
     }
   }, [config, adopted, generatingAll]);
 
+  // ─── 探讨结果导出 / 导入（同一份开局可复用到新书或新游戏本） ─────────
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleExportSnapshot = () => {
+    try {
+      const snap: ExploreSnapshot = {
+        kind: EXPLORE_SNAPSHOT_KIND,
+        version: EXPLORE_SNAPSHOT_VERSION,
+        exportedAt: new Date().toISOString(),
+        produceMode: asGame ? "game" : "novel",
+        config,
+        adopted,
+        currentStep,
+        messages,
+      };
+      const blob = new Blob([JSON.stringify(snap, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `探讨结果-${(config.novelName || "未命名").replace(/[\\/:*?"<>|]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toastSubtle("探讨结果已导出——换个项目/设备导入即可复用同一份开局");
+    } catch (e: any) {
+      toastError("导出失败：" + (e?.message || "未知错误"));
+    }
+  };
+
+  const handleImportSnapshot = async (file: File) => {
+    setImporting(true);
+    try {
+      const raw = JSON.parse(await file.text());
+      if (raw?.kind !== EXPLORE_SNAPSHOT_KIND) throw new Error("不是探讨结果文件（标识不匹配）");
+      if (typeof raw.version !== "number" || raw.version > EXPLORE_SNAPSHOT_VERSION) {
+        throw new Error("文件版本比当前应用新，请升级应用后再导入");
+      }
+      const snap = raw as ExploreSnapshot;
+      setConfig({ ...DEFAULT_BUILD_CONFIG, ...(snap.config || {}) });
+      setAdopted(Array.isArray(snap.adopted) ? snap.adopted : []);
+      if (Array.isArray(snap.messages) && snap.messages.length > 0) setMessages(snap.messages);
+      if (snap.currentStep && (EXPLORE_STEPS as readonly string[]).includes(snap.currentStep)) {
+        setCurrentStep(snap.currentStep);
+      }
+      setProduceMode(snap.produceMode === "game" ? "game" : "novel");
+      setModeChosen(true);
+      // 导入的是「开局探讨结果」：尚未创建产物，重置创建相关的临时态
+      setCreatedProjectId(null);
+      setOutlineResult(null);
+      setOutlineProgress(null);
+      setGeneratePreview([]);
+      lastSavedRef.current = "";
+      toastSubtle(`已导入探讨结果：${Array.isArray(snap.adopted) ? snap.adopted.length : 0} 项设定 · ${Array.isArray(snap.messages) ? snap.messages.length : 0} 条对话`);
+    } catch (e: any) {
+      toastError("导入失败：" + (e?.message || "文件格式不对"));
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
   // ─── 创建项目 ──────────────────────────────────────
 
   const handleCreateProject = useCallback(
@@ -835,6 +915,30 @@ export default function ExplorePage() {
               {showConfig ? "隐藏配置" : "构建配置"}
             </button>
             <button
+              onClick={handleExportSnapshot}
+              disabled={adopted.length === 0 && messages.length <= 1}
+              title="把当前探讨结果导出为 json——可在别的设备/项目导入，复用同一份开局"
+              className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-3 py-1.5 text-xs text-[var(--nv-text-tertiary)] transition-all duration-200 hover:border-[var(--nv-border-3)] hover:text-[var(--nv-text-primary)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              导出探讨
+            </button>
+            <button
+              onClick={() => importRef.current?.click()}
+              disabled={importing}
+              title="导入之前导出的探讨结果（json），接着聊或直接创建"
+              className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-3 py-1.5 text-xs text-[var(--nv-text-tertiary)] transition-all duration-200 hover:border-[var(--nv-border-3)] hover:text-[var(--nv-text-primary)] active:scale-95 disabled:opacity-50"
+            >
+              {importing ? "导入中…" : "导入探讨"}
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              aria-label="导入探讨结果 json"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportSnapshot(f); }}
+            />
+            <button
               onClick={() => {
                 setConfig(DEFAULT_BUILD_CONFIG);
                 setAdopted([]);
@@ -853,6 +957,63 @@ export default function ExplorePage() {
           </div>
         </div>
       </header>
+
+      {/* ── 选择创作模式首屏（未选产出目标时展示）：两种模式共用同一套探讨，先选清再开聊 ── */}
+      {!modeChosen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[var(--nv-veil)] p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-6 shadow-2xl">
+            <div className="mb-1 flex items-center gap-2">
+              <Icon name="sparkles" size={18} className="text-[var(--nv-accent)]" />
+              <h2 className="text-lg font-bold text-[var(--nv-text-primary)]">开始创作 · 先选最终产出</h2>
+            </div>
+            <p className="mb-5 text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+              两种模式共用同一套 11 步探讨（世界观 / 角色 / 势力 / 力量体系 / 地图 / 情节）——聊透一次就够，之后写小说或进去扮演都不必重新设定；选完也可在顶部随时切换。
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                onClick={() => { setProduceMode("novel"); setModeChosen(true); }}
+                className="group flex flex-col items-start rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/60 p-4 text-left transition-all hover:border-[var(--nv-primary)]/50 hover:bg-[var(--nv-primary)]/[0.06] active:scale-[0.99]"
+              >
+                <span className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--nv-primary)]/12">
+                  <Icon name="book" size={18} className="text-[var(--nv-primary)]" />
+                </span>
+                <span className="text-sm font-bold text-[var(--nv-text-primary)]">小说模式</span>
+                <span className="mt-0.5 text-[11px] text-[var(--nv-text-secondary)]">一章一章写下去</span>
+                <span className="mt-2 space-y-1 text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">
+                  写作台正文编辑 · 续写精修 · 一致性审查 · 角色卡/世界书长期记忆 · 导出 EPUB/DOCX
+                </span>
+                <span className="mt-3 text-[11px] font-medium text-[var(--nv-primary)] group-hover:underline">进入写作台 →</span>
+              </button>
+              <button
+                onClick={() => { setProduceMode("game"); setModeChosen(true); }}
+                className="group flex flex-col items-start rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/60 p-4 text-left transition-all hover:border-[var(--nv-creative)]/50 hover:bg-[var(--nv-creative)]/[0.06] active:scale-[0.99]"
+              >
+                <span className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--nv-creative)]/12">
+                  <Icon name="gamepad" size={18} className="text-[var(--nv-creative)]" />
+                </span>
+                <span className="text-sm font-bold text-[var(--nv-text-primary)]">游戏模式</span>
+                <span className="mt-0.5 text-[11px] text-[var(--nv-text-secondary)]">化身角色亲历这段剧情</span>
+                <span className="mt-2 space-y-1 text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">
+                  第一视角扮演 · 选项/自由行动推进 · 跑团检定掷骰 · 每个角色都有随身物品（还能撒谎藏伏笔）
+                </span>
+                <span className="mt-3 text-[11px] font-medium text-[var(--nv-creative)] group-hover:underline">进入第一视角 →</span>
+              </button>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--nv-border-2)] pt-4">
+              <p className="text-[10px] text-[var(--nv-text-tertiary)]">
+                已有探讨结果？导入 json 直接复用同一份开局（同一世界观可开新书、也可开新世界线）
+              </p>
+              <button
+                onClick={() => importRef.current?.click()}
+                disabled={importing}
+                className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-3 py-1.5 text-[11px] text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-border-3)] hover:text-[var(--nv-text-primary)] disabled:opacity-50"
+              >
+                {importing ? "导入中…" : "导入探讨结果"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 探讨模式玩法教程 ── */}
       <Modal open={showTutorial} onClose={() => setShowTutorial(false)} title="探讨模式 · 怎么玩" icon="lightbulb">
@@ -879,18 +1040,30 @@ export default function ExplorePage() {
         </button>
       </Modal>
 
-      {/* ── 产出目标提示条：游戏本模式（?as=saga）与小说模式共用同一套 11 步，只换口径 ── */}
-      {asGame && (
-        <div className="shrink-0 border-b border-[var(--nv-creative)]/25 bg-[var(--nv-creative)]/[0.08] px-5 py-2">
+      {/* ── 产出目标提示条：小说 / 游戏本共用同一套 11 步，只换口径；随时可切换 ── */}
+      {modeChosen && (
+        <div className={`shrink-0 border-b px-5 py-2 ${
+          asGame
+            ? "border-[var(--nv-creative)]/25 bg-[var(--nv-creative)]/[0.08]"
+            : "border-[var(--nv-primary)]/20 bg-[var(--nv-primary)]/[0.06]"
+        }`}>
           <div className="mx-auto flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-            <Icon name="gamepad" size={13} className="shrink-0 text-[var(--nv-creative)]" />
-            <span className="font-medium text-[var(--nv-text-primary)]">产出：游戏本 · 第一视角自由叙事</span>
-            <span className="text-[var(--nv-text-tertiary)]">
-              和写小说同一套前置创作——聊出世界观、你扮演的角色、势力与力量体系、开局场景，这些会成为游戏的舞台与首章章纲
+            <Icon name={asGame ? "gamepad" : "book"} size={13} className={`shrink-0 ${asGame ? "text-[var(--nv-creative)]" : "text-[var(--nv-primary)]"}`} />
+            <span className="font-medium text-[var(--nv-text-primary)]">
+              产出：{asGame ? "游戏本 · 第一视角自由叙事" : "小说 · 章节连载"}
             </span>
-            <Link href="/explore" className="ml-auto shrink-0 text-[var(--nv-primary)] hover:underline">
-              改成写小说 →
-            </Link>
+            <span className="text-[var(--nv-text-tertiary)]">
+              {asGame
+                ? "和写小说同一套前置创作——聊出世界观、你扮演的角色、势力与力量体系、开局场景，这些会成为游戏的舞台与首章章纲"
+                : "聊出世界观、角色、势力、力量体系、地图与情节，生成项目后进写作台：章节正文、续写精修、一致性审查、导出 EPUB/DOCX"}
+            </span>
+            <button
+              onClick={() => setProduceMode(asGame ? "novel" : "game")}
+              className={`ml-auto shrink-0 font-medium hover:underline ${asGame ? "text-[var(--nv-primary)]" : "text-[var(--nv-creative)]"}`}
+              title="同一份探讨结果可以切换产出目标，已采纳的设定不会丢"
+            >
+              切换为{asGame ? "小说模式" : "游戏模式"} →
+            </button>
           </div>
         </div>
       )}

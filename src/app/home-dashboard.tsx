@@ -206,7 +206,7 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
           <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto py-1 -my-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* py-1 -my-1：给按钮 hover 轻抬（-1px）与光晕留出纵向空间——overflow-x-auto 容器纵向同样裁切， */}
             {/* 无此呼吸空间时「开始创作」跳起会被容器边缘切掉（负 margin 抵消，布局不变） */}
-            <Link href="/explore" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium whitespace-nowrap shrink-0">
+            <Link href="/explore" title="开始创作：先选小说模式或游戏模式，共用同一套 11 步探讨" className="btn-primary nf-btn-flow text-xs h-8 px-3.5 rounded-xl inline-flex items-center gap-1.5 font-medium whitespace-nowrap shrink-0">
               <Icon name="sparkles" size={14} /> <span className="whitespace-nowrap">开始创作</span>
             </Link>
             <span className="w-px h-5 bg-[var(--nv-border-2)] mx-0.5" aria-hidden="true" />
@@ -358,7 +358,7 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <FeatureCard icon="upload" title="导入小说" desc="已有 txt / epub / docx 稿子？导入后直接变成可读可续写的作品，并自动提炼角色、世界观、伏笔" cta="导入我的小说" onClick={() => setNovelImportOpen(true)} />
-              <FeatureCard featured icon="sparkles" title="探讨模式" desc="从零构思：对话式构建世界观、角色与大纲，从一句话灵感聊到完整纲要" href="/explore" cta="开始探讨" />
+              <FeatureCard featured icon="sparkles" title="探讨模式" desc="所有创作的起点：对话式聊出世界观、角色与大纲；聊完可选「小说模式」进写作台，或「游戏模式」化身角色亲历剧情" href="/explore" cta="开始探讨" />
               <FeatureCard icon="book" title="拆书分析" desc="逆向学习别人的结构与文风，不生成正文——想「变成我的作品」请用导入小说" href="/dissect" cta="去拆书" />
               <FeatureCard icon="shield" title="去 AI 味检测" desc="粘贴一段文字，本地扫描机器味、逐段给改法——不需要 API Key 就能用" href="/detector" cta="立刻试试" />
             </div>
@@ -468,8 +468,8 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
       <Modal open={tourOpen} onClose={() => setTourOpen(false)} title="功能导览 · 从灵感到成书" icon="lightbulb" size="md">
         <div className="space-y-2.5 text-xs text-[var(--nv-text-secondary)] leading-relaxed">
           <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
-            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="sparkles" size={13} className="text-[var(--nv-accent)]" /> 第一步 · 探讨模式</p>
-            <p className="mb-2">从一句话灵感开始，与 AI 对话式聊出世界观、角色和大纲。聊透后采纳，自动变成一本可写作的小说项目。</p>
+            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="sparkles" size={13} className="text-[var(--nv-accent)]" /> 第一步 · 探讨模式（所有创作的起点）</p>
+            <p className="mb-2">先选最终产出：<strong className="text-[var(--nv-text-primary)]">小说模式</strong>或<strong className="text-[var(--nv-text-primary)]">游戏模式</strong>。两种模式共用同一套 11 步探讨——和 AI 聊出世界观、角色、势力与力量体系、开局场景；聊透一次，写小说与进去扮演都不必重新设定。探讨结果还能导出 json，换个项目/设备导入复用同一份开局。</p>
             <Link href="/explore" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--nv-accent)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--nv-accent)] hover:bg-[var(--nv-accent)]/20">前往探讨模式 <Icon name="arrowRight" size={11} /></Link>
           </div>
           <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
@@ -478,9 +478,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <p className="text-[10px] text-[var(--nv-text-tertiary)]">进入任意作品即可开始；顶栏的「游戏模式」按钮可随时切换玩法。</p>
           </div>
           <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
-            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="gamepad" size={13} className="text-[var(--nv-creative)]" /> 第三步 · 游戏模式（游戏本）</p>
-            <p className="mb-2">化身角色亲历你的故事：一章一局，选项/自由行动推进剧情，获得的物品进背包、遇到的角色势力自动记录；跑团检定模式下对抗行动掷骰定成败。</p>
-            <Link href="/gamesaga" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--nv-creative)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--nv-creative)] hover:bg-[var(--nv-creative)]/20">前往游戏本 <Icon name="arrowRight" size={11} /></Link>
+            <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]"><Icon name="gamepad" size={13} className="text-[var(--nv-creative)]" /> 游戏模式 · 从探讨进入（或派生已有小说）</p>
+            <p className="mb-2">在探讨模式里选「游戏模式」，聊透后一键变成游戏本：化身角色亲历剧情，一章一局，选项/自由行动推进，跑团检定掷骰定成败；每个角色都有随身物品，还会撒谎藏伏笔。</p>
+            <Link href="/gamesaga" onClick={() => setTourOpen(false)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--nv-creative)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--nv-creative)] hover:bg-[var(--nv-creative)]/20">前往游戏本（已有小说的世界） <Icon name="arrowRight" size={11} /></Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">

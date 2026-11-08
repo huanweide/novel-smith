@@ -289,3 +289,26 @@ export interface AdoptedItem {
   content: string;
   timestamp: number;
 }
+
+// ============================================================
+// 探讨快照（导出 / 导入复用）
+// ============================================================
+// 设计要点：一份探讨结果同时能产出「小说」和「游戏本」——数据结构统一，
+// 只是创建时映射到不同产物的字段（小说走 /api/explore/create，游戏本走 /api/game/saga mode=explore）。
+// 用户可把一次聊透的开局导出成 json，之后随时导入复用（同一世界观开新书 / 开新世界线）。
+export const EXPLORE_SNAPSHOT_KIND = "novel-smith-explore";
+export const EXPLORE_SNAPSHOT_VERSION = 1;
+
+export interface ExploreSnapshot {
+  /** 固定标识，导入时校验，避免误导入其它 json */
+  kind: typeof EXPLORE_SNAPSHOT_KIND;
+  version: number;
+  exportedAt: string;
+  /** 产出目标（导入后按它恢复界面口径；可再切换） */
+  produceMode: "novel" | "game";
+  config: BuildConfig;
+  adopted: AdoptedItem[];
+  currentStep: ExploreStep;
+  /** 对话历史（复盘/接着聊用；导入时按需截断） */
+  messages: ExploreMessage[];
+}
