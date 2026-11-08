@@ -17,6 +17,7 @@ import type {
 } from "@/core/explore/types";
 import { DEFAULT_BUILD_CONFIG, EXPLORE_STEPS, STEP_LABELS, STEP_DESCRIPTIONS, STEP_LUCIDE, STEP_PROMPTS } from "@/core/explore/types";
 import { toastError, toastCreated, toastSubtle } from "@/components/ui/toast";
+import { Modal } from "@/components/ui/Modal";
 import { describeStreamError, describeHttpError } from "@/lib/stream-error";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useHealth } from "@/hooks/use-health";
@@ -38,6 +39,8 @@ export default function ExplorePage() {
   const [showConfig, setShowConfig] = useState(true);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // 探讨模式玩法教程（顶栏「教程」直达）
+  const [showTutorial, setShowTutorial] = useState(false);
   // 无障碍：窄屏模态抽屉的焦点陷阱（仅抽屉打开时激活，桌面常驻侧栏不受影响）
   const leftDrawerRef = useRef<HTMLElement>(null);
   const rightDrawerRef = useRef<HTMLElement>(null);
@@ -721,6 +724,13 @@ export default function ExplorePage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowTutorial(true)}
+              className="rounded-xl border border-[var(--nv-accent)]/30 bg-[var(--nv-accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--nv-accent)] transition-all duration-200 hover:bg-[var(--nv-accent)]/20 active:scale-95"
+              title="探讨模式怎么玩：三个区域、候选卡、一键构筑、生成项目"
+            >
+              <span className="flex items-center gap-1"><Icon name="lightbulb" size={12} /> 教程</span>
+            </button>
+            <button
               onClick={() => {
                 setBuildPrompt("");
                 setBuildModalOpen(true);
@@ -778,6 +788,31 @@ export default function ExplorePage() {
           </div>
         </div>
       </header>
+
+      {/* ── 探讨模式玩法教程 ── */}
+      <Modal open={showTutorial} onClose={() => setShowTutorial(false)} title="探讨模式 · 怎么玩" icon="lightbulb">
+        <div className="space-y-3 text-xs leading-relaxed text-[var(--nv-text-secondary)]">
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+            <p className="font-medium text-[var(--nv-text-primary)]">界面三个区域</p>
+            <p className="text-[11px]">左侧「构建配置」：可选，提前告诉 AI 你的偏好（题材/文风/字数），不填也能聊；中间「聊天区」：和 AI 对话的主战场；右侧「已导入设定」：聊出并采纳的内容汇聚处，可逐条编辑。</p>
+          </div>
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+            <p className="font-medium text-[var(--nv-text-primary)]">怎么聊最省力</p>
+            <p className="text-[11px]">每条 AI 回复底部附 <strong>3 张候选卡</strong>——点一张就采纳并自动推进到下一步；不满意点「换一批」重摇。也可以直接打字说你的想法，说到位了让它出卡。顶部「自由讨论 / 大纲」切换：已有完整大纲的话，用大纲模式粘贴进去一键抽取全部设定。</p>
+          </div>
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+            <p className="font-medium text-[var(--nv-text-primary)]">懒人快捷路径</p>
+            <p className="text-[11px]">聊出大方向后，点顶栏「一键构筑所有设定」——AI 按你的方向把角色/世界观/势力/力量体系/货币/地图/情节一次补齐，核对无误后逐条确认即可。</p>
+          </div>
+          <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+            <p className="font-medium text-[var(--nv-text-primary)]">聊完之后</p>
+            <p className="text-[11px]">点「生成项目」落库成小说项目，然后二选一：<strong>小说模式</strong>进写作台继续写；<strong>游戏模式</strong>化身角色亲历这段剧情（跑团扮演，可掷骰检定）。随时可以回探讨模式继续补充设定。</p>
+          </div>
+        </div>
+        <button onClick={() => setShowTutorial(false)} className="mt-4 w-full btn-primary rounded-xl py-2.5 text-sm font-medium">
+          开始探讨
+        </button>
+      </Modal>
 
       {/* ── 11 步探讨进度条 ── */}
       <div inert={leftDrawerOpen || rightDrawerOpen}>

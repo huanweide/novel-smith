@@ -446,6 +446,33 @@ function SagaDetailInner() {
     }
   };
 
+  // ── 回退上一轮（后悔药）：删本轮 gameState 并回滚会话，用后端权威摘要整体覆盖 ──
+  const rollbackLastRound = async () => {
+    if (!sessionId || round <= 1 || status !== "playing") return;
+    if (!confirm(`撤回第 ${round} 轮？该轮叙事、物品与实体变动将一并删除，回退后可换一个行动重来。`)) return;
+    setStatus("generating");
+    try {
+      const res = await fetch(`/api/game/state?sessionId=${encodeURIComponent(sessionId)}&round=${round}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "回退失败");
+      const sm = data.summary;
+      setRound(sm.currentRound || 0);
+      setTotalWords(sm.totalWords || 0);
+      setPlotProgress(sm.plotProgress || 0);
+      setItems((sm.items || []) as GItem[]);
+      setEntities((sm.entities || []) as GEntity[]);
+      setNarrative(sm.narrative || "");
+      setOptions((sm.options || []) as GameOption[]);
+      setTurns((prev) => prev.filter((t) => t.round <= (sm.currentRound || 0)));
+      setStreamed("");
+      toastSuccess(`已回退到第 ${sm.currentRound} 轮，换一个行动重来`);
+      setStatus("playing");
+    } catch (e: any) {
+      toastError(e.message || "回退失败");
+      setStatus("playing");
+    }
+  };
+
   // ── 收束本章 → 自动建下一章 → 自动开始（连续扮演：一键无缝进入下一章）──
   const continueNextChapter = async () => {
     if (!sessionId || !activeChapter) return;
@@ -844,6 +871,14 @@ function SagaDetailInner() {
                   )}
                   {status === "playing" && (
                     <>
+                      <Button
+                        onClick={rollbackLastRound}
+                        disabled={round <= 1}
+                        className="btn-ghost h-7 rounded-lg px-3 text-xs"
+                        title="撤回本轮：删除该轮叙事与物品变动，换一个行动重来（第 1 轮不可回退）"
+                      >
+                        回退一轮
+                      </Button>
                       <Button onClick={endOnly} className="btn-ghost h-7 rounded-lg px-3 text-xs" title="本章归档，停在这里">停下</Button>
                       <Button onClick={continueNextChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章并无缝开启下一章（前情自动继承）">
                         继续下一章 <Icon name="arrowRight" size={12} />
@@ -936,9 +971,20 @@ function SagaDetailInner() {
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 text-xs">
             {rightTab === "text" && (
               <div>
-                <p className="mb-2 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
-                  <Icon name="file" size={13} className="text-[var(--nv-creative)]" /> 正文进度
-                </p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
+                    <Icon name="file" size={13} className="text-[var(--nv-creative)]" /> 正文进度
+                  </p>
+                  {narrative && (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(narrative).then(() => toastSuccess("本章正文已复制到剪贴板")).catch(() => toastError("复制失败")); }}
+                      className="rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[10px] text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+                      title="复制本章累积的全部叙事正文"
+                    >
+                      复制全文
+                    </button>
+                  )}
+                </div>
                 <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--nv-surface-2)]">
                   <div className="h-full rounded-full bg-[var(--nv-creative)] transition-all duration-700" style={{ width: `${Math.min(100, (totalWords / 3000) * 100)}%` }} />
                 </div>
