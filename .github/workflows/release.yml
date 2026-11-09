@@ -26,6 +26,17 @@ jobs:
         with:
           node-version: "24"
 
+      # better-sqlite3 的 Electron-ABI 预编译包在 GitHub Releases 上不存在
+      # （实测 v12.11.1 的 electron-v136 返回 404，只有 npmmirror 二进制镜像里有），
+      # 而 .npmrc 被 gitignore（防 token），CI 默认拿不到镜像 → prebuild-install 找不到二进制
+      # → rebuild:electron 非零退出 → dist 链路中断。构建前把镜像写进 CI 的 .npmrc。
+      - name: Configure native binary mirrors
+        shell: pwsh
+        run: |
+          Add-Content -Path .npmrc -Value "better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3"
+          Add-Content -Path .npmrc -Value "electron_mirror=https://registry.npmmirror.com/-/binary/electron/"
+          Get-Content .npmrc
+
       - name: Install
         run: npm ci
 
