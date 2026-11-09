@@ -129,7 +129,11 @@ export function collectThemeBlocks(css: string): ThemeBlock[] {
     }
   }
 
-  return out.filter((b) => b.vars["--nv-text-primary"]);
+  // 只收「表面令牌可被静态解析」的完整主题。
+  // 游戏模式 night/twilight 把 --nv-void 等写成 var(--game-bg)（跨块复用 --game-* 字面量，
+  // 属 DRY 的合法写法），静态解析器无法跟随 var() 链 → surfacesOf 返回 []，不应算作可校验主题，
+  // 否则会被误计为「第 9 套主题」且表面解析为空，触发对比度回归测试误报。
+  return out.filter((b) => b.vars["--nv-text-primary"] && surfacesOf(b).length === 3);
 }
 
 /**
