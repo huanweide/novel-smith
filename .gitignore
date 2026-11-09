@@ -1,0 +1,156 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/.next-detect*/
+/out/
+
+# production
+/build
+
+# electron-builder 构建产物（含 500MB+ 安装包，绝不入库）
+/release/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev.log
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# local preview / playwright / demo build artifacts
+server.log
+tunnel.log
+.playwright/
+.playwright-cli/
+demo/public/app.js
+
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+/src/generated/prisma
+
+# database (local only)
+# v3.1.54：整个 data/ 目录一律不入库 —— 里面存着用户填的 LLM API Key、
+# 全部小说正文与设定，且 *.db 规则漏掉了备份文件（如 novelforge.db.bak-20260830），
+# 一旦 commit 就是凭据泄露 + 数据外泄。用目录级规则一次堵死。
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# runtime state (auto-generated, local only)
+/.runtime/
+
+# === 凭据安全补充（强制）===
+.env
+.env.*
+!.env.example
+!.env.template
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.priv
+id_rsa
+id_ecdsa
+id_ed25519
+id_dsa
+.ssh/
+*.pub
+
+.aws/
+.azure/
+.gcp/
+.gcloud/
+.kube/
+.k8s/
+kubeconfig*
+
+credentials.json
+credentials.yaml
+credentials.yml
+service-account*.json
+*service-account*.json
+auth.json
+tokens.json
+token.json
+secrets.json
+secret*.json
+*.secret
+*.token
+*.session
+cookies.json
+*.cookies
+
+.npmrc
+.pypirc
+.pip.conf
+pip.conf
+.netrc
+.git-credentials
+.github-token
+.gho
+
+.dsh/
+.workbuddy/
+.loop-state.json
+
+# 过程记录目录（工作记录/会议笔记/截图，非源码，不入库）
+/PROCESS/
+
+# 本地运行时临时目录与异常残留
+/tmp/
+/nul
+
+# git 快照备份（bundle 每个几十 MB，入库会把仓库撑爆）
+/.snapshots/
+
+# ── 2026-10-16 新增：开发过程残留防复发 ─────────────────────────
+# 说明：这些文件都不该入库，但历史上漏了，导致仓库根目录堆了一堆一次性脚本。
+# 判定标准：要么零代码引用，要么是一次性调试产物。
+*.log                       # dev3002.log 这类本地启动日志（含绝对路径与本机信息）
+_ssr_root.html              # SSR 调试用的临时 HTML 快照
+/diag.html                  # 一次性诊断输出
+contrast_calc.mjs           # 对比度计算的一次性试验脚本
+contrast_table.mjs          # 同上
+e2e-check.mjs               # 手工端到端验证脚本（依赖本机已存在的测试项目 UUID）
+e2e-dice.mjs                # 同上
+e2e-auto-table.mjs          # 同上
+node_modules/
+
+# 赞助清理临时备份（勿入库）
+*.sponsorbak

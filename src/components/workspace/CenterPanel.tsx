@@ -1,0 +1,1385 @@
+"use client";
+import { describeHttpError } from "@/lib/stream-error";
+
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
+import { Button } from "@/components/ui/button";
+import { MarkdownViewer } from "./MarkdownViewer";
+import { Icon } from "@/components/ui/icons";
+import { TTSPlayer } from "./TTSPlayer";
+import { ENTITY_LEGEND } from "@/core/entity-highlighter";
+import { Modal } from "@/components/ui/Modal";
+import { HumanizePanel } from "./HumanizePanel";
+import { toastSuccess, toastError } from "@/components/ui/toast";
+import type { StoryNodeData, ReviewIssue } from "./types";
+import { computeNarrativeStage, type NarrativeStage } from "@/core/pipeline/narrative-stage";
+import { useWriterStore } from "@/store";
+import { saveDraftLocal, getDraftLocal, clearDraftLocal, isDraftNewer } from "@/lib/auto-save";
+import { countMatches, hasNativeFind, jumpToMatch, replaceMatches } from "@/lib/in-text-search";
+import { computeSelToolbarPlacement } from "@/lib/sel-toolbar-placement";
+
+// 项目实体（名→颜色→id），用于章节实体彩色徽章与点击跳转
+type ProjectEntity = {
+  id: string; name: string; type: "character" | "lorebook"; color: string; category?: string;
+};
+
+/**
+ * 流式正文节流：AI 逐 token 生成时，把高频变化的 value 合并到下一帧只提交一次，
+ * 避免每个 token 都触发下游（ReactMarkdown 全量重解析）重渲染——大书越写越卡的根因。
+ * - active=false（非流式）：直接透传最新值，保证最终状态精确无残留。
+ * - active=true（流式）：多次更新合并到下一帧一次提交。
+ */
+function useRafThrottledValue(value: string, active: boolean): string {
+  const [display, setDisplay] = useState(value);
+  const latest = useRef(value);
+  const raf = useRef<number | null>(null);
+  latest.current = value;
+
+  useEffect(() => {
+    if (!active) {
+      if (raf.current != null) {
+        cancelAnimationFrame(raf.current);
+        raf.current = null;
+      }
+      setDisplay(value);
+      return;
+    }
+    if (raf.current == null) {
+      raf.current = requestAnimationFrame(() => {
+        raf.current = null;
+        setDisplay(latest.current);
+      });
+    }
+    return () => {
+      if (raf.current != null) {
+        cancelAnimationFrame(raf.current);
+        raf.current = null;
+      }
+    };
+  }, [value, active]);
+
+  return display;
+}
+
+/**
+ * 流式正文显示区（标题 / 朗读 / 图例 / 实体徽章 / Markdown）。
+ * 抽成 React.memo 子组件，props 均为稳定引用（content 仅随流式节流值变化），
+ * 逐 token 更新时只有本子树重渲，外层面板（工具栏 / 侧栏 / 状态栏）不跟着每 token 重渲。
+ */
+const StreamingBody = memo(function StreamingBody({
+  content,
+  selectedNode,
+  projectId,
+  isStreaming,
+  onEntityClick,
+  showTTS,
+  onShowTTSChange,
+  projectEntities,
+  locateEntityId,
+}: {
+  content: string;
+  selectedNode: StoryNodeData;
+  projectId: string;
+  isStreaming: boolean;
+  onEntityClick: (id: string, type: "character" | "lorebook") => void;
+  showTTS: boolean;
+  onShowTTSChange: (v: boolean) => void;
+  projectEntities: ProjectEntity[];
+  locateEntityId?: string | null;
+}) {
+  // 章节实体彩色徽章：扫描本章正文匹配项目实体（随节流后的 content 变化）
+  const chapterEntities = useMemo(() => {
+    if (!content || projectEntities.length === 0) return [];
+    const found = new Map<string, ProjectEntity>();
+    for (const e of projectEntities) {
+      if (e.name && content.includes(e.name) && !found.has(e.id)) found.set(e.id, e);
+    }
+    return Array.from(found.values());
+  }, [content, projectEntities]);
+
+  return (
+    <>
+      {/* 章节头（书籍式仪式感）：序号 kicker + 大标题 + 分隔细线；标题自带「第N章：」前缀时去重 */}
+      {selectedNode?.title && (() => {
+        const rawTitle = selectedNode.title;
+        const m = rawTitle.match(/^第\s*([0-9一二三四五六七八九十百千零两]+)\s*章/);
+        const chapterNo = m ? m[1] : String((selectedNode as { order?: number }).order != null ? (selectedNode as { order?: number }).order! + 1 : 1);
+        const displayTitle = m ? rawTitle.slice(m[0].length).replace(/^[:：\s]+/, "") : rawTitle;
+        const statusMap: Record<string, string> = { outline_only: "未动笔", drafting: "草稿", completed: "完稿", confirmed: "已定稿" };
+        const statusLabel = statusMap[(selectedNode as { status?: string }).status ?? ""] ?? "";
+        return (
+          <header className="text-center mb-8 mt-1 relative z-10">
+            <p className="paper-kicker text-[11px] mb-2.5">
+              第 {chapterNo} 章{statusLabel ? ` · ${statusLabel}` : ""}
+            </p>
+            <h1 className="text-[26px] leading-snug font-bold text-[var(--nv-text-primary)] tracking-wide">
+              {displayTitle || rawTitle}
+            </h1>
+            <div className="mx-auto mt-5 h-px w-20 bg-[var(--nv-border-3)]" />
+          </header>
+        );
+      })()}
+
+      <MarkdownViewer
+        content={content}
+        projectId={projectId}
+        isStreaming={isStreaming}
+        onEntityClick={onEntityClick}
+        locateEntityId={locateEntityId}
+      />
+
+      {/* 阅读辅助信息：朗读 / 本章实体 / 色标说明，统一沉到正文之后的页脚。
+          首屏只剩「标题 + 正文」，去掉居中堆叠的三重装饰——这是写作区「AI 工具感」的主因 */}
+      {content && (
+        <div className="mt-10 pt-4 border-t border-[var(--nv-border-2)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 text-[11px] text-[var(--nv-text-tertiary)]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {showTTS ? (
+              <TTSPlayer text={content} title={selectedNode?.title ?? undefined} onClose={() => onShowTTSChange(false)} />
+            ) : (
+              <button
+                onClick={() => onShowTTSChange(true)}
+                className="flex items-center gap-1.5 h-7 px-2.5 text-[11px] rounded-md border border-[var(--nv-border-2)] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] transition-colors"
+                title="用浏览器语音朗读本章正文"
+              >
+                <Icon name="radio" size={12} /> 朗读本章
+              </button>
+            )}
+            {chapterEntities.map((e) => (
+              <button
+                key={e.id + "|" + e.name}
+                onClick={() => onEntityClick(e.id, e.type)}
+                className="text-[11px] px-2 py-0.5 rounded-full border transition-colors hover:brightness-125"
+                style={{ color: e.color, borderColor: e.color + "59", backgroundColor: e.color + "1a" }}
+                title={e.type === "character" ? "角色 · 点击查看 / 编辑" : "世界书 · 点击查看 / 编辑"}
+              >
+                {e.name}
+              </button>
+            ))}
+          </div>
+          {/* 色标图例折叠收纳：默认收起，需要时展开；不再占据正文首屏 */}
+          <details className="shrink-0">
+            <summary className="cursor-pointer select-none text-[11px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)]">色标说明</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[300px]">
+              {ENTITY_LEGEND.map((it) => (
+                <span key={it.key} className="inline-flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded" style={{ backgroundColor: it.color }} aria-hidden="true" />
+                  {it.label}
+                </span>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
+    </>
+  );
+});
+
+export function CenterPanel({
+  selectedNode, isGenerating, reviewResult,
+  authorNote, onAuthorNoteChange, targetWordCount, onTargetWordCountChange,
+  onWrite, onStop, onEditOutline, onGenerateChapterOutline, onDrawChapterOutline,
+  projectId,
+  refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine, onSelectionRefine,
+  chapterOutlinePrompt, onChapterOutlinePromptChange,
+  genStep, genStepLabels, chapterOutlineStatus,
+  onOpenGame,
+  onBatchWrite,
+  onEditCharacter, onEditLore,   todayWords = 0,
+  loadProject,
+  zen = false, onExitZen, onEnterZen,
+  narrativeStage,
+  locateEntityId,
+  onConflict,
+  focusText, focusSeq,
+}: {
+  selectedNode: StoryNodeData | null; isGenerating: boolean;
+  reviewResult: { passed: boolean; issues: ReviewIssue[] } | null;
+  authorNote: string; onAuthorNoteChange: (v: string) => void;
+  targetWordCount: number; onTargetWordCountChange: (v: number) => void;
+  onWrite: () => void; onStop: () => void;
+  onEditOutline: (outline: string) => void;
+  onGenerateChapterOutline: (flashPrompt: string) => void;
+  onDrawChapterOutline: () => void;
+  chapterOutlinePrompt: string; onChapterOutlinePromptChange: (v: string) => void;
+  projectId: string;
+  refineMode: boolean; onToggleRefineMode: () => void;
+  refineInstruction: string; onRefineInstructionChange: (v: string) => void;
+  onRefine: () => void;
+  onSelectionRefine?: (text: string, action: "polish" | "expand" | "continue" | "custom") => void;
+  onOpenGame: () => void;
+  onBatchWrite: () => void;
+  genStep: string; genStepLabels: Record<string, { icon: React.ReactNode; label: string }>;
+  chapterOutlineStatus: string;
+  onEditCharacter?: (id: string) => void;
+  onEditLore?: (id: string) => void;
+  todayWords?: number;
+  loadProject?: () => void | Promise<void>;
+  zen?: boolean;
+  onExitZen?: () => void;
+  onEnterZen?: () => void;
+  narrativeStage?: NarrativeStage | null;
+  /** 反向联动：从角色卡 / 世界书卡片点「定位」，正文定位并高亮该实体 */
+  locateEntityId?: string | null;
+  /** v3.1.84：正文保存撞编辑冲突（409）时，交给父组件的冲突面板决定「用我的 / 用库里的 / 保留双方」 */
+  onConflict?: (c: {
+    nodeId: string;
+    mine: Record<string, unknown>;
+    server: { editVersion: number; title?: string | null; outline?: string | null; content?: string | null; notes?: string | null };
+  }) => void;
+  /**
+   * 反向联动：从冲突指示器点「跳到该章」时，把引发冲突的正文摘录灌进章内查找，
+   * 复用既有的章内查找能力自动定位并高亮那一句（ROADMAP P2 #6 的最后一公里）。
+   */
+  focusText?: string | null;
+  /** 同一段文本被重复点击时也要重新触发定位，故用递增序号强制 effect 重跑 */
+  focusSeq?: number;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  // v2.49：流式正文下沉到 useWriterStore，父组件（WorkspacePage）逐 token 不再重渲染，只这里局部更新
+  const streamContent = useWriterStore((s) => s.generatedContent);
+  const [editingOutline, setEditingOutline] = useState(false);
+  const [outlineDraft, setOutlineDraft] = useState("");
+  // 编辑器内「选中即改」悬浮工具条（D1：爱好者最高频的 AI 写作动作——选中片段→AI 润色/扩写/续写）
+  const [selToolbar, setSelToolbar] = useState<{ text: string; top: number; left: number; placeAbove: boolean } | null>(null);
+  const handleEditorSelection = useCallback(() => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) { setSelToolbar(null); return; }
+      const text = sel.toString().trim();
+      if (!text || text.length < 2) { setSelToolbar(null); return; }
+      const range = sel.getRangeAt(0);
+      if (contentRef.current && !contentRef.current.contains(range.commonAncestorContainer)) { setSelToolbar(null); return; }
+      const rect = range.getBoundingClientRect();
+      const placement = computeSelToolbarPlacement(
+        { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+        window.innerWidth,
+      );
+      setSelToolbar({ text, ...placement });
+    } catch {
+      setSelToolbar(null);
+    }
+  }, []);
+  const [outlineExpanded, setOutlineExpanded] = useState(false);
+  // 写作工具折叠（v3.1.167）：默认收起成单行，正文上移占满首屏；展开才见章纲/批量/游戏模式/过审自检等
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+  // ── AI 念书（语音朗读）：标题下方「朗读本章」入口的展开态 ──
+  const [showTTS, setShowTTS] = useState(false);
+  // ── 本地过审自检：检测「机器味」，纯本地规则引擎，不上传正文 ──
+  const [showHumanize, setShowHumanize] = useState(false);
+
+  // ── 正文内联编辑：点击「编辑正文」后页面外观不变，仅正文变为可编辑状态（无外框界面）──
+  const [inlineEditing, setInlineEditing] = useState(false);
+  const [inlineDraft, setInlineDraft] = useState("");
+  const [savingInline, setSavingInline] = useState(false);
+  const inlineRef = useRef<HTMLDivElement>(null);
+  // ── 三层自动保存（5.1）：手动编辑正文时实时防丢 + 状态指示 + 崩溃恢复 ──
+  const [saveState, setSaveState] = useState<"idle" | "unsaved" | "saving" | "saved">("idle");
+  const [pendingDraft, setPendingDraft] = useState<{ nodeId: string; content: string; savedAt: number } | null>(null);
+  // v3.1.84：乐观锁版本号基准。服务端每次成功保存都会 editVersion+1，而自动保存的 effect
+  // 依赖不含 editVersion（闭包会永久停留在进入编辑态那一刻），导致第 2 次及之后的保存必然撞
+  // 409 被静默吞掉——一次编辑会话里正文只进库第一拍。这里用 ref 维护「服务端最新版本号」，
+  // 保存成功后回写，下一拍才不会自己撞自己。
+  const editVersionRef = useRef<number | undefined>(undefined);
+  // 自动保存遇到真冲突（别的标签页 / AI 改写过这一章）时暂停后续自动请求，避免每 3s 空转失败
+  const autoSavePausedRef = useRef(false);
+  // 暂停原因只提示一次，不反复弹 toast 打断写作
+  const autoSaveWarnedRef = useRef(false);
+
+  // ── 章内查找（v3.1.77）：在当前章节正文里定位词并高亮跳转（只读态用，编辑态交给浏览器原生 Ctrl+F）──
+  const [nodeQuery, setNodeQuery] = useState("");
+  const [matchIdx, setMatchIdx] = useState(0);
+  const nodeSearchRef = useRef<HTMLInputElement>(null);
+  // ── 章内替换（v3.1.78）：基于查找词把正文命中的词替换成新词（只读态用；不碰 DOM，对源文本走 slice 替换后落库）──
+  const [replaceQuery, setReplaceQuery] = useState("");
+  const nodeReplaceRef = useRef<HTMLInputElement>(null);
+
+  // v3.1.84：切章时重置乐观锁基准与自动保存暂停态。只认节点 id 变化——同章内父组件若回刷
+  // prop，不能把我们已经推进过的版本号覆盖回旧值（那会重新触发自己撞自己的 409）。
+  useEffect(() => {
+    editVersionRef.current = (selectedNode as any)?.editVersion;
+    autoSavePausedRef.current = false;
+    autoSaveWarnedRef.current = false;
+  }, [selectedNode?.id]);
+
+  const startInlineEdit = () => {
+    if (!selectedNode) return;
+    // v3.1.84：进入编辑态时把乐观锁基准同步到当前最新版本号——若这章刚被别的操作改过，
+    // 基准必须跟上，否则一上来就撞 409（用户会以为编辑器坏了）。
+    editVersionRef.current = (selectedNode as any)?.editVersion;
+    autoSavePausedRef.current = false;
+    autoSaveWarnedRef.current = false;
+    setInlineDraft(displayContent);
+    setInlineEditing(true);
+  };
+  const cancelInlineEdit = () => {
+    setInlineEditing(false);
+    setInlineDraft("");
+    setSaveState("idle");
+  };
+  const saveInlineEdit = async () => {
+    if (!selectedNode || !inlineRef.current) return;
+    const newContent = inlineRef.current.textContent ?? "";
+    setSavingInline(true);
+    try {
+      // v3.1.84：字段名必须是 expectedVersion（后端只读它做乐观锁），不是 editVersion
+      const body = {
+        content: newContent,
+        wordCount: newContent.length,
+        expectedVersion: editVersionRef.current ?? (selectedNode as any).editVersion,
+      };
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      // v3.1.84：撞编辑冲突不再只弹一句「保存失败」——交给父组件冲突面板，
+      // 让用户看清库里那版是什么，自己决定「用我的 / 用库里的 / 保留双方」。
+      if (res.status === 409 && data?.conflict) {
+        if (data.server && onConflict) {
+          onConflict({ nodeId: selectedNode.id, mine: body as unknown as Record<string, unknown>, server: data.server });
+        } else {
+          toastError("保存冲突：这一章在别处被改过，但没能取到库里那版，请刷新后重试");
+        }
+        setSaveState("unsaved");
+        return;
+      }
+      if (!res.ok) { const _f = describeHttpError(res.status, data); throw new Error(_f.description); }
+      // 服务端每次成功保存都 editVersion+1，回写基准，下一拍才不会自己撞自己
+      if (data?.editVersion != null) editVersionRef.current = data.editVersion;
+      autoSavePausedRef.current = false;
+      autoSaveWarnedRef.current = false;
+      toastSuccess("正文已保存");
+      setInlineEditing(false);
+      setInlineDraft("");
+      setSaveState("idle");
+      if (selectedNode) clearDraftLocal(selectedNode.id);
+      if (loadProject) await loadProject();
+    } catch (err: any) {
+      setSaveState("unsaved");
+      toastError("保存失败：" + (err?.message || "请重试"));
+    } finally {
+      setSavingInline(false);
+    }
+  };
+
+  // v3.1.114：给「本地过审自检」面板用的写回通道。
+  //
+  // 机器改完的新正文必须走和手动编辑**完全相同**的那条路：同一个 PUT、同一把乐观锁、
+  // 同一套 409 冲突处理。绝不因为「这是机器批量改的」就另开一条捷径——
+  // 否则这一章刚在别处被改过时，会悄悄覆盖掉作者后写的内容。
+  const applyHumanizeFix = async (newContent: string): Promise<{ ok: boolean; msg?: string }> => {
+    if (!selectedNode) return { ok: false, msg: "当前没有选中章节" };
+    try {
+      const body = {
+        content: newContent,
+        wordCount: newContent.length,
+        expectedVersion: editVersionRef.current ?? (selectedNode as { editVersion?: number }).editVersion,
+      };
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.status === 409 && data?.conflict) {
+        if (data.server && onConflict) {
+          onConflict({
+            nodeId: selectedNode.id,
+            mine: body as unknown as Record<string, unknown>,
+            server: data.server,
+          });
+          return { ok: false, msg: "这一章在别处被改过，已弹出冲突面板请你定夺" };
+        }
+        return { ok: false, msg: "保存冲突：这一章在别处被改过，请刷新后重试" };
+      }
+      if (!res.ok) {
+        const _f = describeHttpError(res.status, data);
+        throw new Error(_f.description);
+      }
+      if (data?.editVersion != null) editVersionRef.current = data.editVersion;
+      if (loadProject) await loadProject();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, msg: e instanceof Error ? e.message : "请重试" };
+    }
+  };
+
+  // 三层自动保存 · 层2（Server 3s 防抖落库）：进入编辑态后监听正文输入，
+  // 500ms 写本地兜底、3s 自动 PUT 落库（不退出编辑态、光标不跳），成功后清本地草稿。
+  // 层1（LocalStorage 500ms）由本 effect 内的 lsTimer 触发；层3（手动点完成）见 saveInlineEdit。
+  useEffect(() => {
+    if (!inlineEditing || !inlineRef.current) return;
+    let lsTimer: ReturnType<typeof setTimeout> | null = null;
+    let srvTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = async () => {
+      if (!selectedNode || !inlineRef.current) return;
+      // 已撞过真冲突：暂停后续自动请求，等用户在冲突面板里处理完（切章会重置）
+      if (autoSavePausedRef.current) return;
+      const text = inlineRef.current.textContent ?? "";
+      setSaveState("saving");
+      try {
+        const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          // v3.1.84：字段名必须是 expectedVersion——后端只读这个字段做乐观锁。此前写的是
+          // editVersion，被后端忽略，等于正文保存一直没上锁，会静默覆盖别处的改动（数据丢失）。
+          body: JSON.stringify({
+            content: text,
+            wordCount: text.length,
+            expectedVersion: editVersionRef.current ?? (selectedNode as any).editVersion,
+          }),
+        });
+        // v3.1.84：409 是「这一章在别处被改过」的真冲突，不再是「带旧版本号撞自己」。
+        // 停掉后续自动保存，明确告诉用户去处理，而不是静默吞掉让他以为存上了。
+        if (res.status === 409) {
+          autoSavePausedRef.current = true;
+          if (!autoSaveWarnedRef.current) {
+            autoSaveWarnedRef.current = true;
+            toastError("这一章在别处被改过，自动保存已暂停。请点「完成」用冲突面板选择保留哪一版");
+          }
+          setSaveState("unsaved");
+          return;
+        }
+        if (!res.ok) throw new Error("save failed");
+        const saved = await res.json().catch(() => null);
+        // 关键：服务端每次成功保存都 editVersion+1，必须回写基准，否则下一拍必然自己撞自己
+        if (saved?.editVersion != null) editVersionRef.current = saved.editVersion;
+        autoSaveWarnedRef.current = false;
+        if (selectedNode) clearDraftLocal(selectedNode.id);
+        setSaveState("saved");
+      } catch {
+        // 落库失败仍有 localStorage 兜底，不阻塞写作；但要让用户看见，别以为已经存进去了
+        if (!autoSaveWarnedRef.current) {
+          autoSaveWarnedRef.current = true;
+          toastError("自动保存失败，正文已暂存在本地，可点「完成」重试");
+        }
+        setSaveState("unsaved");
+      }
+    };
+
+    const onInput = () => {
+      if (!selectedNode || !inlineRef.current) return;
+      const text = inlineRef.current.textContent ?? "";
+      setSaveState("unsaved");
+      if (lsTimer) clearTimeout(lsTimer);
+      if (srvTimer) clearTimeout(srvTimer);
+      lsTimer = setTimeout(() => saveDraftLocal(selectedNode.id, text), 500);
+      srvTimer = setTimeout(flush, 3000);
+    };
+
+    const el = inlineRef.current;
+    el.addEventListener("input", onInput);
+    return () => {
+      el.removeEventListener("input", onInput);
+      if (lsTimer) clearTimeout(lsTimer);
+      if (srvTimer) clearTimeout(srvTimer);
+    };
+  }, [inlineEditing, selectedNode?.id]);
+
+  // 三层自动保存 · 崩溃恢复：打开章节时若本地有该节点的未落库草稿（编辑到一半崩了/
+  // 没点完成就切走），提示恢复。正常保存（点完成 / 3s 自动落库）都会清掉本地草稿，
+  // 所以残留的草稿必然是「还没存进去的内容」，提示恢复永远是对的，无需比对服务端时间。
+  useEffect(() => {
+    if (!selectedNode) {
+      setPendingDraft(null);
+      return;
+    }
+    const draft = getDraftLocal(selectedNode.id);
+    if (draft) {
+      setPendingDraft({ nodeId: selectedNode.id, content: draft.content, savedAt: draft.savedAt });
+    } else {
+      setPendingDraft(null);
+    }
+  }, [selectedNode?.id]);
+
+  // v3.1.81：章内查找/替换状态随章节切换重置，杜绝跨章串台误替换正文（不可逆改写）。
+  // selectedNode 是父组件传入的 prop，切章只换 prop、CenterPanel 不卸载；
+  // 若不主动清，旧章的查找词/替换词会带进新章，误触「替换全部」会跨章改写正文。
+  useEffect(() => {
+    setNodeQuery("");
+    setReplaceQuery("");
+    setMatchIdx(0);
+  }, [selectedNode?.id]);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    setInlineDraft(pendingDraft.content);
+    setInlineEditing(true);
+    setPendingDraft(null);
+  };
+  const dismissDraft = () => {
+    if (pendingDraft) clearDraftLocal(pendingDraft.nodeId);
+    setPendingDraft(null);
+  };
+
+  // 进入编辑态时把原文写入 contentEditable（非受控，避免光标跳动）
+  useEffect(() => {
+    if (inlineEditing && inlineRef.current) {
+      inlineRef.current.textContent = inlineDraft;
+    }
+  }, [inlineEditing]);
+
+  useEffect(() => {
+    if (contentRef.current && isGenerating) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [streamContent, isGenerating]);
+
+  // v2.50.2 打字机滚动：专注模式下手动编辑正文时，把光标所在行滚动到视口中间
+  useEffect(() => {
+    if (!zen || !inlineEditing) return;
+    const el = inlineRef.current;
+    const sc = contentRef.current;
+    if (!el || !sc) return;
+    const scrollToCursor = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      const scRect = sc.getBoundingClientRect();
+      const target = sc.scrollTop + (rect.top - scRect.top) - sc.clientHeight / 2 + 24;
+      sc.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+    };
+    el.addEventListener("input", scrollToCursor);
+    el.addEventListener("keyup", scrollToCursor);
+    el.addEventListener("click", scrollToCursor);
+    return () => {
+      el.removeEventListener("input", scrollToCursor);
+      el.removeEventListener("keyup", scrollToCursor);
+      el.removeEventListener("click", scrollToCursor);
+    };
+  }, [zen, inlineEditing]);
+
+  const displayContent = streamContent || selectedNode?.content || "";
+  // v3.1.77 章内查找：实时统计当前章命中数 + 上一处/下一处跳转（复用浏览器原生高亮，零侵入正文渲染）
+  const matchCount = useMemo(() => countMatches(displayContent, nodeQuery), [displayContent, nodeQuery]);
+  const goNextMatch = useCallback(() => {
+    if (!nodeQuery || matchCount === 0) return;
+    jumpToMatch(nodeQuery, false);
+    setMatchIdx((i) => (i >= matchCount ? 1 : i + 1));
+  }, [nodeQuery, matchCount]);
+  const goPrevMatch = useCallback(() => {
+    if (!nodeQuery || matchCount === 0) return;
+    jumpToMatch(nodeQuery, true);
+    setMatchIdx((i) => (i <= 1 ? matchCount : i - 1));
+  }, [nodeQuery, matchCount]);
+
+  // ── 反向联动（ROADMAP P2 #6）：外部（冲突指示器）请求定位某段文本 ──
+  // 把文本灌进章内查找框，等正文渲染出命中后自动跳到第一处并高亮。
+  useEffect(() => {
+    if (!focusText) return;
+    setNodeQuery(focusText);
+    setMatchIdx(1);
+  }, [focusText, focusSeq]);
+
+  useEffect(() => {
+    // 只在「查找词正是外部请求的文本」时自动跳，避免干扰用户自己输入的查找
+    if (!focusText || focusText !== nodeQuery) return;
+    if (!nodeQuery || matchCount === 0) return;
+    // 切章后正文可能尚未完成渲染，给一拍让 DOM 稳定再跳
+    const timer = setTimeout(() => jumpToMatch(nodeQuery, false), 60);
+    return () => clearTimeout(timer);
+  }, [focusText, focusSeq, nodeQuery, matchCount]);
+
+  // v3.1.78 章内替换：对源文本 displayContent 走纯函数 replaceMatches 生成新正文，再复用落库逻辑直接 PUT（不读 DOM，规避 contentEditable 依赖）
+  const commitContent = useCallback(async (newContent: string, nextMatchIdx = 0): Promise<boolean> => {
+    if (!selectedNode) return false;
+    setSavingInline(true);
+    try {
+      // v3.1.84：字段名必须是 expectedVersion（后端只读它做乐观锁），不是 editVersion；
+      // 取 ref 里维护的服务端最新版本号，避免带上陈旧版本号自己撞自己。
+      const body = {
+        content: newContent,
+        wordCount: newContent.length,
+        expectedVersion: editVersionRef.current ?? (selectedNode as any).editVersion,
+      };
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      // 这一章在别处被改过：交给冲突面板，而不是静默覆盖掉别人的改动
+      if (res.status === 409 && data?.conflict) {
+        if (data.server && onConflict) {
+          onConflict({ nodeId: selectedNode.id, mine: body as unknown as Record<string, unknown>, server: data.server });
+        } else {
+          toastError("替换冲突：这一章在别处被改过，但没能取到库里那版，请刷新后重试");
+        }
+        return false;
+      }
+      if (!res.ok) { const _f = describeHttpError(res.status, data); throw new Error(_f.description); }
+      // 服务端每次成功保存都 editVersion+1，回写基准，下一拍才不会自己撞自己
+      if (data?.editVersion != null) editVersionRef.current = data.editVersion;
+      autoSavePausedRef.current = false;
+      autoSaveWarnedRef.current = false;
+      if (selectedNode) clearDraftLocal(selectedNode.id);
+      if (loadProject) await loadProject();
+      // v3.1.79：替换当前处后保持光标位置（原第 K+1 处前移为第 K 处，自动指向下一处）；
+      // 全部替换才传 0 回到起点，避免连续替换时被弹回第 1 处。
+      setMatchIdx(nextMatchIdx);
+      return true;
+    } catch (err: any) {
+      toastError("替换失败：" + (err?.message || "请重试"));
+      return false;
+    } finally {
+      setSavingInline(false);
+    }
+  }, [selectedNode, loadProject, onConflict]);
+
+  const replaceOne = useCallback(async () => {
+    if (!selectedNode || !nodeQuery) return;
+    const { newContent, count } = replaceMatches(displayContent, nodeQuery, replaceQuery, {
+      occurrenceIndex: Math.max(0, (matchIdx || 1) - 1),
+    });
+    if (count === 0) { toastError("未定位到可替换的位置"); return; }
+    // v3.1.79：替换第 K 处后原第 K+1 处前移为第 K 处，保持 matchIdx 指向下一处，支持连点连续替换
+    // v3.1.80：落库失败不再报假成功——commitContent 返回布尔，成功才提示
+    const ok = await commitContent(newContent, matchIdx);
+    if (ok) toastSuccess("已替换当前处");
+  }, [selectedNode, nodeQuery, replaceQuery, displayContent, matchIdx, commitContent]);
+
+  const replaceAll = useCallback(async () => {
+    if (!selectedNode || !nodeQuery) return;
+    const { newContent, count } = replaceMatches(displayContent, nodeQuery, replaceQuery, { all: true });
+    if (count === 0) { toastError("未定位到可替换的位置"); return; }
+    // v3.1.79：全部替换后清空「替换为」框并回到查找起点，避免 UI 残留旧替换词
+    // v3.1.80：落库失败不再报假成功——commitContent 返回布尔，成功才清空替换框并提示
+    const ok = await commitContent(newContent, 0);
+    if (ok) {
+      setReplaceQuery("");
+      toastSuccess(`已替换 ${count} 处`);
+    }
+  }, [selectedNode, nodeQuery, replaceQuery, displayContent, commitContent]);
+
+  // 流式正文节流值：AI 逐 token 生成时合并到下一帧提交一次，喂给 StreamingBody / MarkdownViewer
+  const throttledContent = useRafThrottledValue(displayContent, isGenerating);
+
+  // 实体点击回调：稳定引用，避免 inline 箭头函数导致 StreamingBody memo 失效
+  const handleEntityClick = useCallback(
+    (id: string, type: "character" | "lorebook") => {
+      if (type === "character") onEditCharacter?.(id);
+      else onEditLore?.(id);
+    },
+    [onEditCharacter, onEditLore],
+  );
+
+  // 底部状态栏数据（字数沿用项目约定 = 字符数 content.length，随生成实时更新）
+  const currentWords = displayContent.length;
+  const lineCount = displayContent ? displayContent.split("\n").length : 0;
+  const targetReached = targetWordCount > 0 && currentWords >= targetWordCount;
+  const progressPct = targetWordCount > 0 ? Math.min(100, Math.round((currentWords / targetWordCount) * 100)) : 0;
+
+  // 每日目标（与统计面板同源：localStorage nf-daily-goal-<projectId>）
+  // 依赖 todayWords 触发重读：保存后目标即时同步，形成写作↔统计闭环
+  const [dailyGoal, setDailyGoal] = useState(0);
+  const dailyGoalKey = `nf-daily-goal-${projectId}`;
+  useEffect(() => {
+    const read = () => {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(dailyGoalKey) : null;
+      const g = parseInt(raw || "0", 10);
+      setDailyGoal(isNaN(g) ? 0 : g);
+    };
+    read();
+    const onStorage = (e: StorageEvent) => { if (e.key === dailyGoalKey) read(); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [dailyGoalKey, todayWords]);
+  const dailyReached = dailyGoal > 0 && (todayWords || 0) >= dailyGoal;
+  const dailyPct = dailyGoal > 0 ? Math.min(100, Math.round(((todayWords || 0) / dailyGoal) * 100)) : 0;
+
+  // ── BE-1 版本历史抽屉 ──
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [revisions, setRevisions] = useState<RevisionMeta[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [previewRev, setPreviewRev] = useState<RevisionDetail | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [rollbacking, setRollbacking] = useState(false);
+
+  type RevisionMeta = {
+    id: string; version: number; wordCount: number;
+    source: string; summary: string | null; createdAt: string;
+  };
+  type RevisionDetail = RevisionMeta & { content: string };
+
+  const SOURCE_LABEL: Record<string, string> = {
+    "ai-write": "AI 生成", "ai-rewrite": "AI 重写", "ai-polish": "AI 润色",
+    manual: "手动保存", rollback: "回滚快照", "auto-fill": "自动填表", unknown: "未知",
+  };
+
+  const openRevisions = async () => {
+    if (!selectedNode) return;
+    setShowRevisions(true);
+    setRevisionsLoading(true);
+    setPreviewRev(null);
+    try {
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}/revisions`);
+      const data = await res.json();
+      if (!res.ok) toastError(data.error || "获取版本历史失败");
+      else setRevisions(data.revisions || []);
+    } catch {
+      toastError("网络错误");
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
+  const previewRevision = async (revId: string) => {
+    if (!selectedNode) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}/revisions/${revId}`);
+      const data = await res.json();
+      if (!res.ok) toastError(data.error || "获取版本失败");
+      else setPreviewRev(data);
+    } catch {
+      toastError("网络错误");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const doRollback = async (revId: string) => {
+    if (!selectedNode) return;
+    if (!confirm("确定回滚到该版本？当前正文会先自动备份为可恢复快照。")) return;
+    setRollbacking(true);
+    try {
+      const res = await fetch(`/api/story/nodes/${selectedNode.id}/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revisionId: revId }),
+      });
+      const data = await res.json();
+      if (!res.ok) toastError(data.error || "回滚失败");
+      else {
+        toastSuccess(`已回滚到第 ${data.rolledBackToVersion} 版 ✓`);
+        setShowRevisions(false);
+        if (loadProject) await loadProject();
+      }
+    } catch (err) {
+      toastError("回滚失败：" + (err instanceof Error ? err.message : "网络错误"));
+    } finally {
+      setRollbacking(false);
+    }
+  };
+  // 达成庆祝：每日仅一次，localStorage 去重，避免每次渲染重弹
+  useEffect(() => {
+    if (!dailyReached) return;
+    const ck = `nf-daily-celebrated-${projectId}-${new Date().toISOString().slice(0, 10)}`;
+    if (!localStorage.getItem(ck)) {
+      localStorage.setItem(ck, "1");
+      toastSuccess("今日目标达成，继续保持节奏");
+    }
+  }, [dailyReached, projectId, todayWords]);
+
+  // 章节实体彩色徽章：拉取项目实体（名→颜色→id），扫描本章正文匹配，点击跳详情
+  const [projectEntities, setProjectEntities] = useState<Array<{
+    id: string; name: string; type: "character" | "lorebook"; color: string; category?: string;
+  }>>([]);
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetch(`/api/entities/highlight?projectId=${encodeURIComponent(projectId)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled && d?.entities) setProjectEntities(d.entities); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  // 章节实体彩色徽章（chapterEntities）已下沉到 StreamingBody，随节流后的 content 计算。
+
+  return (
+    <>
+    <main className="flex-1 flex flex-col overflow-hidden bg-[var(--nv-void)]">
+      {/* F03：生成状态读屏实时播报——常驻 live region，避免可见 genStep 容器在流式（MarkdownViewer）分支不挂载时漏报；error 用 assertive，复用 toast 的 role=alert 模式 */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {genStep && genStep !== "error" ? genStepLabels[genStep]?.label : ""}
+      </div>
+      <div className="sr-only" role="alert" aria-live="assertive" aria-atomic="true">
+        {genStep === "error" ? genStepLabels.error.label : ""}
+      </div>
+      {selectedNode ? (
+        <>
+          {/* 控制栏 / 专注顶栏 */}
+          {zen ? (
+            <div className="shrink-0 flex items-center justify-between border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)] px-4 py-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <button onClick={onExitZen} title="退出专注（Ctrl/Cmd + .）" className="flex h-7 items-center gap-1.5 rounded-lg border border-[var(--nv-border-2)] px-2.5 text-xs text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors">
+                  <Icon name="x" size={13} /> 退出
+                </button>
+                <h2 className="text-sm font-medium truncate max-w-[50vw]">{selectedNode.title}</h2>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {inlineEditing ? (
+                  <button onClick={saveInlineEdit} disabled={savingInline} className="flex h-7 items-center gap-1 rounded-lg border border-[var(--nv-success)]/50 text-[var(--nv-success)] bg-[var(--nv-success-soft)] px-2.5 text-xs hover:bg-[var(--nv-success)]/15 disabled:opacity-50"><Icon name="check" size={12} /> 完成</button>
+                ) : (
+                  <button onClick={startInlineEdit} className="flex h-7 items-center gap-1 rounded-lg border border-[var(--nv-border-2)] px-2.5 text-xs text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors"><Icon name="pencil" size={12} /> 编辑</button>
+                )}
+                <span className="text-xs text-[var(--nv-text-tertiary)]">{currentWords.toLocaleString()} 字 · 目标 {targetWordCount}</span>
+              </div>
+            </div>
+          ) : (
+          <div className="border-b border-[var(--nv-border-2)] px-4 py-3 shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-sm">{selectedNode.title}</h2>
+              <span className="text-xs text-[var(--nv-text-tertiary)] flex items-center gap-2 flex-wrap justify-end">
+                {narrativeStage && (
+                  <span className="flex items-center gap-1 rounded px-1.5 py-0.5 border border-[var(--nv-primary)]/30 bg-[var(--nv-primary)]/10 text-[var(--nv-primary)]" title="全书写作节奏阶段（基于本章在全书的进度自动推导，被动展示）">
+                    <Icon name="compass" size={11} /> {narrativeStage.label} · {narrativeStage.percent}%
+                  </span>
+                )}
+                {selectedNode.status === "completed" ? <span className="flex items-center gap-1"><Icon name="check" size={11} className="text-[var(--nv-success)]" /> 已完成</span> : selectedNode.status === "reviewing" ? <span className="flex items-center gap-1"><Icon name="alert" size={11} className="text-accent-label" /> 待修改</span> : <span className="flex items-center gap-1"><Icon name="pencil" size={11} /> 草稿</span>}{" "}
+                · {selectedNode.wordCount || 0} 字
+                <button onClick={openRevisions}
+                  className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors"
+                  title="查看 / 回滚历史版本">
+                  <Icon name="history" size={11} /> 历史
+                </button>
+              </span>
+            </div>
+            {/* ── 写作工具区：默认收起（单行），展开才显示完整工具 ── */}
+            {toolsExpanded && (
+              <div className="flex justify-end mb-1.5">
+                <button onClick={() => setToolsExpanded(false)}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)] transition-colors"
+                  title="收起工具区，给正文腾出整屏">
+                  <span className="text-[9px] leading-none">▴</span> 收起工具
+                </button>
+              </div>
+            )}
+            {toolsExpanded ? (<>
+            {/* 下一步建议：首写引导（v3.1.62，纯展示、只读 state，降低首写决策成本 · 痛点#3） */}
+            {(() => {
+              if (isGenerating) return null;
+              const w = currentWords;
+              const hint =
+                w === 0
+                  ? { icon: "pencil" as const, text: "这一章还是空白——先写个开头，或点下方「生成」让 AI 起草一版骨架。" }
+                  : w < 500
+                  ? { icon: "sparkles" as const, text: "刚起步——继续「续写」把场景和人物铺开，别急着雕花。" }
+                  : w < 1500
+                  ? { icon: "scale" as const, text: "骨架有了——用「润色」打磨文笔，或「检查冲突 / 伏笔」查前后矛盾。" }
+                  : { icon: "check" as const, text: "本章已成型——跑一次「过审自检」查机器味，满意就标记「已完成」收章。" };
+              return (
+                <div className="flex items-center gap-2 mt-2.5 px-3 py-2 rounded-xl border border-[var(--nv-primary)]/25 bg-[var(--nv-primary-soft)] text-[var(--nv-text-secondary)]">
+                  <Icon name={hint.icon} size={14} className="shrink-0 text-[var(--nv-primary)]" />
+                  <span className="text-xs leading-snug">{hint.text}</span>
+                </div>
+              );
+            })()}
+            {/* 大纲编辑 */}
+            <div className="mb-3 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40 p-2.5">
+              {editingOutline ? (
+                <div className="flex gap-2">
+                  <textarea className="input-glass flex-1 rounded-lg px-3 py-2 text-xs resize-none" rows={3}
+                    value={outlineDraft} onChange={(e) => setOutlineDraft(e.target.value)} placeholder="输入本节点大纲…" aria-label="本节点大纲草稿" />
+                  <div className="flex flex-col gap-1">
+                    <button onClick={() => { onEditOutline(outlineDraft); setEditingOutline(false); }} className="text-xs text-[var(--nv-success)] hover:text-[var(--nv-success)]/70 font-medium">保存</button>
+                    <button onClick={() => setEditingOutline(false)} className="text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)]">取消</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    {/* 章纲折叠按钮 */}
+                    <button
+                      type="button"
+                      onClick={() => setOutlineExpanded((v) => !v)}
+                      className={`shrink-0 flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        selectedNode.outline
+                          ? "bg-[var(--nv-primary-soft)] text-[var(--nv-primary)] hover:bg-[var(--nv-primary)]/15"
+                          : "bg-[var(--nv-surface-3)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)]"
+                      }`}
+                      title="展开 / 收起本章大纲"
+                    >
+                      <span className="text-[10px] leading-none">{outlineExpanded ? "▾" : "▸"}</span>
+                      <Icon name="book" size={12} />
+                      章纲{selectedNode.outline ? "·已设" : "·未设"}
+                    </button>
+
+                    {/* 章纲操作 */}
+                    {!isGenerating && (
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {chapterOutlineStatus === "generating" ? (
+                          <span className="text-[10px] text-[var(--nv-primary)] animate-pulse px-2 py-1 flex items-center gap-1 rounded-lg bg-[var(--nv-primary-soft)]"><Icon name="loader" size={10} className="animate-spin" /> 章纲生成中…</span>
+                        ) : chapterOutlineStatus === "done" ? (
+                          <span className="text-[10px] text-[var(--nv-success)] font-medium px-2 py-1 flex items-center gap-1 rounded-lg bg-[var(--nv-success)]/10"><Icon name="check" size={10} /> 章纲完成</span>
+                        ) : chapterOutlineStatus === "error" ? (
+                          <span className="text-[10px] text-[var(--nv-danger)] px-2 py-1 flex items-center gap-1 rounded-lg bg-[var(--nv-danger-soft)]"><Icon name="x" size={10} /> 章纲失败</span>
+                        ) : (
+                          <>
+                            <input value={chapterOutlinePrompt} onChange={(e) => onChapterOutlinePromptChange(e.target.value)}
+                              placeholder="预览提示词（留空自动）"
+                              className="input-glass w-36 rounded-lg px-2 py-1 text-[10px] focus:border-[var(--nv-primary)]" aria-label="章纲预览提示词" />
+                            <button onClick={() => onGenerateChapterOutline(chapterOutlinePrompt)}
+                              className="flex items-center gap-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1 text-[10px] text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)]"
+                              title="快速预览——轻量生成本章草稿章纲，不绑定角色、可随时重生成，仅作写作前的快速参考（正式大纲请用「抽卡分镜」）"><Icon name="sparkles" size={10} /> 快速预览</button>
+                            <button onClick={onDrawChapterOutline}
+                              className="flex items-center gap-1 rounded-lg border border-[var(--nv-primary)]/40 bg-[var(--nv-primary-soft)] px-2 py-1 text-[10px] font-medium text-[var(--nv-primary)] transition-colors hover:bg-[var(--nv-primary)]/15"
+                              title="正式 Outline——并行抽 3-5 条不同路线并自动选角，采用后写入带角色/剧情的正式章纲"><Icon name="grid" size={12} /> 抽卡分镜</button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* 展开时显示大纲文本（点击进入编辑） */}
+                  {outlineExpanded && (
+                    <div
+                      onClick={() => { setOutlineDraft(selectedNode.outline || ""); setEditingOutline(true); }}
+                      className="cursor-pointer rounded-lg border border-dashed border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-3 py-2 text-xs leading-relaxed text-[var(--nv-text-secondary)] hover:border-[var(--nv-primary)]/40 hover:text-[var(--nv-text-primary)] transition-colors"
+                    >
+                      {selectedNode.outline ? (
+                        <span className="line-clamp-4">{selectedNode.outline}</span>
+                      ) : (
+                        <span className="italic text-[var(--nv-text-tertiary)]">点击设置本节点大纲…</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* 生成控制 */}
+            <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40 p-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {isGenerating ? (
+                  <Button size="sm" onClick={onStop} className="btn-danger h-8 text-xs rounded-lg"><Icon name="stop" size={11} /> 停止生成</Button>
+                ) : (
+                  <>
+                    {!refineMode && (
+                      <Button size="sm" onClick={onWrite} className="btn-primary h-8 text-xs rounded-lg"><Icon name="pencil" size={11} /> 生成/重写</Button>
+                    )}
+                    {refineMode && (
+                      <Button size="sm" onClick={onRefine} className="btn-ghost h-8 text-xs flex items-center gap-1 rounded-lg text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调</Button>
+                    )}
+                    <button onClick={onToggleRefineMode}
+                      className={`flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border transition-colors ${refineMode ? "border-[var(--nv-accent)]/50 text-[var(--nv-accent)] bg-[var(--nv-accent-soft)] hover:bg-[var(--nv-accent)]/20" : "border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)]"}`}
+                      title={refineMode ? "切换到生成模式" : "切换到微调模式"}>
+                      <Icon name="wrench" size={11} /> {refineMode ? "微调中" : "微调"}
+                    </button>
+                    {!isGenerating && (
+                      <button onClick={onBatchWrite}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-primary)]/40 text-[var(--nv-primary)] bg-[var(--nv-primary-soft)] hover:bg-[var(--nv-primary)]/15 transition-colors"
+                        title="批量写作：后台连续生成 1-10 个新章节（自动写章名），可关窗口查看进度">
+                        <Icon name="pencil" size={12} /> 批量写作
+                      </button>
+                    )}
+                    {!isGenerating && (
+                      <button onClick={onOpenGame}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors"
+                        title="进入游戏模式：以互动叙事方式探索本章">
+                        <Icon name="gamepad" size={12} /> 游戏模式
+                      </button>
+                    )}
+                    {!isGenerating && !inlineEditing && (
+                      <button onClick={startInlineEdit}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors"
+                        title="编辑正文：页面不变，仅正文变为可直接修改的可编辑状态">
+                        <Icon name="pencil" size={12} /> 编辑正文
+                      </button>
+                    )}
+                    {!isGenerating && (
+                      <button onClick={() => setShowHumanize(true)}
+                        disabled={displayContent.length < 50}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-accent)]/40 text-[var(--nv-accent)] bg-[var(--nv-accent-soft)] hover:bg-[var(--nv-accent)]/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="本地过审自检：在本机检测 AI 痕迹（高频词 / 三段式排比 / 破折号滥用 / 句长机械等），逐段给证据和改法。正文全程留在你电脑上，不上传任何服务器">
+                        <Icon name="shield" size={12} /> 过审自检
+                      </button>
+                    )}
+                    {!isGenerating && (
+                      <button onClick={onEnterZen}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors"
+                        title="进入专注写作模式：隐藏侧栏工具栏，只留正文，支持打字机滚动（Ctrl/Cmd + .）">
+                        <Icon name="target" size={12} /> 专注
+                      </button>
+                    )}
+                    {inlineEditing && (
+                      <>
+                        <button onClick={saveInlineEdit} disabled={savingInline}
+                          className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-success)]/50 text-[var(--nv-success)] bg-[var(--nv-success-soft)] hover:bg-[var(--nv-success)]/15 transition-colors disabled:opacity-50">
+                          <Icon name="check" size={12} /> {savingInline ? "保存中…" : "完成"}
+                        </button>
+                        <button onClick={cancelInlineEdit}
+                          className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors">
+                          <Icon name="x" size={12} /> 取消
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+                <div className="flex items-center gap-1 ml-auto">
+                  <input type="number" value={targetWordCount} onChange={(e) => onTargetWordCountChange(parseInt(e.target.value) || 3000)}
+                    className="input-glass w-16 h-8 rounded-lg px-2 text-xs text-center" title="目标字数" aria-label="目标字数" />
+                  <span className="text-xs text-[var(--nv-text-tertiary)]">字</span>
+                </div>
+              </div>
+              <input placeholder={refineMode ? "微调指令（改对话/加描写/续写500字）…" : "作者指令（高优先级）…"}
+                value={refineMode ? refineInstruction : authorNote}
+                onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
+                className="input-glass w-full rounded-lg px-3 py-2 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />
+              {refineMode && !isGenerating && (
+                <p className="text-[10px] text-accent-label">微调模式：不重写正文，按指令修改现有内容或续写补长。字数不够会自动补，中途打断可续写。</p>
+              )}
+            </div>
+            </>) : (
+            /* ── 收起态：单行工具条——生成 / 目标字数 / 作者指令 / 展开工具，正文首屏最大化 ── */
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/40 px-2.5 py-1.5">
+              <button onClick={() => setToolsExpanded(true)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)] transition-colors shrink-0"
+                title="展开写作工具（章纲 / 微调 / 批量写作 / 游戏模式 / 过审自检 / 专注）">
+                <span className="text-[10px] leading-none">▾</span> <Icon name="wrench" size={12} /> 工具
+              </button>
+              {isGenerating ? (
+                <Button size="sm" onClick={onStop} className="btn-danger h-7 text-xs rounded-lg shrink-0"><Icon name="stop" size={11} /> 停止</Button>
+              ) : (
+                !refineMode && (
+                  <Button size="sm" onClick={onWrite} className="btn-primary h-7 text-xs rounded-lg shrink-0"><Icon name="pencil" size={11} /> 生成/重写</Button>
+                )
+              )}
+              {refineMode && (
+                <Button size="sm" onClick={onRefine} className="btn-ghost h-7 text-xs rounded-lg shrink-0 text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调</Button>
+              )}
+              <input type="number" value={targetWordCount} onChange={(e) => onTargetWordCountChange(parseInt(e.target.value) || 3000)}
+                className="input-glass w-14 h-7 rounded-lg px-1.5 text-xs text-center shrink-0" title="目标字数" aria-label="目标字数" />
+              <span className="text-xs text-[var(--nv-text-tertiary)] shrink-0">字</span>
+              <input placeholder={refineMode ? "微调指令…" : "作者指令（高优先级）…"}
+                value={refineMode ? refineInstruction : authorNote}
+                onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
+                className="input-glass flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />
+            </div>
+            )}
+          </div>
+          )}
+          {/* 正文显示区 */}
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-4 py-6 lg:px-8" onMouseUp={handleEditorSelection} onScroll={() => setSelToolbar(null)}>
+            {displayContent ? (
+              <div className="max-w-[860px] mx-auto">
+                {/* 纸面容器：深色 UI 中央的一张浅色「书页」（inline style 变量域覆盖——
+                    纸内组件强制浅色配色，深浅主题下都可读；避免污染 wcag 主题解析） */}
+                <div
+                  className="paper-sheet relative rounded-2xl px-6 py-8 sm:px-10 lg:px-14 lg:py-10"
+                  style={{
+                    "--nv-prose": "#2E3038",
+                    "--nv-text-primary": "#1B1D24",
+                    "--nv-text-secondary": "#4A4C55",
+                    "--nv-text-tertiary": "#8A8778",
+                    "--nv-text-muted": "#A3A094",
+                    "--nv-text-muted-on-surface-3": "#A3A094",
+                    "--nv-border-2": "rgba(26,28,34,0.14)",
+                    "--nv-border-3": "#DDD9CC",
+                    "--nv-surface-1": "#FFFFFF",
+                    "--nv-surface-2": "#F4F2EA",
+                    "--nv-surface-3": "#ECE9DE",
+                    "--nv-primary-soft": "rgba(99,102,241,0.08)",
+                  } as React.CSSProperties}
+                >
+                {/* 大号章节数字（参考书页左上角，纯装饰） */}
+                <span aria-hidden className="paper-big-no absolute top-4 right-7 text-[64px] sm:text-[80px]">
+                  {(() => {
+                    const m = (selectedNode?.title || "").match(/^第\s*([0-9一二三四五六七八九十百千零两]+)\s*章/);
+                    const no = m ? m[1] : String(((selectedNode as { order?: number }).order ?? 0) + 1);
+                    const cn: Record<string, string> = { "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9", "十": "10" };
+                    return cn[no] ?? no;
+                  })()}
+                </span>
+                {!inlineEditing && (
+                  <div className="flex items-center gap-1.5 mb-4">
+                    <div className="flex items-center gap-1.5 flex-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1">
+                      <Icon name="search" size={13} className="text-[var(--nv-text-tertiary)] shrink-0" />
+                      <input
+                        ref={nodeSearchRef}
+                        value={nodeQuery}
+                        onChange={(e) => { setNodeQuery(e.target.value); setMatchIdx(0); }}
+                        placeholder="章内查找…"
+                        aria-label="章内查找"
+                        className="flex-1 min-w-0 bg-transparent text-xs text-[var(--nv-text-primary)] placeholder:text-[var(--nv-text-tertiary)] focus:outline-none"
+                      />
+                      {nodeQuery && (
+                        <span className="text-[10px] text-[var(--nv-text-tertiary)] whitespace-nowrap shrink-0">
+                          {matchCount === 0 ? "无匹配" : `第 ${Math.min(matchIdx || 1, matchCount)}/${matchCount} 处`}
+                        </span>
+                      )}
+                      {nodeQuery && matchCount > 0 && (
+                        <>
+                          <button type="button" onClick={goPrevMatch} title="上一处" className="shrink-0 rounded p-0.5 text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors">
+                            <span className="text-xs leading-none">↑</span>
+                          </button>
+                          <button type="button" onClick={goNextMatch} title="下一处" className="shrink-0 rounded p-0.5 text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors">
+                            <span className="text-xs leading-none">↓</span>
+                          </button>
+                          <button type="button" onClick={() => { setNodeQuery(""); setMatchIdx(0); nodeSearchRef.current?.blur(); }} title="清空" className="shrink-0 rounded p-0.5 text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors">
+                            <Icon name="x" size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {nodeQuery && matchCount > 0 && (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <div className="flex items-center gap-1.5 flex-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-2 py-1">
+                          <Icon name="refresh" size={13} className="text-[var(--nv-text-tertiary)] shrink-0" />
+                          <input
+                            ref={nodeReplaceRef}
+                            value={replaceQuery}
+                            onChange={(e) => setReplaceQuery(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") replaceAll(); }}
+                            placeholder="替换为…"
+                            aria-label="替换为"
+                            className="flex-1 min-w-0 bg-transparent text-xs text-[var(--nv-text-primary)] placeholder:text-[var(--nv-text-tertiary)] focus:outline-none"
+                          />
+                          <button type="button" onClick={replaceOne} disabled={savingInline} title="替换当前处" className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors disabled:opacity-50">
+                            替换当前处
+                          </button>
+                          <button type="button" onClick={replaceAll} disabled={savingInline} title="替换全部" className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--nv-text-secondary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors disabled:opacity-50">
+                            替换全部
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {nodeQuery && !hasNativeFind() && (
+                      <span className="text-[10px] text-[var(--nv-text-tertiary)] shrink-0">本浏览器不支持自动高亮</span>
+                    )}
+                  </div>
+                )}
+                {inlineEditing ? (
+                  // 内联编辑态：无外框，页面其余完全不变，仅正文变为可直接修改的可编辑区
+                  <div
+                    ref={inlineRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    spellCheck={false}
+                    className="text-[18.5px] leading-[1.95] tracking-[0.015em] [font-family:var(--nv-prose-font)] text-[var(--nv-prose)] whitespace-pre-wrap break-words outline-none rounded-lg px-2 -mx-2 min-h-[60vh] focus:bg-[var(--nv-surface-2)]/40"
+                  />
+                ) : (
+                <StreamingBody
+                  content={throttledContent}
+                  selectedNode={selectedNode}
+                  projectId={projectId}
+                  isStreaming={isGenerating}
+                  onEntityClick={handleEntityClick}
+                  showTTS={showTTS}
+                  onShowTTSChange={setShowTTS}
+                  projectEntities={projectEntities}
+                  locateEntityId={locateEntityId}
+                />
+                )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-[var(--nv-text-tertiary)] text-sm">
+                {(isGenerating || genStep) ? (
+                  <div className="text-center space-y-3">
+                    {genStep && (
+                      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${
+                        genStep === "error" ? "bg-[var(--nv-danger-soft)] text-[var(--nv-danger)] border border-[var(--nv-danger)]/50"
+                        : genStep === "done" ? "bg-[var(--nv-success-soft)] text-[var(--nv-success)] border border-[var(--nv-success)]/50"
+                        : "bg-[var(--nv-primary-soft)] text-[var(--nv-primary)] border border-[var(--nv-primary)]/50"
+                      }`}>
+                        <span className="text-lg">{genStepLabels[genStep]?.icon}</span>
+                        <span className={genStep === "generating" ? "animate-pulse" : ""}>{genStepLabels[genStep]?.label || "处理中…"}</span>
+                      </div>
+                    )}
+                    {genStep && genStep !== "done" && genStep !== "error" && (
+                      <div className="flex items-center gap-1 justify-center">
+                        {["loading-cards", "confirming", "generating", "reviewing", "summarizing"].map((s, i) => {
+                          const stepIdx = ["loading-cards", "confirming", "generating", "reviewing", "summarizing"].indexOf(genStep);
+                          return (
+                            <div key={s} className="flex items-center gap-1">
+                              <div className={`w-2 h-2 rounded-full transition-colors ${i <= stepIdx ? "bg-[var(--nv-primary)]" : "bg-[var(--nv-border-3)]"}`} />
+                              {i < 4 && <div className={`w-3 h-0.5 ${i < stepIdx ? "bg-[var(--nv-primary)]" : "bg-[var(--nv-border-3)]"}`} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {isGenerating && !genStep && <span className="animate-pulse">生成中…</span>}
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="mb-2">选择左侧大纲节点，设置大纲后点击「生成」</p>
+                    <p className="text-xs">或先让 AI 生成大纲</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* 选中即改悬浮工具条：低调金玻璃，选中正文片段即现，点按把片段交给现有 refine 弹窗（复用 SSE/落库，不擅自改） */}
+          {selToolbar && (
+            <div
+              className={`fixed z-50 -translate-x-1/2 ${selToolbar.placeAbove ? "-translate-y-full" : ""} flex items-center gap-0.5 px-1 py-1 rounded-xl surface-elevated border border-[var(--nv-gold)]/40 shadow-[0_4px_20px_rgba(228,184,99,0.18)] bg-[var(--nv-surface-1)]/95 backdrop-blur-sm`}
+              style={{ top: selToolbar.top, left: selToolbar.left }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {([["polish", "润色"], ["expand", "扩写"], ["continue", "续写"], ["custom", "自定义"]] as const).map(([action, label]) => (
+                <button
+                  key={action}
+                  type="button"
+                  onClick={() => { onSelectionRefine?.(selToolbar.text, action); setSelToolbar(null); }}
+                  className="px-2.5 py-1 text-xs rounded-lg text-[var(--nv-text-secondary)] hover:text-[var(--nv-gold)] hover:bg-[var(--nv-gold)]/10 transition-colors whitespace-nowrap"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* 底部状态栏：行 / 字 / 目标进度 / 编码 */}
+          <div className="shrink-0 flex items-center justify-between border-t border-[var(--nv-border-2)] bg-[var(--nv-abyss)] px-4 py-1.5 text-[11px] text-[var(--nv-text-tertiary)]">
+            <div className="flex items-center gap-4">
+              <span>{lineCount} 行</span>
+              <span>{currentWords.toLocaleString()} 字</span>
+              {dailyGoal > 0 && (
+                <span
+                  className={
+                    dailyReached
+                      ? "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[var(--nv-success)] bg-[var(--nv-success)]/10 animate-pulse"
+                      : "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[var(--nv-text-secondary)] bg-[var(--nv-surface-3)]"
+                  }
+                  title="每日目标进度（与统计面板同源，保存后同步）"
+                >
+                  <Icon name="target" size={11} /> 今日 {Math.round(todayWords || 0).toLocaleString()} / {dailyGoal.toLocaleString()} · {dailyPct}%
+                </span>
+              )}
+              <span className={targetReached ? "text-[var(--nv-success)]" : "text-[var(--nv-text-secondary)]"}>
+                目标 {targetWordCount} 字 · {progressPct}%
+              </span>
+            </div>
+            <span className="flex items-center gap-2">
+              {!zen && genStep === "generating" && (
+                <span className="inline-flex items-center gap-1 text-[var(--nv-primary)]"><Icon name="loader" size={11} className="animate-spin" /> 草稿保存中…</span>
+              )}
+              {!zen && genStep === "done" && (
+                <span className="inline-flex items-center gap-1 text-[var(--nv-success)]"><Icon name="check" size={11} /> 已落库 <Icon name="check" size={15} className="inline-block align-text-bottom shrink-0" />{selectedNode?.wordCount ? ` · 本章 ${selectedNode.wordCount} 字` : ""}</span>
+              )}
+              {/* 三层自动保存 · 状态指示：手动编辑正文时实时告知是否已落地 */}
+              {inlineEditing && (
+                <span className="inline-flex items-center gap-1.5">
+                  {saveState === "saving" && (
+                    <span className="inline-flex items-center gap-1 text-[var(--nv-primary)]"><Icon name="loader" size={11} className="animate-spin" /> 保存中…</span>
+                  )}
+                  {saveState === "saved" && (
+                    <span className="inline-flex items-center gap-1 text-[var(--nv-success)]"><Icon name="check" size={11} /> 已自动保存</span>
+                  )}
+                  {saveState === "unsaved" && (
+                    <span className="inline-flex items-center gap-1 text-[var(--nv-danger)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--nv-danger)]" /> 未保存</span>
+                  )}
+                  {saveState === "idle" && (
+                    <span className="inline-flex items-center gap-1 text-[var(--nv-text-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-[var(--nv-text-muted)]" /> 编辑中</span>
+                  )}
+                </span>
+              )}
+              {/* 三层自动保存 · 崩溃恢复：本地有比服务端更新的草稿时提示 */}
+              {pendingDraft && (
+                <span className="inline-flex items-center gap-1.5 text-[var(--nv-danger)]">
+                  发现自动保存的草稿（{new Date(pendingDraft.savedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}）
+                  <button type="button" onClick={restoreDraft} className="underline hover:opacity-80">恢复</button>
+                  <button type="button" onClick={dismissDraft} className="underline hover:opacity-80">忽略</button>
+                </span>
+              )}
+              <span className="flex items-center gap-1"><Icon name="file" size={11} /> UTF-8</span>
+            </span>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-[var(--nv-text-tertiary)]">
+          <div className="text-center">
+            <p className="text-lg mb-2">欢迎使用 Novel Smith</p>
+            <p className="text-sm">从左侧大纲树选择节点开始写作，或先生成大纲</p>
+          </div>
+        </div>
+      )}
+    </main>
+
+    {/* BE-1 版本历史抽屉 */}
+    {showRevisions && selectedNode && (
+      <Modal open={showRevisions} onClose={() => setShowRevisions(false)} bare
+        panelClassName="w-[760px] max-w-[94vw] max-h-[88vh] flex flex-col"
+        closeOnOverlay={false}
+        labelledBy="revisions-modal-title">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--nv-border-2)] shrink-0">
+          <div className="flex items-center gap-2">
+            <Icon name="history" size={16} className="text-[var(--nv-primary)]" />
+            <h3 id="revisions-modal-title" className="text-sm font-semibold text-[var(--nv-text-primary)]">历史版本 · {selectedNode.title}</h3>
+          </div>
+          <button onClick={() => setShowRevisions(false)} aria-label="关闭"
+            className="rounded-lg p-1.5 text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)] transition-colors">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div className="flex flex-1 min-h-0">
+          {/* 左：版本列表 */}
+          <div className="w-56 shrink-0 border-r border-[var(--nv-border-2)] overflow-y-auto custom-scrollbar p-2 space-y-1.5">
+            {revisionsLoading ? (
+              <p className="text-xs text-[var(--nv-text-tertiary)] px-2 py-3 flex items-center gap-1.5">
+                <Icon name="loader" size={12} className="animate-spin" /> 加载中…
+              </p>
+            ) : revisions.length === 0 ? (
+              <p className="text-xs text-[var(--nv-text-tertiary)] px-2 py-3 leading-relaxed">
+                暂无历史版本。<br />AI 生成 / 重写或手动保存正文时会自动留档。
+              </p>
+            ) : (
+              revisions.map((r) => (
+                <button key={r.id} onClick={() => previewRevision(r.id)}
+                  className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors border ${
+                    previewRev?.id === r.id
+                      ? "bg-[var(--nv-primary-soft)] border-[var(--nv-primary)]/40"
+                      : "border-transparent hover:bg-[var(--nv-surface-2)]"
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-[var(--nv-text-primary)]">第 {r.version} 版</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--nv-surface-2)] text-[var(--nv-text-tertiary)]">
+                      {SOURCE_LABEL[r.source] || "未知"}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[var(--nv-text-tertiary)] mt-1">
+                    {r.wordCount} 字 · {new Date(r.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          {/* 右：预览 + 回滚 */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
+              {previewLoading ? (
+                <p className="text-xs text-[var(--nv-text-tertiary)] flex items-center gap-1.5">
+                  <Icon name="loader" size={12} className="animate-spin" /> 加载版本内容…
+                </p>
+              ) : previewRev ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-3 text-xs text-[var(--nv-text-tertiary)]">
+                    <span className="px-1.5 py-0.5 rounded-full bg-[var(--nv-surface-2)]">第 {previewRev.version} 版</span>
+                    <span>{SOURCE_LABEL[previewRev.source] || "未知"}</span>
+                    <span>· {previewRev.wordCount} 字</span>
+                    <span>· {new Date(previewRev.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</span>
+                  </div>
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap text-[var(--nv-text-secondary)] max-w-[640px]">
+                    {previewRev.content}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--nv-text-tertiary)]">从左侧选择一版查看内容预览。</p>
+              )}
+            </div>
+            {previewRev && (
+              <div className="shrink-0 border-t border-[var(--nv-border-2)] px-5 py-3 flex justify-end">
+                <button onClick={() => doRollback(previewRev.id)} disabled={rollbacking}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[var(--nv-primary)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center gap-1.5">
+                  {rollbacking ? <><Icon name="loader" size={12} className="animate-spin" /> 回滚中…</> : <><Icon name="history" size={12} /> 回滚到此版本</>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+    )}
+
+    {/* 本地过审自检：纯前端规则引擎，不联网、不上传 */}
+    <HumanizePanel
+      open={showHumanize}
+      onClose={() => setShowHumanize(false)}
+      text={displayContent}
+      chapterTitle={selectedNode?.title}
+      nodeId={selectedNode?.id}
+      onApplyFixes={applyHumanizeFix}
+    />
+    </>
+  );
+}

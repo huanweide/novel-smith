@@ -1,0 +1,89 @@
+:root {
+  --bg: #0b0f17;
+  --card: #141a26;
+  --card2: #1b2230;
+  --line: #263041;
+  --txt: #e6ebf4;
+  --dim: #8b97ad;
+  --accent: #6ea8fe;
+  --high: #ef4444;
+  --mid: #f59e0b;
+  --low: #22c55e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--txt);
+  font: 15px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+
+header h1 { font-size: 26px; margin: 0 0 8px; }
+.badge-demo {
+  font-size: 12px; vertical-align: middle;
+  background: rgba(110,168,254,.15); color: var(--accent);
+  border: 1px solid rgba(110,168,254,.4);
+  padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+}
+.sub { color: var(--dim); margin: 6px 0; }
+.dim { color: var(--dim); font-size: 13px; }
+
+.editor { margin: 22px 0; }
+textarea {
+  width: 100%; background: var(--card); color: var(--txt);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; font: 15px/1.7 inherit; resize: vertical;
+}
+textarea:focus { outline: 2px solid rgba(110,168,254,.4); outline-offset: 1px; }
+.actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+button {
+  background: var(--card2); color: var(--txt);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 16px; font: 15px inherit; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #08121f; border-color: var(--accent); font-weight: 600; }
+
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px; margin: 14px 0;
+}
+.score-card { display: flex; align-items: center; gap: 20px; }
+.score { font-size: 52px; font-weight: 700; line-height: 1; }
+.score small { font-size: 18px; color: var(--dim); }
+.level { font-size: 20px; font-weight: 600; }
+.hint { color: var(--dim); font-size: 13px; margin-top: 4px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.chip { background: var(--card2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--dim); }
+.chip b { color: var(--txt); }
+
+.apply-all { background: var(--low); color: #05210f; border-color: var(--low); font-weight: 600; margin: 4px 0 8px; }
+
+.section { margin-top: 22px; }
+.section h3 { font-size: 15px; color: var(--dim); margin: 0 0 10px; }
+.section.clean { color: var(--low); }
+
+.rules { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.rules li { font-size: 14px; color: var(--dim); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+.sev-high { background: var(--high); } .dot.sev-high { background: var(--high); }
+.sev-mid { background: var(--mid); } .dot.sev-mid { background: var(--mid); }
+.sev-low { background: var(--low); } .dot.sev-low { background: var(--low); }
+
+.hit { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.hit-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 6px; color: #08121f; font-weight: 600; }
+.badge.sev-high { background: var(--high); } .badge.sev-mid { background: var(--mid); } .badge.sev-low { background: var(--low); }
+.rname { font-weight: 600; }
+.hit-head .fix { margin-left: auto; padding: 5px 12px; font-size: 13px; border-color: var(--low); color: var(--low); }
+.hit-head .nofix { margin-left: auto; font-size: 12px; color: var(--dim); }
+.excerpt { margin: 8px 0 6px; padding: 8px 10px; background: var(--card2); border-radius: 8px; font-size: 14px; color: #c8d3e6; }
+.why { color: var(--txt); font-size: 14px; }
+.fix-tip { color: var(--dim); font-size: 13px; margin-top: 4px; }
+
+.disclaimer { margin-top: 26px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--dim); }

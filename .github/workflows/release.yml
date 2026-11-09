@@ -1,0 +1,119 @@
+name: Release
+
+# 发版标签（v*）触发：云端自动构建 Windows 安装包并发布 GitHub Release。
+# 用 Actions 内置 GITHUB_TOKEN（permissions.contents: write），本机不需要任何 token——
+# 本机只负责 push tag，构建/打包/发 Release 全部在云端完成。
+# 资产三件套缺一不可（electron-updater 依赖）：
+#   NovelSmith-<ver>-setup.exe           安装包本体
+#   NovelSmith-<ver>-setup.exe.blockmap  差分下载地图（老版本→新版本只下差异块）
+#   latest.yml                           更新清单（版本号 + sha512 + 文件名），缺它 updater 报 404
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # better-sqlite3 的 Electron-ABI 预编译包在 GitHub Releases 上不存在
+      # （实测 v12.11.1 的 electron-v136 返回 404，只有 npmmirror 二进制镜像里有），
+      # 而 .npmrc 被 gitignore（防 token），CI 默认拿不到镜像 → prebuild-install 找不到二进制
+      # → rebuild:electron 非零退出 → dist 链路中断。构建前把镜像写进 CI 的 .npmrc。
+      - name: Configure native binary mirrors
+        shell: pwsh
+        run: |
+          Add-Content -Path .npmrc -Value "better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3"
+          Add-Content -Path .npmrc -Value "electron_mirror=https://registry.npmmirror.com/-/binary/electron/"
+          Get-Content .npmrc
+
+      - name: Install
+        run: npm ci
+
+      # Prisma Client 不入库（src/generated 被 gitignore），且 generate 在缺 DATABASE_URL 时
+      # 会静默成功但什么都不产出（与 ci.yml 同一坑）——显式带 DATABASE_URL 并校验产物。
+      - name: Generate Prisma Client
+        run: |
+          npx prisma generate
+          if (!(Test-Path src/generated/prisma/client.ts)) {
+            echo "::error::Prisma Client 未生成（src/generated/prisma/client.ts 不存在）"
+            exit 1
+          }
+        env:
+          DATABASE_URL: "file:./data/novelforge.db"
+
+      # next build 的静态收集会实例化 DB（Server Component 查项目列表），需要真实表结构。
+      - name: Setup database
+        run: npx prisma db push
+        env:
+          DATABASE_URL: "file:./data/novelforge.db"
+
+      # npm run dist 完整链：build（safe-build 版本一致性校验）→ rebuild:electron（better-sqlite3
+      # 换 Electron-ABI，CI 海外直连 GitHub Releases 下载 prebuild，无需镜像）→ deref prisma symlinks
+      # → electron-builder --win --publish never（只构建，发布交给下一步的 action-gh-release）
+      # → check-dist-version（安装包/latest.yml 版本一致性断言）→ rebuild:node（CI 内无需，幂等无害）
+      - name: Build installer
+        run: |
+          npm run dist 2>&1 | Tee-Object -FilePath build-log.txt
+          exit $LASTEXITCODE
+
+      # step 日志匿名拉不到（需 admin），失败时把完整构建日志存成 artifact（匿名可下载）以便诊断
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-log.txt
+
+      # 双保险：artifact 下载要登录，公开仓库匿名看不了；把日志尾部写进 run 的 step summary，
+      # 这样不看 artifact 也能直接看到失败原因（本地没有 token 时唯一可读通道）。
+      - name: Dump build log tail to summary
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path build-log.txt) {
+            $lines = Get-Content build-log.txt -Tail 120
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Build log tail (last 120 lines)" -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```' -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n") -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```' -Encoding utf8
+          }
+
+      # 三保险：artifact 与 step summary 都需要登录才能看；再把日志推到 ci-logs 分支，
+      # 本机只要 git fetch 就能读到失败原因（无 token 环境的唯一可靠通道）。
+      - name: Publish build log to ci-logs branch
+        if: failure()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          if (Test-Path build-log.txt) {
+            $free = (Get-PSDrive C).Free
+            Add-Content build-log.txt "`n==== CI META ====`nrun: $env:GITHUB_RUN_ID`nref: $env:GITHUB_REF_NAME`nsha: $env:GITHUB_SHA`nC: free bytes: $free"
+            git config user.name "ci-bot"
+            git config user.email "ci-bot@users.noreply.github.com"
+            git checkout --orphan "ci-log-$env:GITHUB_RUN_ID"
+            git add -f build-log.txt
+            git commit -m "ci: build log (run $env:GITHUB_RUN_ID)"
+            git push origin "HEAD:refs/heads/ci-logs" --force
+          }
+
+      # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/NovelSmith-*-setup.exe
+            release/NovelSmith-*-setup.exe.blockmap
+            release/latest.yml

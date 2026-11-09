@@ -1,0 +1,726 @@
+/**
+ * 游戏模式 —— 提示词组装
+ *
+ * 为游戏模式组装系统提示词和用户消息。
+ * 提示词分为三部分：
+ *   1. 基础层：世界观 + 章纲 + 角色
+ *   2. 交互层：当前状态（轮次/字数/进度/背包）
+ *   3. 反馈层：输出格式要求（NE| CI| PROGRESS| 选项）
+ */
+
+import type { GameSessionContext, GameActionInput } from "./types";
+import { ACTION_LABELS } from "./types";
+
+// ─── 操作归一化（阿游 P0：唯一归一化点）────────────────────────────
+// AI 产出中文操作（CI|获得|…/CI|消耗|/CI|装备|/CI|丢弃|），而引擎(game-engine.ts)、
+// 前端(page.tsx)、开局路由(start/route.ts) 全部用英文枚举 gain/consume/equip/discard
+// 比较。此处统一把中文操作映射为英文枚举，是唯一需要改动的地方（无需四处改比较逻辑）。
+const OP_MAP: Record<string, string> = {
+  // 基础操作（与引擎 game-engine.ts / 前端 page.tsx 的英文枚举一致）
+  "获得": "gain",
+  "消耗": "consume",
+  "装备": "equip",
+  "丢弃": "discard",
+  // 同义词覆盖（阿游 N3 / P1-1）：避免模型用同义动词导致透传到 applyItemChanges 后静默丢物或反向加物
+  // 获得类
+  "拾取": "gain",
+  "捡到": "gain",
+  "取得": "gain",
+  "获取": "gain",
+  "拾起": "gain",
+  "拿": "gain",
+  "得到": "gain",
+  "收下": "gain",
+  "赢得": "gain",
+  "缴获": "gain",
+  "收到": "gain",
+  "得手": "gain",
+  "到手": "gain",
+  // 消耗类
+  "使用": "consume",
+  "服用": "consume",
+  "吃掉": "consume",
+  "饮用": "consume",
+  "吞": "consume",
+  "吞下": "consume",
+  "服下": "consume",
+  "咽下": "consume",
+  // 消耗类同义词扩展（Round12 A4：消告警噪音且不污染数据）
+  "吃": "consume",
+  "喝": "consume",
+  "食": "consume",
+  "进食": "consume",
+  "吸": "consume",
+  "饮": "consume",
+  // 装备类
+  "佩戴": "equip",
+  "穿上": "equip",
+  "戴": "equip",
+  // 丢弃类
+  "丢掉": "discard",
+  "扔掉": "discard",
+  "弃置": "discard",
+  "抛": "discard",
+  "舍弃": "discard",
+  "抛弃": "discard",
+  "遗弃": "discard",
+  "遗失": "discard",
+  "失落": "discard",
+  // 归属转移类（P1 万物可交互）：物品从一方转到另一方（交易/赠予/抢夺/拾遗——旧持有者由引擎按名查账扣减）
+  "转移": "transfer",
+  "转交": "transfer",
+  "交给": "transfer",
+  "给予": "transfer",
+  "赠予": "transfer",
+  "送给": "transfer",
+  "递给": "transfer",
+  "塞给": "transfer",
+  "抢走": "transfer",
+  "夺走": "transfer",
+  "缴了": "transfer",
+  // 损坏类（P1）：物品受损但仍存在（区别于 destroy 销毁移除）——后续可能修复/揭露内情。
+  // 注意：「弄坏/毁坏/砸碎」等彻底损毁语义已映射 destroy（保持既有行为），此处只收「坏了还在」的语义
+  "损坏": "damage",
+  "磨损": "damage",
+  "受损": "damage",
+  "丢失": "discard",
+  // 卸下类（阿游 P1-1：引擎新增 unequip 分支，仅清 equipped 标记，不删物品）
+  "解下": "unequip",
+  "卸下": "unequip",
+  "脱下": "unequip",
+  "褪下": "unequip",
+  // 卸下类同义词扩展（Round12 A4）
+  "摘下": "unequip",
+  "摘掉": "unequip",
+  "除下": "unequip",
+  // 流转/出售类（阿游 P1-1：safe skip，不改动背包，引擎直接 no-op 跳过）
+  "典当": "skip",
+  "抵押": "skip",
+  "典押": "skip",
+  // 流转/出售类同义词扩展（Round12 A4：归入 SAFE_SKIP 兜底，不写背包）
+  "出售": "skip",
+  "售卖": "skip",
+  "卖出": "skip",
+  "交换": "skip",
+  "交易": "skip",
+  // 损毁类（阿游 P1-1：引擎新增 destroy 分支，从背包移除该物品）
+  "损毁": "destroy",
+  "摧毁": "destroy",
+  "弄坏": "destroy",
+  "毁坏": "destroy",
+  "粉碎": "destroy",
+  // 损毁类同义词扩展（Round12 A4）
+  "破坏": "destroy",
+  "砸碎": "destroy",
+  "摔碎": "destroy",
+  "烧毁": "destroy",
+  "焚毁": "destroy",
+  "炸毁": "destroy",
+};
+
+// 中文数字表（与选项解析共用）——用于物品数量「二/三」等中文数字解析。
+const CN_NUM: Record<string, number> = {
+  "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+  "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+};
+
+// 解析复合中文数字（十/百进位，支持零占位）：十二=12、二十=20、一百零五=105。
+// 仅由 零~九、十、百 组成才识别，其余字符视为非法返回 null（交由上层默认 1）。
+function parseCnCompound(s: string): number | null {
+  if (!s) return null;
+  const d: Record<string, number> = {
+    零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5,
+    六: 6, 七: 7, 八: 8, 九: 9,
+  };
+  let section = 0; // 已结算的百位/十位累计
+  let current = 0; // 当前待乘的单位数字
+  let hasAny = false;
+  for (const ch of s) {
+    if (d[ch] != null) {
+      current = d[ch];
+      hasAny = true;
+    } else if (ch === "十") {
+      // 十/二十/十二：十前无数字视为 1（"十"=10）
+      section += (current === 0 && !hasAny ? 1 : current) * 10;
+      current = 0;
+      hasAny = true;
+    } else if (ch === "百") {
+      section += (current === 0 && !hasAny ? 1 : current) * 100;
+      current = 0;
+      hasAny = true;
+    } else {
+      return null; // 含非法字符，不入复合解析
+    }
+  }
+  return hasAny ? section + current : null;
+}
+
+// 解析物品数量：支持阿拉伯数字、单字中文数字与复合中文数字；无法解析给默认 1 并告警（阿游 P1）。
+function parseGameQuantity(raw?: string): number {
+  if (!raw) return 1;
+  const s = raw.trim();
+  if (s === "") return 1;
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (CN_NUM[s] != null) return CN_NUM[s];
+  const cn = parseCnCompound(s);
+  if (cn != null) return cn;
+  console.warn(`[parseGameOutput] 无法解析物品数量「${s}」，默认按 1 处理`);
+  return 1;
+}
+
+// ─── 视角契约（扮演任意角色，阿游 P0-3）────────────────────────
+// 解决用户点名的歧义风险：「换了角色但模型还以为你是原主角」。
+// 三重防歧义：①契约块置顶（谁扮演谁、输入归属）②每轮 user prompt 重申一行锚
+// ③历史轮次行动者标签。本函数生成①，纯函数可单测。
+
+export interface PersonaInfo {
+  name: string;
+  role?: string;
+  briefDescription?: string;
+  /** 其他由 AI 扮演的角色名单（含原主角） */
+  otherNames: string[];
+  /** 叙事人称：second 第二人称「你」（第一人称代入）| third 第三人称小说镜头 */
+  person?: "second" | "third";
+}
+
+export function buildPersonaContract(p: PersonaInfo): string {
+  const others = p.otherNames.filter((n) => n && n !== p.name).slice(0, 12);
+  const othersLine = others.length > 0 ? others.join("、") : "（其余所有登场角色）";
+  const personRule = p.person === "third"
+    ? `\n5. 正文一律用第三人称写 ${p.name}（${p.name}／他／她），**不要用「你」称呼 ${p.name}**；镜头跟随 ${p.name}，像小说正文。`
+    : "";
+  return `
+═══════════════════════════════════════
+【视角契约——最高优先级，覆盖其他一切设定】
+
+▶ 玩家扮演：**${p.name}**${p.role ? `（${p.role}）` : ""}${p.briefDescription ? `\n  角色要点：${p.briefDescription.slice(0, 200)}` : ""}
+▶ AI 扮演：世界环境、旁白叙事，以及**除 ${p.name} 外的一切角色**（${othersLine}）。
+
+铁律：
+1. 玩家的每一次输入都是 **${p.name} 的言行与意图**——哪怕措辞像旁白或指令，也按 ${p.name} 想做的事处理。
+2. 不得替 ${p.name} 自由行动、说话或做决定；${p.name} 只能做玩家输入过的事，或按其既定性格做出最小合理延伸。
+3. 你写 ${p.name} 的台词/动作时，必须能对应到玩家的输入；玩家没说过的关键决定留给玩家。
+4. 其他角色对你（${p.name}）的态度、称呼、记忆，都按「眼前站着的是 ${p.name}」来演。${personRule}
+═══════════════════════════════════════`.trim();
+}
+
+/** 每轮重申的视角锚（防长上下文漂移，三重契约之②） */
+export function buildPersonaRoundAnchor(name: string): string {
+  return `（本轮视角提醒：玩家继续扮演 ${name}；除 ${name} 外的所有角色由你扮演。玩家输入 = ${name} 的言行。）`;
+}
+
+/** 视角契约·上帝/GM 版：玩家不扮演任何人，输入是导演编排 */
+export function buildDirectorContract(characterNames: string[]): string {
+  const names = characterNames.filter(Boolean).slice(0, 12);
+  const cast = names.length > 0 ? names.join("、") : "（所有登场角色）";
+  return `
+═══════════════════════════════════════
+【视角契约——最高优先级，覆盖其他一切设定】
+
+▶ 玩家身份：**上帝 / GM**（不扮演任何角色）
+▶ AI 扮演：世界本身，以及**全部角色**（${cast}）——每个角色按自己的目的、性格与处境独立行动。
+
+铁律：
+1. 玩家的输入是**导演编排**，不是某个角色的言行：安排谁做什么、发生什么、镜头切到哪，一律视为既成事实，必须演出，不得拒绝、不得改写成别的走向。
+2. 全知视角：可以写任何角色看到的、想到的、暗中正在做的事，包括他们彼此不知道的秘密；**不设「你」**。
+3. 编排之外的空隙由你按各自性格补足——角色可以误解、抵触、反噬，但不能推翻玩家明确安排的结果。
+4. 暗线真相对玩家公开：你可以让玩家看见伪装背后的实情，也可以故意留白吊着。
+═══════════════════════════════════════`.trim();
+}
+
+/** 每轮重申的上帝锚（三重契约之②） */
+export function buildDirectorRoundAnchor(): string {
+  return `（本轮视角提醒：玩家是上帝/GM，输入即编排，必须执行；你扮演全部角色，全知叙事，不用「你」。）`;
+}
+
+// ─── Roll 检定（跑团模式，阿游 P0-4）────────────────────────────
+// 骰在 LLM 调用「前」出结果并作为硬约束注入 prompt：AI 只演不判，
+// 把裁决权从「AI 说了算」分一半给随机性——这是跑团的紧张感来源。
+
+const CONFRONTATIONAL_KEYWORDS = [
+  "战斗", "攻击", "进攻", "出手", "偷袭", "伏击", "反击", "刺", "砍", "射",
+  "说服", "劝说", "劝", "威胁", "恐吓", "逼", "审问", "逼问", "谈判", "讨价", "还价", "求", "恳求", "乞求",
+  "偷", "窃", "抢", "夺", "盗", "攀", "爬", "潜入", "闯", "撬", "拆",
+  "逃", "逃跑", "追", "追捕", "躲", "躲避", "挡", "拦", "跳", "撞", "冲",
+  "赌", "比试", "较量", "比拼", "竞",
+];
+
+/** 对抗类行动判定：combat 恒为对抗；观察/休息/选项不骰；其余按关键词命中 */
+export function isConfrontationalAction(actionType: string, actionText: string): boolean {
+  if (actionType === "combat") return true;
+  if (actionType === "option" || actionType === "observe" || actionType === "rest") return false;
+  const t = actionText || "";
+  return CONFRONTATIONAL_KEYWORDS.some((k) => t.includes(k));
+}
+
+/** d100 → 五档结果 */
+export function rollTier(d100: number): { key: string; label: string; directive: string } {
+  if (d100 <= 5) return { key: "critical_fail", label: "大失败", directive: "严重受挫且出人意料（如当场被识破/反被制服/弄巧成拙）" };
+  if (d100 <= 40) return { key: "fail", label: "失败", directive: "行动受阻、被阻止或被反制" };
+  if (d100 <= 75) return { key: "partial", label: "勉强成功", directive: "达成目的但付出可见代价（受伤/暴露/结怨/损失物品）" };
+  if (d100 <= 95) return { key: "success", label: "成功", directive: "顺利达成" };
+  return { key: "critical_success", label: "大成功", directive: "超预期达成，并有意外之喜" };
+}
+
+/** 骰定结果的 prompt 约束块（AI 只演不判） */
+export function buildRollDirective(d100: number, tier: ReturnType<typeof rollTier>): string {
+  return `\n\n【骰子判定（既定结果，必须如实演绎，不得更改）】本次行动检定 d100 = ${d100} → ${tier.label}。要求：${tier.directive}。把结果演成有趣的故事，不要生硬宣布成败。`;
+}
+
+// ─── 系统提示词模板 ─────────────────────────────────────────────
+
+const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用户共同创作一章小说。你的文笔兼具网络文学的爽感和传统文学的画面感。
+
+## 当前创作背景
+- 书名：《{bookName}》
+- 章节：{chapterTitle}
+{outlineSection}
+{existingSection}
+{worldSection}
+{characterSection}
+
+## 当前状态
+- 轮次：第 {round} 轮
+- 累计字数：{totalWords} / {maxWords}（{progressPercent}%）
+- 情节进度：{plotProgress}%
+{itemsSection}
+
+## 互动规则
+1. {actorRule}
+2. 叙事必须严格遵循章纲规划，不偏离主线情节方向。**节奏是「大世界探索」，不是地下城闯关**：不必每轮都发生大事件——多数轮次只是持续推进（修炼、赶路、打探消息、与人寒暄、整理行装、观察环境、做准备）；事件按章纲节点与剧情因果自然到来，不要为了戏剧性硬造冲突或反转。
+3. 叙事结束后单独一行给出 3-4 个编号选项，格式：
+   1. 选项一
+   2. 选项二
+   3. 选项三
+   4. 选项四
+4. 选项要求：3-4 个方向要真的不同，**允许「平缓推进」型选项**（继续修炼／继续赶路／再探一处／找人闲聊／先做准备），也允许风险型与信息型；不要求每个选项都推动主线大跨步。
+5. 选项避免：重复历史行动、完全等价的废话选项、偏离主线太远的支线
+6. 如果本轮出现新实体（新角色/新地点/新物品/新势力），在选项后单独一段输出：
+   ===新实体===
+   NE|实体名|类型|简要描述
+   类型可选：角色、地点、物品、势力、功法、生物、其他
+  7. 物品与归属是流动的：任何人（不只是主角）的物品变动都要打标记——
+   ===角色物品变动===
+   CI|获得|物品名|数量|归属者（可选，留空默认主角）
+   CI|消耗|物品名|数量
+   CI|装备|物品名|数量
+   CI|丢弃|物品名|数量
+   CI|转移|物品名|数量|新归属者（谁把东西给了/卖给了/被抢走了：交易、赠予、抢夺、拾遗都要标记，原持有者由引擎按名查账扣减）
+   CI|损坏|物品名|数量|归属者（东西受损但仍存在——后续可能修复，也可能藏着内情）
+   说明：归属者填「主角」或具体角色名；每个在场角色都可能拥有物品，变动真实入账。
+12. 谎言与伪装（暗线系统）：角色可以撒谎、伪装、吹牛——他声称拥有某物但实际没有，或物品是假货/样品/赃物，或他对某物有隐藏目的。此时：
+   - 表层照常打 CI|获得（背包会显示他有——玩家第一人称看到的只是表象）
+   - 同时在最后单独输出暗线区块（玩家不可见，只有引擎记录）：
+   ===暗线===
+   TRICK|物品名|归属者|真相备注（如「空盒子，里面根本没有钥匙」「是样品，真品在他兄弟手里」「想用它换取信任后偷梁换柱」）
+   - 真相不写进叙事正文；后续剧情揭露时（偷窃发现是空的、鉴定出假货、被人戳穿）正常叙事描写，并用 CI|消耗/损坏/转移 翻转背包——表象与真相的落差就是伏笔的爆点。
+   - 真相已揭露时（本轮叙事里玩家已经知道内情了），额外输出一行：REVEAL|物品名|归属者——引擎会把这条暗线销账，避免重复揭露。
+   - 暗线可长期悬置：不必急着揭露，让它在之后的轮次里自然引爆。
+8. 每轮更新情节进度（选项之前输出）：
+   【情节进度：X%】
+9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
+10. 玩家的行动（尤其是自定义输入）只是「意图声明」，不是既定结果：你必须按剧情合理性、角色能力与当前处境裁决成败——可以失败、被阻止、被反制。明显违背常理或实力悬殊的意图（如凡人妄图一击灭敌、凭空杀人夺宝）不可直接兑现：让剧情给出合理的阻力或反制（如被对方轻松化解、反被制服），也可用幽默化解（如对方一个侧身躲开，把你当成玩笑）。不要生硬拒绝、不要中断叙事，让裁决本身成为有趣的故事。
+11. {narrativeRule}
+
+## 写作风格要求
+- 每段叙事有明确的推进感，不做无效重复描写
+- 对话有潜台词，角色说话方式符合其性格
+- 动作描写干净利落，环境描写嵌入叙事而非单独成段
+- 新信息（实体/物品）自然融入叙事，不生硬介绍
+
+{memorySection}
+{historySection}{secretSection}`;
+
+// ─── 用户行动提示词模板 ────────────────────────────────────────
+
+const ACTION_PROMPTS: Record<string, string> = {
+  observe:
+    "【观察】仔细环顾四周，观察当前所在之处的环境细节、在场人物的神态与微表情，以及任何不寻常的蛛丝马迹。",
+  dialogue:
+    "【对话】与当前场景中的人物交谈，推进对话线，获取信息或推动关系发展。",
+  combat:
+    "【战斗】进入战斗状态，与面前的敌人交锋。描写战斗动作、招式施展和双方攻防。",
+  explore:
+    "【探索】主动移动位置，探索新的区域，寻找隐藏的地点、物品或线索。",
+  use_item:
+    "【使用物品】使用背包中的物品。{itemHint}",
+  rest:
+    "【休息】找一个安全的地方休息恢复。时间推进，状态恢复，可能会有突发事件或梦境预兆。",
+  custom: "{customText}",
+};
+
+// ─── 公开 API ───────────────────────────────────────────────────
+
+/**
+ * IMP-022：跨轮次记忆摘要（P1）
+ *
+ * 现象：historySection 仅取最近 6 轮且每轮截断 150 字，长游戏（>6 轮）早期实体/伏笔/关键决策
+ * 在 prompt 中丢失，AI 后续不记得开头设定。
+ *
+ * 修法：从已持久化的上下文中提取一段紧凑「记忆摘要」，注入到 historySection 之前。
+ * 数据来源（均为跨全部轮次持久、已由引擎合并去重，诚实可提取）：
+ *   - ctx.entities：全部轮次出现过的实体（角色/地点/势力/功法/生物…），正是掉出 historySection 的早期设定
+ *   - ctx.items：当前背包（持久物品，常承载伏笔/线索）
+ *   - ctx.previousTurns 中掉出「最近 6 轮」的早期玩家行动：作为「早期关键决策」回填，避免开头选择被遗忘
+ *
+ * 纯字符串处理，不引网络调用；不改变 historySection 的截断逻辑。
+ */
+export function buildMemorySummary(ctx: GameSessionContext): string {
+  const parts: string[] = [];
+
+  // 1. 持久实体（上下文已跨全部轮次合并去重，名称唯一）
+  const entities = ctx.entities.filter((e) => e && e.name);
+  if (entities.length > 0) {
+    const listed = entities
+      .map((e) => `${e.name}(${e.type || "其他"})`)
+      .join("、");
+    parts.push(`- 已出现实体：${listed}`);
+  }
+
+  // 2. 当前背包（持久物品，承载伏笔/线索）
+  if (ctx.items.length > 0) {
+    const listed = ctx.items
+      .map(
+        (i) =>
+          `${i.name} ×${i.quantity}（${i.category}）${i.owner && i.owner !== "主角" ? `【归属：${i.owner}】` : ""}`
+      )
+      .join("、");
+    parts.push(`- 关键物品：${listed}`);
+  }
+
+  // 3. 掉出最近 6 轮的早期玩家关键决策（避免开头选择被遗忘）
+  const HISTORY_KEEP = 6; // 与 historySection 的 .slice(-6) 保持一致
+  const early = ctx.previousTurns.slice(
+    0,
+    Math.max(0, ctx.previousTurns.length - HISTORY_KEEP)
+  );
+  if (early.length > 0) {
+    const listed = early
+      .map((t) => `第${t.round}轮：${t.playerAction.slice(0, 40)}`)
+      .join("；");
+    parts.push(`- 早期关键决策：${listed}`);
+  }
+
+  if (parts.length === 0) return "";
+  return `\n## 跨轮次记忆摘要（持久记住开头设定与伏笔，长局不丢）\n${parts.join("\n")}`;
+}
+
+/**
+ * 组装游戏模式的系统提示词
+ */
+export function buildGameSystemPrompt(ctx: GameSessionContext): string {
+  const outlineSection = ctx.outline
+    ? `\n## 本章章纲（必须遵循的情节规划）\n${ctx.outline}`
+    : "\n（本章暂无章纲，请根据世界观和角色自由展开剧情，但需要逐渐收束到有意义的情节方向）";
+
+  // v0.46.58：本章已有正文——游戏从已有内容之后继续（含原字数），不推翻已写情节
+  const existingSection = ctx.existingContent
+    ? `\n## 本章已有正文（${ctx.existingContent.length} 字——游戏从这段内容之后续接，不得重复或推翻）\n${ctx.existingContent.slice(0, 3000)}`
+    : "";
+
+  const worldSection =
+    ctx.worldLore.length > 0
+      ? `\n## 世界观设定\n${ctx.worldLore
+          .slice(0, 8)
+          .map((l) => `- **${l.title}**：${l.content.slice(0, 150)}`)
+          .join("\n")}`
+      : "";
+
+  const characterSection =
+    ctx.characters.length > 0
+      ? `\n## 本章涉及角色\n${ctx.characters
+          .map(
+            (c) =>
+              `- **${c.name}**（${c.role}）${c.currentStatus !== "alive" ? `[状态：${c.currentStatus}]` : ""}：${c.briefDescription || "暂无简介"}`
+          )
+          .join("\n")}`
+      : "";
+
+  // 背包按归属分组展示（P1 万物可交互）：每个在场角色的随身物品一目了然——AI 才能演对交易/搜身/讨要。
+  // 主角置顶，其余角色按名排后；空背包角色不显示（没拥有≠没背包，剧情里拿到会自动出现）。
+  const buildItemsStr = () => {
+    if (ctx.items.length === 0) return "（目前没有任何角色持有物品）";
+    const byOwner = new Map<string, typeof ctx.items>();
+    for (const i of ctx.items) {
+      const o = i.owner || "主角";
+      if (!byOwner.has(o)) byOwner.set(o, []);
+      byOwner.get(o)!.push(i);
+    }
+    const owners = [...byOwner.keys()].sort((a, b) => (a === "主角" ? -1 : b === "主角" ? 1 : a.localeCompare(b)));
+    return owners
+      .map((o) => {
+        const list = byOwner.get(o)!;
+        const badge = o === "主角" ? "（你）" : "";
+        return `【${o}${badge}的随身物品】\n${list
+          .map((i) => `- ${i.name} ×${i.quantity}（${i.category}）${i.damaged ? "[已损坏]" : ""}${i.equipped ? "[已装备]" : ""}`)
+          .join("\n")}`;
+      })
+      .join("\n");
+  };
+
+  const itemsSection = `\n## 随身物品总账（谁的身上有什么——任何角色的物品变动都打 CI 标记）\n${buildItemsStr()}`;
+
+  // 叙事视点（三档）：只改口径，不改机制
+  const mode = ctx.narrativeMode || "first";
+  const lens = (ctx.playAsName || "主角").trim();
+
+  // 暗线备忘（P1 谎言与伪装）：只注入 prompt，UI 不显示。AI 持续记得每一条未揭露的真相，
+  // 才能在几十轮后自然引爆（偷窃发现是空盒、鉴定出假货、被戳穿）。
+  // 上帝/GM 视角例外：玩家是导演，暗线对他公开——可以演出来，也可以故意留白。
+  const secretSection =
+    ctx.secretLedger && ctx.secretLedger.length > 0
+      ? mode === "god"
+        ? `\n## 暗线备忘（上帝视角：玩家已知这些真相）\n${ctx.secretLedger
+            .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
+            .join("\n")}\n这些是角色们各自的伪装与实情。上帝视角下你可以直接把它们演进正文（让读者看见暗处的真相），也可以故意按住不表、留作后面的爆点——由你按戏剧效果决定。`
+        : `\n## 暗线备忘（仅你可见，玩家不知道——这些真相尚未揭露）\n${ctx.secretLedger
+            .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
+            .join("\n")}\n记住它们，在合适的剧情节点揭露（揭露时正常叙事 + CI 翻转背包）。`
+      : "";
+
+  const historySection =
+    ctx.previousTurns.length > 0
+      ? `\n## 历史互动记录\n${ctx.previousTurns
+          .slice(-6) // 只保留最近 6 轮
+          .map(
+            (t) =>
+              `第${t.round}轮——玩家行动：${t.playerAction.slice(0, 80)}\nAI叙事：${t.narrative.slice(0, 150)}...`
+          )
+          .join("\n\n")}`
+      : "\n## 历史互动记录\n（游戏开始，等待第一轮玩家行动）";
+
+  const progressPercent =
+    ctx.maxWords > 0 ? Math.round((ctx.totalWords / ctx.maxWords) * 100) : 0;
+
+  // ── 叙事视点（三档）：只改口径，不改机制 —— 同一套演算，换一种看戏的位置 ──
+  const actorRule =
+    mode === "god"
+      ? "玩家以上帝/GM 身份给出编排（安排谁做什么、发生什么、镜头切到哪），你据此生成 1-3 段紧凑的群像叙事（共 300-600 字）：把编排演成多角色同时在场的好戏，每个角色按自己的目的与性格反应，可有并行线索"
+      : mode === "third"
+        ? `玩家替「${lens}」做出下一步行动的决定，你据此生成 1-3 段紧凑叙事（共 300-600 字），保持文笔流畅、描写有画面感，像小说正文章节一样好读`
+        : "用户会描述主角的下一步行动，你据此生成 1-3 段紧凑叙事（共 300-600 字），保持文笔流畅、描写有画面感";
+  const narrativeRule =
+    mode === "god"
+      ? `全知第三人称群像口径（上帝视角/GM）：不设「你」，也不固定跟随某一个人——镜头可以在同一轮里自由切换，交代不同角色各自的动作、对话与心声，也可以写玩家角色们看不到的暗处正在发生什么。玩家的输入是导演编排而非某个角色的意图，必须执行；镜头重心可有所偏向，但始终保持全知。`
+      : mode === "third"
+        ? `第三人称小说口径：始终用名字/他/她写「${lens}」，不用「你」；镜头跟随 ${lens}，只写 TA 能看到、听到、感知到的范围——TA 不知道的事不要提前揭露（悬念留给后面）。例如「${lens}握紧钥匙，林振山眯起了眼」。`
+        : `叙事以第二人称「你」称呼玩家所扮演的角色（${lens}），让玩家以第一人称代入；其他角色才使用名字与第三人称。只写「你」能感知到的范围——你不知道的事不要提前揭露。例如「你握紧钥匙，林振山眯起了眼」。`;
+
+  return GAME_SYSTEM_PROMPT.replace("{bookName}", ctx.bookName)
+    .replace("{chapterTitle}", ctx.chapterTitle)
+    .replace("{actorRule}", actorRule)
+    .replace("{narrativeRule}", narrativeRule)
+    .replace("{outlineSection}", outlineSection)
+    .replace("{existingSection}", existingSection)
+    .replace("{worldSection}", worldSection)
+    .replace("{characterSection}", characterSection)
+    .replace("{round}", String(ctx.currentRound + 1))
+    .replace("{totalWords}", String(ctx.totalWords))
+    .replace("{maxWords}", String(ctx.maxWords))
+    .replace("{progressPercent}", String(progressPercent))
+    .replace("{plotProgress}", String(ctx.plotProgress))
+    .replace("{itemsSection}", itemsSection)
+    .replace("{memorySection}", buildMemorySummary(ctx))
+    .replace("{historySection}", historySection)
+    .replace("{secretSection}", secretSection);
+}
+
+/**
+ * 根据行动类型组装用户消息
+ */
+export function buildActionPrompt(input: GameActionInput): string {
+  const template =
+    ACTION_PROMPTS[input.actionType] ?? ACTION_PROMPTS.custom;
+
+  let prompt = template
+    .replace("{customText}", input.actionText)
+    .replace("{itemHint}", input.targetItem ? `使用：${input.targetItem}` : "请列出可以使用的物品");
+
+  // 阿游 P1-1：显式承接上一轮玩家选择的选项，让 AI 知道从哪个分支继续推进。
+  if (input.selectedOption != null && input.selectedOptionText) {
+    prompt = `（承接上一轮，玩家选择了选项 ${input.selectedOption}：${input.selectedOptionText}）\n` + prompt;
+  } else if (input.selectedOption != null) {
+    prompt = `（承接上一轮，玩家选择了选项 ${input.selectedOption}）\n` + prompt;
+  }
+
+  // 目标指定（阿游 R-目标）：玩家明确指定了交互对象（角色/生物/势力/物品），
+  // 注入到 prompt 头部，让 AI 把该对象作为本轮行动的核心受者。
+  if (input.target && input.target.trim()) {
+    prompt = `【行动目标】本次行动针对：${input.target.trim()}。请围绕该对象展开叙事与反应（对方的回应、状态变化等）。\n` + prompt;
+  }
+
+  return prompt;
+}
+
+/**
+ * 解析 AI 输出，提取结构化数据
+ */
+export function parseGameOutput(rawOutput: string): {
+  narrative: string;
+  options: Array<{ index: number; text: string }>;
+  newEntities: Array<{ name: string; type: string; description: string }>;
+  itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }>;
+  plotProgress: number;
+  /** 暗线（P1 谎言与伪装）：TRICK|物品名|归属者|真相备注——表层照常入账，真相只进暗账（玩家不可见） */
+  newTricks: Array<{ name: string; owner: string; truth: string }>;
+  /** 暗线销账（P1）：REVEAL|物品名|归属者——真相已揭露，引擎从暗账移除该条 */
+  newReveals: Array<{ name: string; owner: string }>;
+} {
+  let narrative = rawOutput;
+  const options: Array<{ index: number; text: string }> = [];
+  const newEntities: Array<{ name: string; type: string; description: string }> = [];
+  const itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }> = [];
+  const newTricks: Array<{ name: string; owner: string; truth: string }> = [];
+  const newReveals: Array<{ name: string; owner: string }> = [];
+  let plotProgress = -1;
+
+  // ── 提取选项（阿游 P1-1 重写）──
+  // 基于「连续编号行块」判定选项区：避免把正文里的编号列表（如"1. 首先…"）误当选项；
+  // 编号放宽 1–6；超界编号直接丢弃不残留；同一编号只取首次出现。
+  const lines = narrative.split("\n");
+  // 兼容阿拉伯数字与中文数字（一~六）编号，灭「模型用中文数字列选项却被当空、退回通用选项」的体验退化（阿游 Round4）
+  const candidatePattern = /^([0-9]{1,2}|[一二三四五六])[\.、\s]+(.+)$/;
+  const cnNum = CN_NUM;
+  const candidates: Array<{ idx: number; text: string; lineNo: number }> = [];
+  lines.forEach((line, i) => {
+    const m = candidatePattern.exec(line);
+    if (m) {
+      const raw = m[1];
+      const idx = /^\d+$/.test(raw) ? parseInt(raw, 10) : (cnNum[raw] ?? -1);
+      if (idx > 0) candidates.push({ idx, text: m[2].trim(), lineNo: i });
+    }
+  });
+
+  // 取最靠后的连续候选块（选项通常位于文末）
+  let lastRun: typeof candidates = [];
+  let cur: typeof candidates = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (cur.length === 0 || candidates[i].lineNo === candidates[i - 1].lineNo + 1) {
+      cur.push(candidates[i]);
+    } else {
+      if (cur.length) lastRun = cur;
+      cur = [candidates[i]];
+    }
+  }
+  if (cur.length) lastRun = cur;
+
+  const seenIdx = new Set<number>();
+  for (const c of lastRun) {
+    if (c.idx >= 1 && c.idx <= 6 && !seenIdx.has(c.idx)) {
+      seenIdx.add(c.idx);
+      options.push({ index: c.idx, text: c.text });
+    }
+  }
+  options.sort((a, b) => a.index - b.index);
+
+  // 若有选项块，截断 narrative 到该块首行之前
+  if (lastRun.length > 0) {
+    let firstLineStart = 0;
+    const startLine = lastRun[0].lineNo;
+    for (let i = 0; i < startLine; i++) firstLineStart += lines[i].length + 1;
+    narrative = narrative.slice(0, firstLineStart).trim();
+  }
+
+  // ── 提取新实体（NE|格式）──
+  const neSection = rawOutput.match(/===新实体===\s*\n([\s\S]*?)(?=\n\n|\n*$|===)/);
+  if (neSection) {
+    const neLines = neSection[1].split("\n").filter((l) => l.startsWith("NE|"));
+    for (const line of neLines) {
+      const parts = line.replace("NE|", "").split("|").map((s) => s.trim());
+      if (parts.length >= 2) {
+        newEntities.push({
+          name: parts[0],
+          type: parts[1] || "其他",
+          description: parts[2] || "",
+        });
+      }
+    }
+    // 从 narrative 中移除 NE 部分
+    narrative = narrative.replace(neSection[0], "").trim();
+  }
+
+  // ── 提取物品变动（CI|格式）──
+  const ciSection = rawOutput.match(
+    /===角色物品变动===\s*\n([\s\S]*?)(?=\n\n|\n*$|===)/
+  );
+  if (ciSection) {
+    const ciLines = ciSection[1].split("\n").filter((l) => l.startsWith("CI|"));
+    for (const line of ciLines) {
+      const parts = line.replace("CI|", "").split("|").map((s) => s.trim());
+      // P2：物品名缺失（如 CI|获得|）直接跳过空名，避免落库空物品
+      if (parts.length < 2 || !parts[1]) {
+        if (parts[0]) {
+          console.warn(`[parseGameOutput] 跳过物品名为空的物品变动：${line}`);
+        }
+        continue;
+      }
+      const rawOp = parts[0];
+      // P0 唯一归一化点：中文操作 → 英文枚举
+      const op = OP_MAP[rawOp] ?? rawOp;
+      if (!(rawOp in OP_MAP)) {
+        console.warn(`[parseGameOutput] 未知操作「${rawOp}」，保留原值（引擎比较分支将不命中）：${line}`);
+      }
+      itemChanges.push({
+        operation: op,
+        name: parts[1],
+        quantity: parseGameQuantity(parts[2]),
+        owner: parts[3] ? parts[3] : undefined,
+      });
+    }
+    narrative = narrative.replace(ciSection[0], "").trim();
+  }
+
+  // ── 提取暗线（TRICK|格式，P1 谎言与伪装）──
+  const trickSection = rawOutput.match(/===暗线===\s*\n([\s\S]*?)(?=\n\n|\n*$|===)/);
+  if (trickSection) {
+    const trickLines = trickSection[1].split("\n").filter((l) => l.startsWith("TRICK|"));
+    for (const line of trickLines) {
+      const parts = line.replace("TRICK|", "").split("|").map((s) => s.trim());
+      if (parts.length >= 3 && parts[0] && parts[2]) {
+        newTricks.push({
+          name: parts[0],
+          owner: parts[1] || "主角",
+          truth: parts[2],
+        });
+      }
+    }
+    // 销账：REVEAL|物品名|归属者（真相已揭露，引擎从暗账移除）
+    const revealLines = trickSection[1].split("\n").filter((l) => l.startsWith("REVEAL|"));
+    for (const line of revealLines) {
+      const parts = line.replace("REVEAL|", "").split("|").map((s) => s.trim());
+      if (parts[0]) newReveals.push({ name: parts[0], owner: parts[1] || "" });
+    }
+    // 从 narrative 中移除暗线区块（绝不进正文，玩家不可见）
+    narrative = narrative.replace(trickSection[0], "").trim();
+  }
+
+  // ── 提取情节进度 ──
+  const progressMatch = rawOutput.match(/【情节进度[：:]\s*(\d+)%?】/);
+  if (progressMatch) {
+    plotProgress = parseInt(progressMatch[1]);
+    narrative = narrative.replace(progressMatch[0], "").trim();
+  }
+
+  // 清理多余空行
+  narrative = narrative.replace(/\n{3,}/g, "\n\n").trim();
+
+  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals };
+}
+
+/**
+ * 导出给 API 路由使用——缩减最近轮次的 narrative 用于 token 控制
+ */
+export function summarizeTurnsForContext(
+  turns: Array<{ round: number; playerAction: string; narrative: string }>,
+  maxTurns: number = 6
+): string {
+  if (turns.length === 0) return "";
+
+  const recent = turns.slice(-maxTurns);
+  return recent
+    .map(
+      (t) =>
+        `【第${t.round}轮】玩家：${t.playerAction.slice(0, 60)} → AI：${t.narrative.slice(0, 200)}`
+    )
+    .join("\n");
+}

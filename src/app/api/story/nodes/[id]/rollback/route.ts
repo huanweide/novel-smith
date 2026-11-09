@@ -1,0 +1,71 @@
+import { jsonError } from "@/lib/api-error";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { snapshotRevision } from "@/lib/versions";
+import { STATUS_COMPLETED } from "@/core/story-status";
+
+// POST /api/story/nodes/[id]/rollback  body: { revisionId }
+// 把节点正文回滚到指定版本，并把「回滚前」的当前正文先快照（保证回滚可逆）。
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { revisionId } = body;
+
+    if (!revisionId) {
+      return NextResponse.json({ error: "缺少 revisionId" }, { status: 400 });
+    }
+
+    const node = await prisma.storyNode.findUnique({
+      where: { id },
+      select: { content: true, wordCount: true, projectId: true, deletedAt: true },
+    });
+    if (!node) {
+      return NextResponse.json({ error: "节点不存在" }, { status: 404 });
+    }
+    // #123 软删防复活：已移入回收站的节点不允许回滚正文，避免污染 tombstone
+    if (node.deletedAt) {
+      return NextResponse.json({ error: "该节点已被删除（回收站），无法回滚。如需操作请先从回收站恢复" }, { status: 410 });
+    }
+
+    const revision = await prisma.storyNodeRevision.findUnique({
+      where: { id: revisionId },
+    });
+    if (!revision || revision.nodeId !== id) {
+      return NextResponse.json({ error: "版本不存在或不属于该节点" }, { status: 404 });
+    }
+
+    // 先快照「回滚前」的当前正文，保证回滚操作本身可逆
+    if (node.content && String(node.content).trim()) {
+      await snapshotRevision({
+        nodeId: id,
+        projectId: node.projectId,
+        source: "rollback",
+        prevContent: node.content,
+        prevWordCount: node.wordCount,
+      });
+    }
+
+    // 回滚正文
+    const updated = await prisma.storyNode.update({
+      where: { id },
+      data: {
+        content: revision.content,
+        wordCount: revision.content.length,
+        status: STATUS_COMPLETED,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      content: updated.content,
+      wordCount: updated.wordCount,
+      rolledBackToVersion: revision.version,
+    });
+  } catch (err) {
+    return jsonError(err);
+  }
+}

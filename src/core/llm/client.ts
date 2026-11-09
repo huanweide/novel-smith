@@ -1,0 +1,770 @@
+/**
+ * LLM API 客户端 —— 兼容 OpenAI 协议的通用封装
+ *
+ * 支持 DeepSeek、硅基流动、OpenAI 等任何 OpenAI 兼容 API。
+ * 核心能力：同步调用 + 流式调用（SSE）。
+ *
+ * ⚠️ 模型名/API Key 统一从 AppSettings 数据库读取，不再硬编码。
+ *    用户设置页改什么模型，所有 API 调用即时生效。
+ */
+
+import { getSettings, mapLLMError, recordLlmCall, assertValidApiKey } from "@/lib/llm";
+import type { LLMConfig, FallbackModel } from "@/core/types";
+
+// ─── LLM 请求超时（BE-8：统一散落的三档为单常量）────────────
+/** 单次 LLM 请求最长等待时间（毫秒）。所有 chat / chatStream 共用此值，避免超时语义不一致、排查慢调用更简单。 */
+export const LLM_REQUEST_TIMEOUT_MS = 300_000;
+
+// ─── 类型定义 ───────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  /** tool_calls 的 ID（role=tool 时必填） */
+  tool_call_id?: string;
+  /** assistant 消息可能包含 tool_calls */
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+}
+
+export interface LLMRequest {
+  messages: ChatMessage[];
+  model: string;
+  /** 业务语义标签（writer/reviewer/summarize/extractor...），用于成本看板按角色聚合；不传则记 general */
+  role?: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  /** 业务目标字数（中文）：用于 L5-01 动态推算 max_tokens，避免长章被固定 4096 硬截断 */
+  targetWordCount?: number;
+  stream?: boolean;
+  /** 推理模式：显式传入时透传给供应商（GLM/Qwen3 混合推理模型用 thinking:disabled 关思考提速）；未传时由 config.disableThinking 全局决定 */
+  thinking?: { type: "enabled" | "disabled" };
+  /** 外部 AbortSignal（如用户停止生成）：与超时信号合并，真正中断底层 fetch，灭停止后仍在生成的 token 浪费 */
+  signal?: AbortSignal;
+  /** JSON 模式：要求模型以严格 JSON 对象输出（OpenAI 兼容 response_format）。用于选角 / 去重分组等"必须纯 JSON"的场景 */
+  json?: boolean;
+  /** OpenAI 兼容的工具定义 */
+  tools?: Array<{
+    type: "function";
+    function: {
+      name: string;
+      description: string;
+      parameters: Record<string, unknown>;
+    };
+  }>;
+}
+
+export interface LLMResponse {
+  content: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  /** 工具调用请求（LLM 要求执行工具时返回） */
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: string; // JSON string
+  }>;
+}
+
+export type LLMClient = ReturnType<typeof createLLMClient>;
+
+// ─── 推理模型输出预算保护（N1 修复）──────────────────────
+/**
+ * 推理模型（如 deepseek-v4-flash / deepseek-reasoner / o1 等）会在输出里先吐一段
+ * 思考链（reasoning_content），它和正文共用 max_tokens 预算。若预算太小（如 800），
+ * 全部预算会被思考链吃光，正文 content 直接为空（Round 12 e2e 复测 N1 实锤）。
+ *
+ * 这里对已知推理模型强制一个最低输出预算，保证「思考 + 正文」都有空间。
+ * 非推理模型不受影响，仍按各自设定的小预算运行（短回复、分类等）。
+ */
+const REASONING_MODEL_RE = /reason|r1|thinking|o1|o3|o4|qwq|z1|v4-flash|deepseek-v4/i;
+const REASONING_MIN_MAX_TOKENS = 2500;
+/**
+ * L5-01：动态推算 max_tokens。
+ * - 若业务声明 targetWordCount（如章节目标字数），则按「中文 1.6 倍 token 估算」放大预算，
+ *   并取 4096 下限、modelCtxLimit 上限（contextWindowSize*0.8 安全余量），避免长章被固定 4096 硬截断。
+ * - 否则回退到既有 requested/fallback（= config.maxTokensPerRequest）。
+ * - 推理模型最低预算保护（N1）仍优先于上述结果。
+ */
+export function resolveMaxTokens(
+  model: string,
+  requested: number | undefined,
+  fallback: number,
+  opts?: { targetWordCount?: number; contextWindowSize?: number },
+): number {
+  let base: number;
+  const twc = opts?.targetWordCount;
+  if (typeof twc === "number" && twc > 0) {
+    const ctxLimit = Math.floor((opts?.contextWindowSize ?? 65536) * 0.8);
+    base = Math.min(ctxLimit, Math.max(4096, Math.ceil(twc * 1.6)));
+  } else {
+    base = requested ?? fallback;
+  }
+  if (REASONING_MODEL_RE.test(model) && base < REASONING_MIN_MAX_TOKENS) {
+    return REASONING_MIN_MAX_TOKENS;
+  }
+  return base;
+}
+
+// ─── 重试 / 故障转移 基础设施 ──────────────────────────────
+
+/** 单次调用最大尝试次数（含首次）。故障转移链长度由 fallbackModels 决定 */
+const DEFAULT_RETRIES = 3;
+
+/** P2 监控记账：失败/重试的尝试也需记账，用此前缀与成功调用区分，避免成功率失真 */
+const FAIL_ROLE_PREFIX = "fail:";
+
+/** 指数退避延迟（含 ±20% 抖动），封顶 8s */
+export function backoffDelay(attempt: number, baseMs = 600, maxDelayMs = 8000): number {
+  const raw = baseMs * Math.pow(2, attempt - 1);
+  const capped = Math.min(maxDelayMs, raw);
+  const jitter = capped * 0.2 * (Math.random() * 2 - 1);
+  // 抖动之后要再封一次顶：抖动加在封顶后面的话，标称「封顶 8s」实际能飙到 9.6s，
+  // 重试次数多的时候这点超出会累积成明显的等待。
+  return Math.min(maxDelayMs, Math.max(0, Math.round(capped + jitter)));
+}
+
+/** 解析供应商 429 的 Retry-After 头（支持「秒数」或「HTTP-date」），转毫秒；封顶 60s 防恶意超大值；非法返回 null */
+export function parseRetryAfter(headers: Headers): number | null {
+  const raw = headers.get("retry-after");
+  if (!raw) return null;
+  const secs = Number(raw);
+  if (Number.isFinite(secs) && secs > 0) return Math.min(60000, Math.round(secs * 1000));
+  const date = Date.parse(raw);
+  if (!Number.isNaN(date)) {
+    const delta = date - Date.now();
+    if (delta > 0) return Math.min(60000, delta);
+  }
+  return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** 是否可重试：网络层错误（无状态码）/429 限流/5xx 服务端异常可重试；4xx 鉴权与请求错误不可重试 */
+export function isRetryable(status: number | null): boolean {
+  if (status === null) return true;
+  if (status === 429) return true;
+  if (status >= 500) return true;
+  return false;
+}
+
+export interface ChatTarget {
+  model: string;
+  baseURL: string;
+  apiKey: string;
+}
+
+/**
+ * 给「重试也不会变好」的错误打个标记（4xx：鉴权/参数/请求本身有问题）。
+ *
+ * 为什么需要这个标记：上层（典型是 completeText 的 JSON 模式降级）必须能区分两种失败——
+ *   - 供应商不认 response_format（4xx）：去掉这个参数再试一次是有意义的；
+ *   - 限流 / 服务端抽风（429、5xx）：再来一轮只会**让请求数翻倍**，
+ *     本来就被限流，加倍请求等于雪上加霜。
+ * 没有这个标记，上层只能对所有错误一视同仁地重试。
+ */
+function markFatal(error: Error): Error {
+  (error as Error & { llmFatal?: boolean }).llmFatal = true;
+  return error;
+}
+
+/** 判断从 chat / chatStream 抛出的错误是否属于「重试也不会好」的那类 */
+export function isFatalLLMError(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { llmFatal?: boolean }).llmFatal === true;
+}
+
+/** 构建「主模型 → 备用模型」调用链 */
+export function buildChain(config: LLMConfig, primaryModel: string): ChatTarget[] {
+  const primary: ChatTarget = {
+    model: primaryModel,
+    baseURL: config.baseURL.replace(/\/+$/, ""),
+    apiKey: config.apiKey,
+  };
+  const fallbacks: ChatTarget[] = (config.fallbackModels ?? []).map((f: FallbackModel) => ({
+    model: f.model,
+    baseURL: (f.baseURL ?? config.baseURL).replace(/\/+$/, ""),
+    apiKey: f.apiKey ?? config.apiKey,
+  }));
+  return [primary, ...fallbacks];
+}
+
+type AttemptResult =
+  | { ok: true; value: LLMResponse }
+  | { ok: false; fatal: boolean; error: Error; retryAfterMs?: number };
+
+/** 单次非流式请求（含解析）；网络/429/5xx 返回可重试错误，4xx 返回 fatal */
+async function attemptChat(
+  target: ChatTarget,
+  request: Omit<LLMRequest, "stream">,
+  config: LLMConfig,
+): Promise<AttemptResult> {
+  const body: Record<string, unknown> = {
+    model: target.model,
+    messages: request.messages,
+    temperature: request.temperature ?? config.defaultTemperature,
+    top_p: request.topP ?? config.defaultTopP,
+    max_tokens: resolveMaxTokens(target.model, request.maxTokens, config.maxTokensPerRequest, {
+      targetWordCount: request.targetWordCount,
+      contextWindowSize: config.contextWindowSize,
+    }),
+    stream: false,
+    // 思考模式：显式传入优先；否则全局开关 disableThinking 开启时注入 disabled（GLM/Qwen3 混合推理提速）
+    ...(request.thinking ? { thinking: request.thinking } : config.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
+    ...(request.json ? { response_format: { type: "json_object" } } : {}),
+  };
+  if (request.tools && request.tools.length > 0) {
+    body.tools = request.tools;
+    body.tool_choice = "auto";
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${target.baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${target.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // 原始异常必须留痕：TypeError 可能是 fetch failed(带 cause)、JSON 序列化失败、
+    // header 非法等，一律翻译成「网络不可达」会掩盖真因。真机实测：写章 97s 后报错，
+    // 服务端日志一个字都没有，完全无法定位。用户文案保持泛化，明细只进服务端日志。
+    console.error("[llm/client] 非流式 fetch 抛出原始异常:", e instanceof Error
+      ? { name: e.name, message: e.message, cause: (e as { cause?: unknown }).cause }
+      : e);
+    if (e instanceof TypeError) {
+      return { ok: false, fatal: false, error: new Error(`无法连接 AI 服务：请检查 Base URL（${target.baseURL}）与网络是否可达。`) };
+    }
+    return { ok: false, fatal: false, error: e instanceof Error ? e : new Error(String(e)) };
+  }
+
+  if (!response.ok) {
+    const err = await response.text();
+    const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers) : null;
+    return {
+      ok: false,
+      fatal: !isRetryable(response.status),
+      error: new Error(mapLLMError(response.status, err, target.model)),
+      retryAfterMs: retryAfterMs ?? undefined,
+    };
+  }
+
+  const data = await response.json();
+
+  // 容错：API 可能因内容过滤返回空 choices
+  if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+    if (data.error) {
+      return { ok: false, fatal: true, error: new Error(`LLM API 拒绝: ${typeof data.error === "string" ? data.error : JSON.stringify(data.error)}`) };
+    }
+    return { ok: true, value: { content: "", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } } };
+  }
+
+  const choice = data.choices[0];
+  const message = choice?.message;
+  if (!message) {
+    return { ok: true, value: { content: "", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } } };
+  }
+  // 检查 finish_reason——content_filter 表示被拦截
+  if (choice.finish_reason === "content_filter") {
+    return {
+      ok: true,
+      value: {
+        content: "",
+        usage: { promptTokens: data.usage?.prompt_tokens || 0, completionTokens: 0, totalTokens: data.usage?.total_tokens || 0 },
+      },
+    };
+  }
+
+  // 解析工具调用
+  let toolCalls: LLMResponse["toolCalls"] | undefined;
+  if (message?.tool_calls && Array.isArray(message.tool_calls)) {
+    toolCalls = message.tool_calls.map((tc: any) => ({
+      id: tc.id || "",
+      name: tc.function?.name || "",
+      arguments: tc.function?.arguments || "{}",
+    }));
+  }
+
+  return {
+    ok: true,
+    value: {
+      content: message?.content || "",
+      usage: {
+        promptTokens: data.usage?.prompt_tokens || 0,
+        completionTokens: data.usage?.completion_tokens || 0,
+        totalTokens: data.usage?.total_tokens || 0,
+      },
+      toolCalls,
+    },
+  };
+}
+
+type EstablishResult =
+  | { ok: true; response: Response }
+  | { ok: false; fatal: boolean; error: Error; retryAfterMs?: number };
+
+/** 建立流式连接（仅此阶段可重试 / 故障转移；进入 token 流后不再切换，避免重复输出） */
+async function establishStream(
+  target: ChatTarget,
+  request: Omit<LLMRequest, "stream">,
+  config: LLMConfig,
+): Promise<EstablishResult> {
+  const body: Record<string, unknown> = {
+    model: target.model,
+    messages: request.messages,
+    temperature: request.temperature ?? config.defaultTemperature,
+    top_p: request.topP ?? config.defaultTopP,
+    max_tokens: resolveMaxTokens(target.model, request.maxTokens, config.maxTokensPerRequest, {
+      targetWordCount: request.targetWordCount,
+      contextWindowSize: config.contextWindowSize,
+    }),
+    stream: true,
+    stream_options: { include_usage: true },
+    // 思考模式：显式传入优先；否则全局开关 disableThinking 开启时注入 disabled（GLM/Qwen3 混合推理提速）
+    ...(request.thinking ? { thinking: request.thinking } : config.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
+  };
+
+  // 合并超时信号与外部 signal：任一触发即中断 fetch（用户停止时真正停止生成，灭 token 浪费）。
+  const timeoutSignal = AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS);
+  const fetchSignal = request.signal
+    ? AbortSignal.any([timeoutSignal, request.signal])
+    : timeoutSignal;
+
+  let response: Response;
+  try {
+    response = await fetch(`${target.baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${target.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: fetchSignal,
+    });
+  } catch (e) {
+    // 同非流式：原始异常留痕，避免「网络不可达」掩盖真因（真机写章 97s 失败时零日志）。
+    console.error("[llm/client] 流式 fetch 抛出原始异常:", e instanceof Error
+      ? { name: e.name, message: e.message, cause: (e as { cause?: unknown }).cause }
+      : e);
+    if (e instanceof TypeError) {
+      return { ok: false, fatal: false, error: new Error(`无法连接 AI 服务：请检查 Base URL（${target.baseURL}）与网络是否可达。`) };
+    }
+    return { ok: false, fatal: false, error: e instanceof Error ? e : new Error(String(e)) };
+  }
+
+  if (!response.ok) {
+    const err = await response.text();
+    const retryAfterMs = response.status === 429 ? parseRetryAfter(response.headers) : null;
+    return {
+      ok: false,
+      fatal: !isRetryable(response.status),
+      error: new Error(mapLLMError(response.status, err, target.model)),
+      retryAfterMs: retryAfterMs ?? undefined,
+    };
+  }
+
+  return { ok: true, response };
+}
+
+/** 读取 SSE 流并逐 token 产出（与重试 / 故障转移解耦） */
+async function* readStream(
+  response: Response,
+  onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void,
+  onFirstToken?: () => void,
+): AsyncGenerator<{ type: "token" | "done"; content: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; finishReason?: string }> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("无法获取响应流");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let promptTokens = 0;
+  let completionTokens = 0;
+  // L5-01：流式 finish_reason 透传（在最后的 data chunk 中携带，早于 [DONE]）
+  let finishReason: string | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+        const dataStr = trimmed.slice(6);
+        if (dataStr === "[DONE]") {
+          const finalUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
+          onUsage?.(finalUsage);
+          yield {
+            type: "done" as const,
+            content: "",
+            usage: finalUsage,
+            finishReason,
+          };
+          return;
+        }
+
+          try {
+            const data = JSON.parse(dataStr);
+            const delta = data.choices?.[0]?.delta;
+
+            // L5-01：捕获流式 finish_reason（截断检测依据，早于 [DONE] 到达）
+            const fr = data.choices?.[0]?.finish_reason;
+            if (typeof fr === "string" && fr.length > 0) finishReason = fr;
+
+          // 推理模型把思考链放在 delta.reasoning_content，它同样占用 max_tokens
+          // 预算与 completion_tokens 计数。这里把 reasoning token 也计入 completionTokens，
+          // 保证流式用量计数与最终 usage 一致（N1 配套修正，否则监测面板少算推理消耗）。
+          if (delta?.reasoning_content) {
+            completionTokens++;
+          }
+
+          if (delta?.content) {
+              completionTokens++;
+              if (onFirstToken) onFirstToken(); // 首个正文 token 到达——记录首 token 延迟
+              yield {
+                type: "token" as const,
+                content: delta.content,
+                usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens },
+              };
+            }
+
+          if (data.usage) {
+            promptTokens = data.usage.prompt_tokens;
+            completionTokens = data.usage.completion_tokens;
+          }
+        } catch {
+          // 忽略解析失败的行
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const finalUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
+  onUsage?.(finalUsage);
+  yield {
+    type: "done" as const,
+    content: "",
+    usage: finalUsage,
+    finishReason,
+  };
+}
+
+// ─── 客户端工厂 ─────────────────────────────────────────────
+
+/**
+ * 创建 LLM 客户端
+ */
+export function createLLMClient(config: LLMConfig) {
+  return {
+    /**
+     * 同步调用 —— 等全部生成完再返回
+     */
+    async chat(request: Omit<LLMRequest, "stream">): Promise<LLMResponse> {
+      const chain = buildChain(config, request.model);
+      let lastError: Error | null = null;
+      const start = Date.now(); // 端到端计时起点（含重试/故障转移）
+
+      for (const target of chain) {
+        let attempt = 0;
+        while (attempt < DEFAULT_RETRIES) {
+          attempt++;
+          const res = await attemptChat(target, request, config);
+          if (res.ok) {
+            recordLlmCall({
+              model: target.model,
+              role: request.role,
+              promptTokens: res.value.usage.promptTokens,
+              completionTokens: res.value.usage.completionTokens,
+              totalTokens: res.value.usage.totalTokens,
+              baseURL: target.baseURL,
+              isFallback: target !== chain[0],
+              durationMs: Date.now() - start, // 生成延迟：端到端总耗时
+            });
+            return res.value;
+          }
+          // P2：失败/重试的尝试也要记账（区分于成功调用），否则调用次数与成功率失真
+          recordLlmCall({
+            model: target.model,
+            role: `${FAIL_ROLE_PREFIX}${request.role || "general"}`,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            baseURL: target.baseURL,
+            isFallback: target !== chain[0],
+          });
+          // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
+          if (res.fatal) throw markFatal(res.error);
+          lastError = res.error;
+          if (attempt < DEFAULT_RETRIES) await sleep(res.retryAfterMs ?? backoffDelay(attempt));
+        }
+      }
+
+      throw lastError ?? new Error("LLM 调用失败（无可用模型）");
+    },
+
+    /**
+     * 流式调用 —— 返回 AsyncGenerator
+     */
+    async *chatStream(request: Omit<LLMRequest, "stream">) {
+      const chain = buildChain(config, request.model);
+      let lastError: Error | null = null;
+      const streamStart = Date.now(); // 流式计时起点
+      let firstTokenMs: number | null = null; // 首个正文 token 延迟（闭包共享给 onUsage）
+
+      for (const target of chain) {
+        let attempt = 0;
+        while (attempt < DEFAULT_RETRIES) {
+          attempt++;
+          const est = await establishStream(target, request, config);
+          if (est.ok) {
+            // 一旦进入 token 流就不再重试 / 切换，避免重复输出
+            yield* readStream(
+              est.response,
+              (u) =>
+                recordLlmCall({
+                  model: target.model,
+                  role: request.role,
+                  promptTokens: u.promptTokens,
+                  completionTokens: u.completionTokens,
+                  totalTokens: u.totalTokens,
+                  baseURL: target.baseURL,
+                  isFallback: target !== chain[0],
+                  durationMs: Date.now() - streamStart, // 流式总耗时（到 [DONE]）
+                  firstTokenMs, // 首 token 延迟（onFirstToken 已设置）
+                }),
+              () => {
+                if (firstTokenMs === null) firstTokenMs = Date.now() - streamStart;
+              },
+            );
+            return;
+          }
+          // P2：建立流失败/重试的尝试也要记账（区分于成功调用）
+          recordLlmCall({
+            model: target.model,
+            role: `${FAIL_ROLE_PREFIX}${request.role || "general"}`,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            baseURL: target.baseURL,
+            isFallback: target !== chain[0],
+          });
+          // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
+          if (est.fatal) throw markFatal(est.error);
+          lastError = est.error;
+          if (attempt < DEFAULT_RETRIES) await sleep(est.retryAfterMs ?? backoffDelay(attempt));
+        }
+      }
+
+      throw lastError ?? new Error("LLM 流式调用失败（无可用模型）");
+    },
+  };
+}
+
+// ─── 从数据库设置构建 LLMConfig ──────────────────────────
+
+/**
+ * 从全局设置（AppSettings 表）构建 LLMConfig
+ *
+ * 这是所有 LLM 调用的统一入口——模型名、API Key、Base URL
+ * 全部从数据库读取，用户在设置页面改了就全局生效。
+ *
+ * @param overrides 可选覆盖（如正文生成想用不同的 temperature）
+ */
+export async function getEffectiveConfig(overrides?: Partial<LLMConfig>): Promise<LLMConfig> {
+  const settings = await getSettings();
+
+  // 故障转移备用模型链：从 LLM_FALLBACK 环境变量注入（形如 "modelA@baseURL,modelB"），零 schema 改动。
+  // 未配置则该链表为空，不做故障转移；也可经 overrides.fallbackModels 由代码注入。
+  const fallbackEnv = process.env.LLM_FALLBACK;
+  const parsedFallbacks: FallbackModel[] = fallbackEnv
+    ? fallbackEnv
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((spec) => {
+          const at = spec.indexOf("@");
+          if (at === -1) return { model: spec };
+          const model = spec.slice(0, at).trim();
+          const baseURL = spec.slice(at + 1).trim();
+          return { model, baseURL: baseURL || undefined };
+        })
+    : [];
+
+  return {
+    architectModel: overrides?.architectModel || settings.model,
+    writerModel: overrides?.writerModel || settings.writerModel || settings.model,
+    reviewerModel: overrides?.reviewerModel || settings.reviewerModel || settings.model,
+    summarizeModel: overrides?.summarizeModel || settings.summarizeModel || settings.model,
+    extractorModel: overrides?.extractorModel || settings.summarizeModel || settings.model,
+    baseURL: overrides?.baseURL || settings.baseUrl,
+    apiKey: overrides?.apiKey || settings.apiKey,
+    defaultTemperature: overrides?.defaultTemperature ?? 0.8,
+    defaultTopP: overrides?.defaultTopP ?? 0.95,
+    maxTokensPerRequest: overrides?.maxTokensPerRequest ?? parseInt(process.env.MAX_TOKENS_PER_REQUEST || "4096"),
+    contextWindowSize: overrides?.contextWindowSize ?? parseInt(process.env.CONTEXT_WINDOW_SIZE || "65536"),
+    fallbackModels: overrides?.fallbackModels ?? parsedFallbacks,
+    disableThinking: overrides?.disableThinking ?? settings.disableThinking,
+  };
+}
+
+/**
+ * 把项目级 llmConfig（Json，可能含 model/baseUrl/apiKey/temperature/topP）
+ * 映射成 LLMConfig 覆盖项。仅当字段非空才覆盖，确保"项目级留空=继承全局"。
+ *
+ * 用于 F5 项目配置中心的「per-project LLM 覆盖」：用户在配置面板为某项目指定
+ * 不同模型/密钥后，该项目的生成（写/润/续/总结）即优先使用项目级配置。
+ */
+export function buildProjectOverrides(
+  projectLlmConfig?: Record<string, unknown> | null,
+): Partial<LLMConfig> {
+  if (!projectLlmConfig || typeof projectLlmConfig !== "object") return {};
+  const o: Partial<LLMConfig> = {};
+  const model = projectLlmConfig.model;
+  if (typeof model === "string" && model.trim()) {
+    o.architectModel = o.writerModel = o.reviewerModel = o.summarizeModel = o.extractorModel = model.trim();
+  }
+  const baseURL = projectLlmConfig.baseUrl;
+  if (typeof baseURL === "string" && baseURL.trim()) o.baseURL = baseURL.trim();
+  const apiKey = projectLlmConfig.apiKey;
+  if (typeof apiKey === "string" && apiKey.trim()) {
+    // key 含中文 / 全角字符会在 fetch 头里炸出天书 ByteString 错误，提前拦截
+    assertValidApiKey(apiKey.trim(), "项目设置");
+    o.apiKey = apiKey.trim();
+  }
+  if (typeof projectLlmConfig.temperature === "number") o.defaultTemperature = projectLlmConfig.temperature;
+  if (typeof projectLlmConfig.topP === "number") o.defaultTopP = projectLlmConfig.topP;
+  return o;
+}
+
+/**
+ * 从数据库设置创建 LLM 客户端（非流式调用用）
+ */
+export async function createLLMClientFromSettings(overrides?: Partial<LLMConfig>): Promise<LLMClient> {
+  const config = await getEffectiveConfig(overrides);
+  return createLLMClient(config);
+}
+
+/**
+ * 便捷文本补全：把「system + 单轮 user prompt」封装成一次 chat 调用，返回 content 字符串。
+ *
+ * 用于迁移旧 `callLLM` / `callSiliconFlow` 调用——让所有「真正发起 LLM 请求」的入口
+ * 统一收敛到本文件（core/llm/client），不再有散落在各路由里的裸 fetch 封装。
+ * 语义对齐旧 callLLM：自动按 DB 设置选择模型与 Key；退避重试与故障转移由 `chat()` 提供。
+ *
+ * 注意：旧 callLLM 对「空响应」会当作临时故障重试；`chat()` 不判空，直接返回 content。
+ * 空响应属极罕见情况，且 chat 已自带 3 次网络层重试，此处不再单独复刻判空逻辑。
+ */
+export async function completeText(
+  system: string,
+  prompt: string,
+  opts?: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    role?: string;
+    config?: LLMConfig;
+    /** JSON 模式：要求模型以严格 JSON 对象输出（见 LLMRequest.json） */
+    json?: boolean;
+  },
+): Promise<string> {
+  const config = opts?.config ?? (await getEffectiveConfig());
+  const client = createLLMClient(config);
+  const baseReq: Omit<LLMRequest, "stream"> = {
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
+    model: opts?.model ?? config.architectModel,
+    role: opts?.role,
+    temperature: opts?.temperature,
+    maxTokens: opts?.maxTokens,
+  };
+  try {
+    const res = await client.chat({ ...baseReq, ...(opts?.json ? { json: true } : {}) });
+    return res.content;
+  } catch (e) {
+    // JSON-mode 优雅降级：仅当供应商**不认 response_format**（4xx，属"请求本身有问题"）
+    // 才去掉 json 再试一次——换个参数确实可能就成了。
+    //
+    // 这里刻意**不对** 429 / 5xx 降级：那类失败 chat() 内部已经重试过 3 次，
+    // 再补一轮等于把请求数翻倍，而在限流场景下加倍请求只会让情况更糟。
+    // （此前是不分青红皂白一律降级，与注释里写的"通常 4xx"不符。）
+    if (opts?.json && isFatalLLMError(e)) {
+      const res2 = await client.chat(baseReq);
+      return res2.content;
+    }
+    throw e;
+  }
+}
+
+/**
+ * 获取当前设置中的模型名（同步版本——仅用于已缓存的场景）
+ *
+ * @deprecated 优先使用 getEffectiveConfig()。不返回硬编码默认值——调用方自行处理 undefined。
+ */
+export function getFallbackModel(): string | undefined {
+  return process.env.LLM_MODEL || undefined;
+}
+
+// ─── 向后兼容导出 ──────────────────────────────────────────
+
+/**
+ * @deprecated 使用 getEffectiveConfig() 替代
+ */
+export function getDefaultLLMConfig(): LLMConfig {
+  const m = getFallbackModel() || "";
+  return {
+    architectModel: m,
+    writerModel: m,
+    reviewerModel: m,
+    summarizeModel: m,
+    extractorModel: m,
+    baseURL: process.env.LLM_BASE_URL || "https://api.deepseek.com",
+    apiKey: process.env.LLM_API_KEY || "",
+    defaultTemperature: 0.8,
+    defaultTopP: 0.95,
+    maxTokensPerRequest: parseInt(process.env.MAX_TOKENS_PER_REQUEST || "4096"),
+    contextWindowSize: parseInt(process.env.CONTEXT_WINDOW_SIZE || "65536"),
+    disableThinking: process.env.DISABLE_THINKING === "1",
+  };
+}
+
+/**
+ * @deprecated 使用 createLLMClientFromSettings() 替代
+ */
+export function getSiliconFlowConfig(): LLMConfig {
+  return getDefaultLLMConfig();
+}
+
+/**
+ * @deprecated 使用 createLLMClientFromSettings() 替代
+ */
+export function getDefaultClient(): LLMClient {
+  return createLLMClient(getDefaultLLMConfig());
+}
+
+/**
+ * @deprecated 使用 createLLMClientFromSettings() 替代
+ */
+export function getSiliconFlowClient(): LLMClient {
+  return createLLMClient(getDefaultLLMConfig());
+}

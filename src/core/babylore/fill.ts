@@ -1,0 +1,1131 @@
+// 宝宝流填表服务（国模填表·DeepSeek篇 精确配置）
+//
+// 原理：正文 → 填表总结 → 召回 → 正文
+// 本文件实现「填表总结」：每写完一章，DeepSeek 自动从正文抽取结构化事实，写入对应结构化表格（LoreTable）。
+//
+// 国模填表 DeepSeek 精确配置（来自《奶龙都能看会的宝宝流数据库使用教程 v2.7》）：
+//   - API: https://api.deepseek.com/v1 （由 settings.baseUrl 解析）
+//   - 模型: deepseek-chat（本产品 settings.model，如 deepseek-v4-flash）
+//   - 关思维链（COT）+ 严格 JSON：response_format: json_object
+//   - 温度 1；SQL 模式填表，失败自动重试 3 次
+// 注：本产品把"SQL 模式"等价实现为 JSON 行操作协议（insert/update/delete），在应用层用 JS 落地，兼具宝宝流语义且安全。
+//
+// v0.46.63 重写：灭错名三件套 ——
+//  ① 给 LLM 看【权威名录·已有名称 + 全量样例行】（不再只给最近 8 行，看不到全量才造地名变体）；
+//  ② 强化提示词（零杜撰/复用已有/完整性/填后自检）；
+//  ③ applyOps 代码级去重（同名 insert 自动转 update，杜绝重复行）；
+//  ④ 返回「疑似错误地名」警告 + 新增 selfCheckFill（全正文检索校验名称真实性 + 空值完整性）；
+//  ⑤ 新增 babyloreFillAll（一键从首章填到最新 + 防重复跳过已填章节）。
+
+import { asArray } from "@/lib/utils";
+import fs from "fs";
+import path from "path";
+import { prisma } from "@/lib/prisma";
+import { recordLlmCall } from "@/lib/llm";
+import { getSettings } from "@/lib/llm";
+import { safeParseAIJson } from "@/lib/json-parser";
+import { buildProjectOverrides } from "@/core/llm/client";
+import { syncChapterEntities } from "./entity-sync";
+import { fillModelOf } from "./table-model";
+import type { LoreTableOp, TableDef } from "./types";
+import { resolveNameToCanonical, type CanonicalCharacter } from "@/lib/entity-auto-creator";
+
+export interface FillResult {
+  ok: boolean;
+  operations: number;
+  applied: number;
+  error?: string;
+  warnings?: string[]; // 疑似错误地名/名称提示
+  /** P1-B（墨白）：落库后跑 selfCheckFill 的疑似问题（地名/空值/跨表/表内异体），供 UI/诊断 */
+  selfCheckIssues?: SelfCheckIssue[];
+}
+
+/** P1-C（墨白）：被跳过的无效 op（丢失的写入），与 warning 一一对应 */
+export interface SkippedOp {
+  op: unknown;
+  reason: string;
+  table: string;
+}
+
+export interface FillErrorMeta {
+  /** 全跳过语义细分：no_dirty=真无脏数据；all_skipped_mislabeled=含幽灵脏标记（DB 找不到对应章节）疑似误标；all_clean=全部跳过节点均为真实已校验章节的干净态（不诱导重填）；partial_failed=部分失败；no_applied=零落地 */
+  kind: "no_dirty" | "all_skipped_mislabeled" | "all_clean" | "partial_failed" | "no_applied";
+  processed: number;
+  applied: number;
+  skipped: number;
+  failed: number;
+  /** 被跳过（疑似误标）的节点 ID 列表，供 UI/诊断精确区分「真无脏」与「误标」 */
+  nodeIds: string[];
+  /** M2（墨白 Round12）：本轮因「实体类型↔表类别不匹配」被跳过、未落库的错写条数（报错不写错） */
+  crossTableSkips?: number;
+}
+
+export interface FillAllResult {
+  ok: boolean;
+  failed: number; // 未达完成门槛（ok && applied>0）的章节数，供前端呈现「部分失败/可重试」
+  processed: number; // 实际填表章节数
+  skipped: number; // 因已填而跳过的章节数（防重复）
+  operations: number;
+  applied: number;
+  error?: string;
+  /** P1-A（墨白）：全跳过分支携带结构化元数据，便于 UI/诊断区分「真无脏」与「旧版误标脏标记」 */
+  fillErrorMeta?: FillErrorMeta;
+  /** P1-C（墨白）：各章被跳过的无效 op（丢失的写入），与 warning 绑定一一对应 */
+  skippedOps?: SkippedOp[];
+  warnings: string[]; // 各章疑似错误地名
+  selfCheck: SelfCheckResult;
+}
+
+export interface SelfCheckIssue {
+  table: string;
+  row: number | string;
+  value: string;
+  issue: string;
+}
+export interface SelfCheckResult {
+  checkedTables: number;
+  nameIssues: number; // 疑似错误地名/名称
+  completenessIssues: number; // 空值/缺名称
+  crossTableIssues: number; // 跨表同名（归属待确认）
+  issues: SelfCheckIssue[];
+}
+
+// ─── 防重复填表标记（持久化已填章节，避免重复劳动）──────────
+const FILLED_PATH = path.join(process.cwd(), ".runtime", "babylore-filled.json");
+function loadFilled(): Record<string, string[]> {
+  try {
+    return JSON.parse(fs.readFileSync(FILLED_PATH, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+function saveFilled(m: Record<string, string[]>) {
+  fs.mkdirSync(path.dirname(FILLED_PATH), { recursive: true });
+  fs.writeFileSync(FILLED_PATH, JSON.stringify(m, null, 2));
+}
+
+/** 标记某章节已填表（供写章自动填表与一键填表共享同一防重复标记） */
+export function markChapterFilled(projectId: string, nodeId: string) {
+  const m = loadFilled();
+  const set = new Set(m[projectId] || []);
+  if (set.has(nodeId)) return;
+  set.add(nodeId);
+  m[projectId] = Array.from(set);
+  saveFilled(m);
+}
+
+/** P2-①（墨白）：清理「已填」脏标记（全清或单章），供 UI「清理脏标记并重填」出口。返回清除条目数。 */
+export function clearFilledChapters(projectId: string, nodeId?: string): number {
+  const m = loadFilled();
+  const list = m[projectId];
+  if (!list || list.length === 0) return 0;
+  if (nodeId) {
+    const before = list.length;
+    m[projectId] = list.filter((id) => id !== nodeId);
+    if (m[projectId].length === 0) delete m[projectId];
+    saveFilled(m);
+    return before - (m[projectId]?.length ?? 0);
+  }
+  const cleared = list.length;
+  delete m[projectId];
+  saveFilled(m);
+  return cleared;
+}
+
+// ─── 工具 ──────────────────────────────────────────────────
+
+function parseOps(raw: string): LoreTableOp[] {
+  if (!raw) return [];
+  const parsed = safeParseAIJson(raw);
+  if (!parsed) return [];
+  const ops = Array.isArray(parsed) ? parsed : parsed.operations;
+  if (Array.isArray(ops)) return ops.filter((o: any) => o && o.table && o.op) as LoreTableOp[];
+  return [];
+}
+
+/** 取表的「身份列」：优先 name/title/place/live/key/building，否则第一列 */
+function getIdentityCol(t: { columns?: any[] }): string {
+  const cols = (t.columns as any[]) || [];
+  const keys = cols.map((c) => c.key);
+  const priority = ["name", "title", "place", "live", "key", "building"];
+  for (const p of priority) if (keys.includes(p)) return p;
+  return keys[0] || "name";
+}
+
+/**
+ * M2（墨白 Round12）：实体类型 ↔ 表类别 约束，防止「人物落建筑表」等跨表错放。
+ *
+ * 设计原则（优先「报错不写错」避免数据污染）：
+ *  - 表类别可靠来源是 LoreTable.category（person|place|item|attribute|timeline|custom），
+ *    据此把表归为「地理/建筑类（geo）」或非地理类。
+ *  - 实体类型用启发式推断：依据其在正文中的角色词（主语 + 说/想/看/道…）判定为「人物」。
+ *    仅当高置信度判定为人物、且目标表为地理/建筑类时，才算「类型不匹配」。
+ *  - 判定逻辑抽成纯函数以便单测；不匹配时不写入，改为上报 cross-table issue。
+ */
+
+export type InferredEntityType = "character" | "geo" | "unknown";
+
+/** 表类别 → 地理/建筑类分组（与 selfCheckFill 的 GEO_LIKE 对齐） */
+export const GEO_CATEGORIES = new Set<string>([
+  "geo", "location", "place", "places", "building", "buildings", "map", "scene", "scenes",
+]);
+
+/** 人物/组织类表类别（实体类，不应被写入地理表；也不应承担地理实体） */
+export const ENTITY_CATEGORIES = new Set<string>([
+  "person", "characters", "character", "people", "org", "organization",
+  "item", "items", "skill", "skills", "relation", "relations", "event", "events",
+  "creature", "creatures",
+]);
+
+/** 表类别归类 */
+export function tableGroupOf(category: string | undefined): "geo" | "entity" | "other" {
+  const c = (category || "custom").toLowerCase();
+  if (GEO_CATEGORIES.has(c)) return "geo";
+  if (ENTITY_CATEGORIES.has(c)) return "entity";
+  return "other";
+}
+
+/** 人物行为动词/标记：出现在实体名之后即强烈暗示该实体是「人物」 */
+const CHARACTER_VERBS = [
+  "说", "道", "笑", "问", "喊", "叫", "低声", "心想", "想", "看", "望", "走", "转", "点头",
+  "摇头", "皱眉", "眯", "叹", "沉吟", "轻声", "冷笑", "怒", "回道", "心道", "喊道", "笑道",
+  "叫道", "低语", "喃喃", "凝视", "转身", "应道", "答道", "默然", "缓缓",
+];
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 启发式推断实体是否为「人物」：基于其在正文中的角色词（主语 + 说话/动作谓语）。
+ * 仅在高置信度命中时才返回 "character"；其余一律返回 "unknown"（保守，避免误杀合法地点写入）。
+ * 纯函数，便于单测。
+ */
+export function inferEntityType(name: string, text: string): InferredEntityType {
+  if (!name || !text) return "unknown";
+  const n = name.trim();
+  if (n.length < 2) return "unknown";
+  const e = escapeRegExp(n);
+  // 1) 实体名后紧跟人物行为动词（「名说道」「名笑道」「名皱眉」等）→ 人物
+  for (const v of CHARACTER_VERBS) {
+    if (new RegExp(`${e}${v}`).test(text)) return "character";
+  }
+  // 2) 引号式对话：「……」，名说/名道（名在引号后）→ 典型小说写法
+  if (new RegExp(`[”"』][^”"』]{0,12}?${e}(说|道|笑|问|喊|叫)`).test(text)) return "character";
+  // 3) 谓语式动作：名「看了/望向/走向/转身/皱起/眯起/点了点头/摇了摇头」→ 人物
+  if (new RegExp(`${e}(看了|望向|走向|转身|皱起|眯起|点了点头|摇了摇头|轻声道|冷笑道)`).test(text)) return "character";
+  return "unknown";
+}
+
+/** 组装一条「类型不匹配」跨表 issue（复用 SelfCheckIssue 上报结构） */
+function makeTypeMismatchIssue(tableName: string, entityName: string, tableCategory: string): SelfCheckIssue {
+  return {
+    table: tableName,
+    row: "跨表",
+    value: entityName,
+    issue: `类型不匹配：实体「${entityName}」(人物) 试图写入「${tableName}」(${tableCategory})，已跳过写错表`,
+  };
+}
+
+/** 列显示名：禁用列尾缀「(禁填)」标注（M4 软引导——落库安全由 normalizeOpColumns 代码级过滤兜底） */
+function colDisplayLabel(c: { label?: string; key?: string }, disabled: Set<string>): string {
+  const base = `${c.label}(${c.key})`;
+  return disabled.has(String(c.key)) ? `${base}[禁填]` : base;
+}
+
+/** 组装给 LLM 的表格文本：权威名录（已有名称）+ 全量样例行（截断保护） */
+function buildTablesText(tables: TableDef[]): string {
+  return tables
+    .map((t) => {
+      const disabled = new Set((t.disabledColumns as string[]) || []);
+      const cols = (t.columns as any[]).map((c) => colDisplayLabel(c, disabled)).join("、");
+      const idCol = getIdentityCol(t);
+      const allRows = (t.rows as any[]) || [];
+      // 权威名录：所有已有名称（去重），防止 LLM 造地名变体
+      const nameRoster = Array.from(
+        new Set(allRows.map((r) => r[idCol]).filter((v) => v != null && String(v).trim() !== ""))
+      ) as string[];
+      const rosterText = nameRoster.length
+        ? nameRoster.slice(0, 80).map((n) => `- ${n}`).join("\n")
+        : "（空，可放心新增）";
+      const rosterNote = nameRoster.length > 80 ? `\n（共 ${nameRoster.length} 个名称，已展示前 80）` : "";
+      // 全量样例行（截断保护，避免超大表撑爆 prompt）
+      const cap = 60;
+      const rowsSample = allRows.slice(0, cap).map((r) => JSON.stringify(r)).join("\n");
+      const rowsNote = allRows.length > cap ? `\n（共 ${allRows.length} 行，已展示前 ${cap}）` : "";
+      return `表「${t.name}」 key=${t.key}
+说明：${t.note}
+列：${cols}
+【权威名录·已有名称（新增事实必须复用，禁止自创同义变体/繁简混用）】
+${rosterText}${rosterNote}
+【已有样例（全量前 ${cap} 行）】
+${rowsSample || "（空）"}${rowsNote}`;
+    })
+    .join("\n\n---\n\n");
+}
+
+const STRICT_SYSTEM_PROMPT = `你是小说数据库填表助手（宝宝流数据库·国模填表·DeepSeek篇）。
+任务：阅读【最新章节正文】，提取结构化事实，写入对应结构化表格。
+
+铁律（违反即错误，必须严格遵守）：
+1. 名称零杜撰：所有写入的名称（人名/地名/组织名/物品名/功法名）必须逐字复制【最新章节正文】里的原文用字（含繁简、异体写法），禁止音译、改写、缩写、自创同义变体。例：正文写「青龙镇」就填「青龙镇」，不得改成「青龍镇」「青龙城」或「青龙门」之类。
+2. 复用已有：每个表已附【权威名录·已有名称】。若本章事实涉及的名称已在名录中，必须用 update 复用该行（match 按名称列匹配），严禁再 insert 同名新行。
+3. 新增慎重：仅当正文出现全新且确定性的名称、且不在名录中时，才 insert 新行；新名称仍须与正文用字完全一致。
+4. 填后自检：每个被填的名称值都必须能在【最新章节正文】里找到原文；若找不到，说明是错误地名/名称，绝对不要填。
+5. 禁填列不写：列清单中带 [禁填] 标记的列是作者锁定列，禁止出现在 values 里（写了也会被系统丢弃）；按其他列正常写入。
+
+完整性召回（防漏抽，与上面防杜撰同级重要，漏抽=记忆缺口=后续剧情矛盾）：
+A. 人物全覆盖：正文中出现、或仅在对话/回忆/短信中被提及的每一个具名人物，都必须在人物类表中有行——新人物 insert，已有人物 update。只抽主角不抽配角与被提及者 = 漏抽错误。示例：正文只写了一句「你姐在旧城图书馆，等你」而姐姐没出场——也要为她 insert 一行（位置=旧城图书馆，状态=约主角见面）。
+B. 对话即事实：对话、短信、回忆中明确说出的事实（身世、下落、约定、身份、数字）与叙述描写同等有效，照常提取。
+C. 状态列写「变化+要点」：状态/说明类列必须写该人物本章的关键状态变化、新获取的信息、去向或待办（例：「交出书房钥匙」「得知父亲坠桥存疑，动身赴约」），禁止写「在X处」「正常」「无变化」这类零信息值；纯位置写位置列，不占状态列。
+D. 存疑也入表：正文以疑问或悬念抛出的重要事实（某人下落不明、死亡存疑、身份存疑），照常写入并在值尾标注「（存疑）」，不得因不确定而丢弃。
+E. 下一章钩子必须记录：章末出现的赴约地点、待办、收到的消息等指向下一章的信息，必须写入对应人物的状态列。
+
+输出严格 JSON（response_format=json_object），不要任何解释文字、不要 Markdown。
+返回结构：{"operations":[{"table":"表英文key","op":"insert|update|delete","match":{"col":"列key","val":"匹配值"},"values":{"列key":"值"}}]}
+  - insert：values 含各列值（row_id 由系统分配，勿填）。
+  - update：match 指定按哪列匹配已有行（一般用唯一列如 name），values 为要更新的列。
+  - delete：match 指定删除哪一行。
+- 若某事实在表中已存在（同 name），用 update 而非 insert。
+- 每个表只处理与本章相关的行。`;
+
+interface LlmCreds {
+  baseURL: string;
+  apiKey: string;
+  model: string;
+  /** 全局「关闭思考模式」开关透传：混合推理模型（DeepSeek-V4-Flash 等）填表时禁用思考，速度优先 */
+  disableThinking?: boolean;
+}
+
+/**
+ * 构建「实体名 → 角色卡正主」解析器：取项目全部角色卡（排除🗂已合并脏卡），
+ * 用 resolveNameToCanonical 把 李大师/李神医 等变体归一到正主（如 李富贵），
+ * 使填表落库前自然并回，无需手动点去重（阶段1 目标）。取数失败安全降级为「不归一」。
+ */
+async function buildNameResolver(projectId: string): Promise<(name: string) => string> {
+  let characters: CanonicalCharacter[] = [];
+  try {
+    const rows = await prisma.characterCard.findMany({
+      where: { projectId },
+      select: { name: true, aliases: true, tags: true },
+    });
+    characters = (rows as any[])
+      .filter((c) => !((c.tags as string[]) || []).includes("🗂 已合并"))
+      .map((c) => ({ name: c.name, aliases: Array.isArray(c.aliases) ? (c.aliases as string[]) : [] }));
+  } catch {
+    characters = [];
+  }
+  return (name: string) => resolveNameToCanonical(characters, name);
+}
+
+async function runFillForText(
+  chapterText: string,
+  tables: TableDef[],
+  llm: LlmCreds,
+  tableKeys?: string[],
+  srcLabel?: string,
+  projectId?: string,
+  nameResolver?: (name: string) => string,
+): Promise<{ ok: boolean; operations: number; applied: number; warnings: string[]; skippedOps: SkippedOp[]; crossTableIssues: SelfCheckIssue[]; error?: string }> {
+  const filteredTables = tableKeys && tableKeys.length ? tables.filter((t) => tableKeys.includes(t.key)) : tables;
+  if (filteredTables.length === 0) {
+    return { ok: false, operations: 0, applied: 0, warnings: [], skippedOps: [], crossTableIssues: [], error: "没有匹配的表格" };
+  }
+
+  const tablesText = buildTablesText(filteredTables);
+  const userPrompt = `【结构化表格定义】
+${tablesText}
+
+【最新章节正文】
+${chapterText.slice(0, 12000)}
+
+请提取本章事实，输出 operations 的严格 JSON。`;
+
+  const url = llm.baseURL.endsWith("/v1")
+    ? `${llm.baseURL}/chat/completions`
+    : `${llm.baseURL}/v1/chat/completions`;
+
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const t0 = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${llm.apiKey}`,
+        },
+        signal: AbortSignal.timeout(120000),
+        body: JSON.stringify({
+          model: fillModelOf(llm.model, llm.baseURL),
+          messages: [
+            { role: "system", content: STRICT_SYSTEM_PROMPT },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.5, // 结构化抽取任务：低温稳定（原 1.0 同章两次注入随机波动）；0.3 过保守漏抽新人物，0.5 平衡稳定与覆盖
+          max_tokens: 8000,
+          response_format: { type: "json_object" },
+          ...(llm.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
+        }),
+      });
+
+      if (!res.ok) {
+        const e = await res.text().catch(() => "");
+        lastErr = `API ${res.status}: ${e.slice(0, 200)}`;
+        throw new Error(lastErr);
+      }
+      const data = await res.json();
+      const msg0 = data?.choices?.[0]?.message || {};
+      let raw = (msg0.content || "").trim();
+      // 推理模型兜底（v1.2.0 实测）：deepseek-v4-flash 推理过长时会吃光 max_tokens，
+      // content 为空（finish=length）；此时从推理尾部提取最后一个 JSON 块作为最终答案。
+      if (!raw) {
+        const reasoning = String(msg0.reasoning_content || "");
+        const parsed = safeParseAIJson(reasoning);
+        if (parsed) raw = JSON.stringify(parsed);
+      }
+      const ops = parseOps(raw);
+      if (ops.length === 0) {
+        lastErr = "模型未返回任何有效操作";
+        if (attempt < 3) continue;
+      }
+      const r = await applyOps(filteredTables, ops, srcLabel || "ch?:batch?", chapterText, nameResolver);
+      const warnings = [...r.warnings, ...buildWarnings(r.appliedNames, chapterText)];
+      // P0-3：以「实际落地数 applied」为完成门槛——空 ops / 全失效 ops 的章节
+      // 须视为失败（ok:false），使其可重试而非被永久标记「已填」（防重复机制反噬）。
+      if (r.applied === 0) {
+        warnings.push(`本章未落地任何事实（ops=${ops.length}）：${lastErr || "空 ops 或全失效"}，将标记为未填以便重试`);
+      }
+      const usage = (data as any)?.usage;
+      recordLlmCall({
+        model: llm.model,
+        role: "assistant",
+        promptTokens: usage?.prompt_tokens ?? usage?.promptTokens ?? 0,
+        completionTokens: usage?.completion_tokens ?? usage?.completionTokens ?? 0,
+        totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
+        baseURL: llm.baseURL,
+        projectId: projectId ?? null,
+      });
+      return {
+        ok: r.applied > 0,
+        operations: ops.length,
+        applied: r.applied,
+        warnings,
+        skippedOps: r.skippedOps,
+        crossTableIssues: r.crossTableIssues,
+        error: r.applied > 0 ? undefined : lastErr || "未落地任何事实",
+      };
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+      console.warn(`[fill] LLM attempt=${attempt} FAILED dt=${Date.now() - t0}ms err=${lastErr.slice(0, 120)}`);
+      if (attempt < 3) continue;
+    }
+  }
+  return { ok: false, operations: 0, applied: 0, warnings: [], skippedOps: [], crossTableIssues: [], error: lastErr };
+}
+
+/**
+ * 列名归一（D 轮实测抓出）：模型输出 ops.values 的键不稳定——有时用列 key（"name"），
+ * 有时用列 label（"人物"）。label 键落库后与列定义对不上，成为读不出/无法复用匹配的脏行。
+ * 这里按每张表的 columns 把 label→key、key→key 统一归一（values 与 match.col 都处理）。
+ * 未识别的键原样保留（可能来自表 note 里约定别名），由后续守卫兜底。
+ *
+ * M4 列级禁用：归一后剔除 disabledColumns 黑名单命中的 values 键（代码级强保证，
+ * LLM 是否遵守 prompt「禁填」标注不 影响 落库安全）。match.col 只读不写，不禁。
+ */
+function normalizeOpColumns(op: LoreTableOp, table: TableDef): LoreTableOp {
+  const cols = (table.columns as any[]) || [];
+  const byKey = new Map(cols.map((c) => [String(c.key), String(c.key)]));
+  const byLabel = new Map(cols.map((c) => [String(c.label).toLowerCase(), String(c.key)]));
+  const normKey = (k: string) => byKey.get(k) ?? byLabel.get(String(k).toLowerCase()) ?? k;
+  const disabled = new Set((table.disabledColumns as string[]) || []);
+  const values = ((op as any).values && typeof (op as any).values === "object" ? (op as any).values : {}) as Record<string, unknown>;
+  const normValues: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) {
+    const nk = normKey(k);
+    if (disabled.has(nk)) continue; // 禁用列：剔除写入（身份列由 API 层校验不可进黑名单）
+    normValues[nk] = v;
+  }
+  const match = (op as any).match && typeof (op as any).match === "object" ? { ...(op as any).match } : undefined;
+  if (match?.col) match.col = normKey(String(match.col));
+  return { ...op, values: normValues, ...(match ? { match } : {}) } as LoreTableOp;
+}
+
+async function applyOps(
+  tables: TableDef[],
+  ops: LoreTableOp[],
+  srcLabel: string,
+  chapterText?: string,
+  nameResolver?: (name: string) => string,
+): Promise<{ applied: number; appliedNames: { table: string; value: string }[]; warnings: string[]; skippedOps: SkippedOp[]; crossTableIssues: SelfCheckIssue[] }> {
+  const byKey = new Map(tables.map((t) => [t.key, t]));
+  let applied = 0;
+  const appliedNames: { table: string; value: string }[] = [];
+  const warnings: string[] = [];
+  const skippedOps: SkippedOp[] = [];
+  const crossTableIssues: SelfCheckIssue[] = [];
+  const now = new Date().toISOString();
+
+  for (const rawOp of ops) {
+    const t = byKey.get(rawOp.table);
+    if (!t) continue;
+    // 列名归一：label（"人物"）→ key（"name"），values 与 match.col 统一（见 normalizeOpColumns）
+    const op = normalizeOpColumns(rawOp, t);
+    // 直接累积修改 tables 内的 t.rows（同一引用贯穿多章循环）：
+    // 上一章写回后 t.rows 即最新，下一章 applyOps 看到累积结果，
+    // 灭「一键填表每章整体覆盖写回、静默丢失前序章」的缺陷（墨白 P0-1）。
+    const rows: any[] = Array.isArray(t.rows) ? t.rows : (t.rows = []);
+    const idCol = getIdentityCol(t);
+
+    // M2（墨白 Round12）：写入前校验「实体推断类型 ↔ 目标表类别」。
+    // 目标表为地理/建筑类（geo）却要写入一个高置信度「人物」实体 → 类型不匹配，
+    // 不静默写错表，改为跳过并上报 cross-table issue（报错不写错，避免数据污染）。
+    const opAny = op as any;
+    const entityNameRaw =
+      (op.op === "insert" ? (opAny.values || {})[idCol] : opAny.match?.val) ?? (opAny.values || {})[idCol];
+    // 落库前归一：李大师 类变体 → 角色卡正主（李富贵），使代码级去重自然并回（阶段1）。
+    const entityName =
+      nameResolver && entityNameRaw != null ? nameResolver(String(entityNameRaw)) : entityNameRaw;
+    if (
+      entityName != null &&
+      inferEntityType(String(entityName), chapterText || "") === "character" &&
+      tableGroupOf(t.category) === "geo"
+    ) {
+      const issue = makeTypeMismatchIssue(t.name, String(entityName), t.category || "custom");
+      warnings.push(`${t.name}：${issue.issue}`);
+      skippedOps.push({ op, reason: issue.issue, table: t.name });
+      crossTableIssues.push(issue);
+      continue; // 不写入，报错不写错
+    }
+
+    if (op.op === "insert") {
+      const rawNewVal = (op.values || {})[idCol];
+      // 落库前归一：李大师 类变体 → 角色卡正主（李富贵），使代码级去重自然并回（阶段1）。
+      const newVal = nameResolver && rawNewVal != null ? nameResolver(String(rawNewVal)) : rawNewVal;
+      // 主键必填守卫（D 轮实测抓出）：身份列（如 name）为空的 insert 无法被后续章节按名复用匹配，
+      // 必成孤儿脏行（第1章抽出的无名行直到终态都无人 update）→ 跳过不落库。
+      if (newVal == null || String(newVal).trim() === "") {
+        warnings.push(`表「${t.name}」insert 缺少身份列「${idCol}」值，已跳过（空主键行无法被后续章节复用匹配）`);
+        skippedOps.push({ op, reason: `insert 缺少身份列「${idCol}」值`, table: t.name });
+        continue;
+      }
+      // 代码级去重：同主键名已存在则转 update（杜绝同名重复行）
+      const existingIdx =
+        newVal != null
+          ? rows.findIndex((r: any) => String(r[idCol] ?? "").toLowerCase() === String(newVal).toLowerCase())
+          : -1;
+      if (existingIdx >= 0) {
+        // P1-F（墨白）：去重合并时同步刷新溯源标记（最后写入来源）
+        rows[existingIdx] = { ...rows[existingIdx], ...(op.values || {}), _src: srcLabel, _ts: now };
+        applied++;
+        if (rawNewVal != null) appliedNames.push({ table: t.name, value: String(rawNewVal) });
+      } else {
+        const maxId = rows.reduce((m: number, r: any) => Math.max(m, Number(r.row_id) || 0), 0);
+        const row: any = { row_id: maxId + 1, ...(op.values || {}), _src: srcLabel, _ts: now };
+        rows.push(row);
+        applied++;
+        if (rawNewVal != null) appliedNames.push({ table: t.name, value: String(rawNewVal) });
+      }
+    } else if (op.op === "update") {
+      const { col, val: rawVal } = (op as any).match || {};
+      const cols = asArray<any>(t.columns) as Array<{ key: string }>;
+      // 守卫：LLM 发 update 却漏给 match 或 col 非有效列时，原逻辑会推入带脏键「undefined」的伪行且不报警，
+      // 破坏防重复/零错名。此处无效则跳过该 op，不落库、不插伪行（P1-①）。
+      if (!col || !cols.some((c) => c.key === col)) {
+        warnings.push(`表「${t.name}」update 缺少有效 match 列「${String(col || "")}」，已跳过该操作（不插伪行）`);
+        skippedOps.push({ op, reason: `update 缺少有效 match 列「${String(col || "")}」`, table: t.name });
+        continue;
+      }
+      // 落库前归一：李大师 类变体 → 角色卡正主，命中已归一的行（阶段1）。
+      const val = nameResolver && rawVal != null ? nameResolver(String(rawVal)) : rawVal;
+      // 大小写不敏感匹配（与 insert 去重一致），避免「青龙镇」/「青龙鎮」因字形/大小写漏匹配（墨白 F5）
+      const idx = rows.findIndex((r: any) => String(r[col] ?? "").toLowerCase() === String(val ?? "").toLowerCase());
+      if (idx >= 0) {
+        // P1-F（墨白）：命中即刷新溯源标记
+        rows[idx] = { ...rows[idx], ...(op.values || {}), _src: srcLabel, _ts: now };
+        applied++;
+        const uv = (op.values || {})[idCol] ?? rawVal;
+        if (uv != null) appliedNames.push({ table: t.name, value: String(uv) });
+      } else {
+        // P1：update 按 match 列未命中任何行。若 match 列非身份列，则无有效身份，
+        // 直接新建会造「伪行」（身份列空缺/撞名），故记 warning 并跳过，不静默插伪行。
+        if (col !== idCol) {
+          warnings.push(`表「${t.name}」update 按「${String(col)}」未命中任何行，且该列非身份列，已跳过（不静默新建伪行）`);
+          skippedOps.push({ op, reason: `update 按「${String(col)}」未命中且该列非身份列`, table: t.name });
+          continue;
+        }
+        // 主键必填守卫：兜底新建同样不许身份列空值（同 insert 守卫）
+        if (val == null || String(val).trim() === "") {
+          warnings.push(`表「${t.name}」update 兜底新建缺少身份列「${idCol}」值，已跳过`);
+          skippedOps.push({ op, reason: `update 兜底新建缺少身份列值`, table: t.name });
+          continue;
+        }
+        const maxId = rows.reduce((m: number, r: any) => Math.max(m, Number(r.row_id) || 0), 0);
+        rows.push({ row_id: maxId + 1, [col]: val, ...(op.values || {}), _src: srcLabel, _ts: now });
+        applied++;
+        if (rawVal != null) appliedNames.push({ table: t.name, value: String(rawVal) });
+      }
+    } else if (op.op === "delete") {
+      const { col, val: rawVal } = (op as any).match || {};
+      const cols = asArray<any>(t.columns) as Array<{ key: string }>;
+      // 守卫：delete 缺有效 match 列时，原逻辑会按 undefined 列过滤→误删整表或静默不删，
+      // 此处无效则整体跳过该 op，不删除任何行（P1-①）。
+      if (!col || !cols.some((c) => c.key === col)) {
+        warnings.push(`表「${t.name}」delete 缺少有效 match 列「${String(col || "")}」，已跳过该操作（不删除任何行）`);
+        skippedOps.push({ op, reason: `delete 缺少有效 match 列「${String(col || "")}」`, table: t.name });
+        continue;
+      }
+      // 落库前归一：按已归一名删除（阶段1）。
+      const val = nameResolver && rawVal != null ? nameResolver(String(rawVal)) : rawVal;
+      const before = rows.length;
+      // 大小写不敏感匹配，与 update 一致（墨白 F5）
+      const filtered = rows.filter((r: any) => String(r[col] ?? "").toLowerCase() !== String(val ?? "").toLowerCase());
+      applied += before - filtered.length;
+      rows.length = 0;
+      rows.push(...filtered);
+    }
+
+    await prisma.loreTable.update({ where: { id: t.id }, data: { rows } });
+  }
+  return { applied, appliedNames, warnings, skippedOps, crossTableIssues };
+}
+
+/** 填后自检：被填名称若未出现在正文中，疑似错误地名/名称 */
+function buildWarnings(appliedNames: { table: string; value: string }[], chapterText: string): string[] {
+  const hay = (chapterText || "").toLowerCase();
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  for (const { table, value } of appliedNames) {
+    const v = (value || "").trim();
+    if (v.length < 2) continue;
+    const key = `${table}::${v.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!hay.includes(v.toLowerCase())) {
+      warnings.push(`表「${table}」填入名称「${v}」未在正文中找到原文，疑似错误地名/名称`);
+    }
+  }
+  return warnings;
+}
+
+// ─── 对外 API ───────────────────────────────────────────────
+
+export async function babyloreFill(
+  projectId: string,
+  chapterText: string,
+  options?: { tableKeys?: string[]; projectLlmConfig?: Record<string, unknown> | null; chapterOrder?: number; batchId?: string; source?: string; nodeId?: string },
+): Promise<FillResult> {
+  // 空内容守卫（P2-④）：正文为空则不触发 LLM 填表，避免空跑/误插空行。
+  // safeFillAfterWriting 经本入口调用，故一并覆盖，无需重复判断。
+  if (!(chapterText || "").trim()) {
+    return { ok: false, operations: 0, applied: 0, error: "空内容跳过填表" };
+  }
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch (e) {
+    return { ok: false, operations: 0, applied: 0, error: e instanceof Error ? e.message : "LLM 未配置" };
+  }
+  const projOverride = buildProjectOverrides(options?.projectLlmConfig || {});
+  const baseURL = projOverride.baseURL || settings.baseUrl;
+  const apiKey = projOverride.apiKey || settings.apiKey;
+  const rawProj = (options?.projectLlmConfig || {}) as Record<string, unknown>;
+  const model = typeof rawProj.model === "string" && rawProj.model.trim() ? rawProj.model : settings.model;
+
+  const where: any = { projectId, fillEnabled: true };   // fillEnabled=false 的表跳过自动填表（用户/填表策略预设禁用的区块）
+  if (options?.tableKeys?.length) where.key = { in: options.tableKeys };
+  const dbTables = await prisma.loreTable.findMany({ where });
+
+  if (dbTables.length === 0) {
+    // 区分「没有表」与「有表但全被禁用自动填表」，避免误导用户去建表
+    const total = await prisma.loreTable.count({ where: { projectId } });
+    return {
+      ok: false,
+      operations: 0,
+      applied: 0,
+      error: total === 0
+        ? "项目暂无结构化表格。请先在创意工坊套用「表格模板预设」，或在项目「结构化表格」页新建。"
+        : "所有表格均已停用自动填表（可在「结构化表格」页逐表开启，或套用填表策略预设）。请确认后重试。",
+    };
+  }
+
+  const tables: TableDef[] = dbTables.map((t: any) => ({
+    id: t.id,
+    key: t.key,
+    name: t.name,
+    note: t.note || "",
+    category: t.category || "custom",
+    columns: (t.columns as any) || [],
+    rows: (t.rows as any) || [],
+    disabledColumns: asArray<string>(t.disabledColumns) as string[],
+  }));
+
+  // v1.6.19 #6 修复：填表前深拷贝各表 rows 作为 before 快照，
+  // 填表后 diff 出本次实际新增的 row_id，记录到 BabyloreFillBatch（锚定 nodeId），
+  // 供撤销章节时精确清理该章自动填入的结构化表格行。
+  const beforeRowsById = new Map<string, any[]>(
+    dbTables.map((t: any) => [t.id, JSON.parse(JSON.stringify(asArray<any>(t.rows)))]),
+  );
+
+  const llm: LlmCreds = { baseURL, apiKey, model, disableThinking: settings.disableThinking };
+  const srcLabel = `ch${options?.chapterOrder ?? "?"}:batch${options?.batchId ?? "manual"}${options?.source ? ":" + options.source : ""}`;
+  // 阶段1：构建「实体名 → 角色卡正主」解析器，填表落库前自然归一（李大师→李富贵）。
+  const nameResolver = await buildNameResolver(projectId);
+  const r = await runFillForText(chapterText, tables, llm, options?.tableKeys, srcLabel, projectId, nameResolver);
+
+  // v1.6.19 #6 修复：仅当本次填表有落地（applied>0）且携带 nodeId 时才记录溯源批次。
+  // diff 逻辑：after（tables[i].rows 已被 applyOps 原地改写）中存在、before 快照中不存在 row_id 的行 = 本次新增。
+  if (r.applied > 0 && options?.nodeId) {
+    for (const t of tables) {
+      const beforeArr = beforeRowsById.get(t.id) || [];
+      const beforeIds = new Set(beforeArr.map((row: any) => row.row_id));
+      const beforeById = new Map(beforeArr.map((row: any) => [row.row_id, row]));
+      const afterRows = (t.rows as any[]) || [];
+      const inserted: number[] = [];
+      // 填表溯源快照：整行原样写回 prisma Json 字段，Json 输入类型仅接受 any 形态，保留 any
+      const updatedBefore: Record<string, any> = {};
+      for (const row of afterRows) {
+        if (!beforeIds.has(row.row_id)) {
+          inserted.push(row.row_id);
+        } else {
+          // v1.6.23 F2：既有行被改写（去重合并/命中更新）→ 记录更新前整行快照，供撤销时精确还原
+          const beforeRow = beforeById.get(row.row_id);
+          if (JSON.stringify(beforeRow) !== JSON.stringify(row)) {
+            updatedBefore[String(row.row_id)] = beforeRow;
+          }
+        }
+      }
+      if (inserted.length > 0 || Object.keys(updatedBefore).length > 0) {
+        await prisma.babyloreFillBatch.create({
+          data: {
+            projectId,
+            nodeId: options.nodeId,
+            loreTableId: t.id,
+            insertedRowIds: inserted,
+            updatedRowsBefore: updatedBefore,
+          },
+        }).catch(() => null); // 记录失败不影响正文/填表交付
+      }
+    }
+  }
+  // v1.2.1：同步抽取角色/世界书实体——角色卡、世界卡内容也能自动填写（查重兜底，失败不影响表格结果）
+  await syncChapterEntities(projectId, chapterText, llm).catch(() => null);
+  // P1-B（墨白）：落库后跑 selfCheckFill，把疑似问题（地名/空值/跨表/表内异体）合并进结果，供 UI/诊断。
+  const selfCheck = await selfCheckFill(projectId);
+  // M2（墨白 Round12）：把「类型不匹配」跨表 issue 并入自检结果（复用 SelfCheckIssue 上报结构），
+  // 使填表/微调/续写/一键填表的结果都能在 UI/诊断里体现「报错不写错」。
+  const selfCheckIssues = [...selfCheck.issues, ...r.crossTableIssues];
+  return {
+    ok: r.ok,
+    operations: r.operations,
+    applied: r.applied,
+    error: r.error,
+    warnings: r.warnings,
+    selfCheckIssues,
+  };
+}
+
+/**
+ * 一键填表：按 order 遍历所有有正文的章节，从首章填到最新；
+ * 已填过的章节（防重复标记）自动跳过；全部填完后自动跑 selfCheck 地名/完整性自检。
+ */
+export async function babyloreFillAll(
+  projectId: string,
+  options?: {
+    tableKeys?: string[];
+    projectLlmConfig?: Record<string, unknown> | null;
+    onProgress?: (done: number, total: number, currentTitle?: string) => void | Promise<void>;
+  },
+): Promise<FillAllResult> {
+  let settings;
+  try {
+    settings = await getSettings();
+  } catch (e) {
+    return {
+      ok: false,
+      failed: 0,
+      processed: 0,
+      skipped: 0,
+      operations: 0,
+      applied: 0,
+      error: e instanceof Error ? e.message : "LLM 未配置",
+      warnings: [],
+      selfCheck: { checkedTables: 0, nameIssues: 0, completenessIssues: 0, crossTableIssues: 0, issues: [] },
+    };
+  }
+  const projOverride = buildProjectOverrides(options?.projectLlmConfig || {});
+  const baseURL = projOverride.baseURL || settings.baseUrl;
+  const apiKey = projOverride.apiKey || settings.apiKey;
+  const rawProj = (options?.projectLlmConfig || {}) as Record<string, unknown>;
+  const model = typeof rawProj.model === "string" && rawProj.model.trim() ? rawProj.model : settings.model;
+  const llm: LlmCreds = { baseURL, apiKey, model, disableThinking: settings.disableThinking };
+
+  const where: any = { projectId, fillEnabled: true };   // fillEnabled=false 的表跳过自动填表（用户/填表策略预设禁用的区块）
+  if (options?.tableKeys?.length) where.key = { in: options.tableKeys };
+  const dbTables = await prisma.loreTable.findMany({ where });
+
+  const nodes = await prisma.storyNode.findMany({
+    where: { projectId, content: { not: null }, deletedAt: null },
+    orderBy: { order: "asc" },
+  });
+  const chapters = nodes.filter((n) => (n.content || "").trim().length > 0);
+
+  if (dbTables.length === 0) {
+    return {
+      ok: false,
+      failed: 0,
+      processed: 0,
+      skipped: 0,
+      operations: 0,
+      applied: 0,
+      error: "项目暂无结构化表格。请先在创意工坊套用「表格模板预设」，或在项目「结构化表格」页新建。",
+      warnings: [],
+      selfCheck: { checkedTables: 0, nameIssues: 0, completenessIssues: 0, crossTableIssues: 0, issues: [] },
+    };
+  }
+
+  const tables: TableDef[] = dbTables.map((t: any) => ({
+    id: t.id,
+    key: t.key,
+    name: t.name,
+    note: t.note || "",
+    category: t.category || "custom",
+    columns: (t.columns as any) || [],
+    rows: (t.rows as any) || [],
+    disabledColumns: asArray<string>(t.disabledColumns) as string[],
+  }));
+
+  // 阶段1：构建「实体名 → 角色卡正主」解析器（一次构建全章复用），填表落库前自然归一。
+  const nameResolver = await buildNameResolver(projectId);
+
+  const filledMap = loadFilled();
+  const filledSet = new Set(filledMap[projectId] || []);
+
+  let processed = 0;
+  let skipped = 0;
+  let operations = 0;
+  let applied = 0;
+  let failedChapters = 0; // 未达 Round6 完成门槛（ok && applied>0）的章节数
+  const warnings: string[] = [];
+  const allSkippedOps: SkippedOp[] = []; // P1-C：汇总各章被跳过的无效 op
+  const allCrossTableIssues: SelfCheckIssue[] = []; // M2（墨白 Round12）：汇总各章「类型不匹配」跨表 issue
+  const runBatch = String(Date.now()); // 本轮一键填表批次号，写入行 _src 溯源
+  const skippedNodeIds: string[] = []; // P1-A：被跳过（疑似误标）的节点 ID，供全跳过 error 携带
+
+  for (const ch of chapters) {
+    if (filledSet.has(ch.id)) {
+      // P1-D（墨白）：该节点已在「已填」集合 → 视为脏标记已清除的干净节点。
+      // 复用现有 markChapterFilled 清除路径再次确认（幂等：已存在则直接 return），确保下一轮不再将其当脏重填，
+      // 杜绝「全 clean 跳过 → ok:false → UI 一直显示有更新 → 无限重填」死循环。
+      skipped++;
+      skippedNodeIds.push(ch.id);
+      try {
+        markChapterFilled(projectId, ch.id);
+      } catch {
+        /* 标记失败不影响主流程 */
+      }
+      continue;
+    }
+    const srcLabel = `ch${ch.order}:batch${runBatch}`;
+    const r = await runFillForText(ch.content || "", tables, llm, options?.tableKeys, srcLabel, projectId, nameResolver);
+    // v1.2.1：逐章同步抽取角色/世界书实体（一键追评也覆盖角色卡/世界卡）
+    await syncChapterEntities(projectId, ch.content || "", llm).catch(() => null);
+    processed++;
+    operations += r.operations;
+    applied += r.applied;
+    for (const w of r.warnings) warnings.push(`第${ch.order}章《${ch.title || "未命名"}》：${w}`);
+    for (const s of r.skippedOps) allSkippedOps.push(s);
+    for (const c of r.crossTableIssues) allCrossTableIssues.push(c);
+    // 仅成功章计入已填集合——失败章必须留待重试，否则被永久标记跳过（磐石 P0 修复）。
+    // P0-3：门槛由 r.ok 提升为 r.ok && r.applied>0，空 ops/全失效章不标已填，留待重试。
+    if (r.ok && r.applied > 0) {
+      // P1-D（墨白）：成功落地即清除该节点脏标记（已填=干净），下一轮不再重填（复用现有 markChapterFilled 路径）。
+      filledSet.add(ch.id);
+      // 增量落盘：每填完一章即持久化，避免中途超时/崩溃丢失全部进度（磐石 P0 防丢进度）
+      filledMap[projectId] = Array.from(filledSet);
+      saveFilled(filledMap);
+    } else {
+      // 该章未达完成门槛，计入失败章，留待重试（P1-1：不得静默吞掉）。
+      failedChapters++;
+    }
+    // v1.4.0：后台任务进度回调（每章后上报，供 FillTask 轮询）
+    if (options?.onProgress) {
+      try {
+        await options.onProgress(processed, chapters.length, ch.title || ch.id);
+      } catch { /* 进度上报失败不影响主流程 */ }
+    }
+  }
+
+  const selfCheckRaw = await selfCheckFill(projectId);
+  // M2（墨白 Round12）：把各章「类型不匹配」跨表 issue 并入自检结果（已跳过的错写不会落库，故此处补报而非自检自然发现）。
+  const selfCheck: SelfCheckResult = {
+    ...selfCheckRaw,
+    crossTableIssues: selfCheckRaw.crossTableIssues + allCrossTableIssues.length,
+    issues: [...selfCheckRaw.issues, ...allCrossTableIssues].slice(0, 200),
+  };
+
+  // P1-A/P1-D（墨白）：babyloreFillAll 不得恒返回 ok:true（静默假完成），且全跳过分支须区分两种语义：
+  //  - processed===0 且 skipped===0：本轮确实没有任何脏数据（无待填节点）；
+  //  - processed===0 但 skipped>0：全部节点被跳过，疑似旧版误标脏标记 → 携带 nodeIds 供诊断。
+  // 与 Round6 完成门槛 ok && applied>0 保持一致：任一章失败或零落地均判失败并带 error 摘要，促使重试而非误判完成。
+  let ok = true;
+  let error: string | undefined;
+  let fillErrorMeta: FillErrorMeta | undefined;
+
+  if (processed === 0 && skipped === 0) {
+    // 本轮确实没有任何脏数据（无正文章节 / 无待填节点）→ 明确区分，避免与「误标」混淆。
+    ok = false;
+    error = "无待填数据（本轮未检测到任何脏标记）";
+    fillErrorMeta = { kind: "no_dirty", processed, applied, skipped, failed: failedChapters, nodeIds: skippedNodeIds };
+  } else if (processed === 0 && skipped > 0) {
+    // P1-②（墨白）：全部节点被跳过——区分「真·误标脏标记」与「正常干净态」。
+    // 干净态误判会诱导 UI 弹「清理脏标记并重填」对**已校验章节**重跑 LLM（破坏性重填）。
+    // 仅当「已填集合」里存在 DB 中找不到对应正文章节的「幽灵 id」时才判 mislabeled（真误标）；
+    // 若所有跳过节点均为真实已校验章节，则判 all_clean（ok），不诱导重填。
+    const validNodeIds = new Set(nodes.map((n) => n.id));
+    const ghostIds = [...filledSet].filter((id) => !validNodeIds.has(id));
+    if (ghostIds.length > 0) {
+      ok = false;
+      error = `全部 ${skipped} 个节点被跳过，其中发现 ${ghostIds.length} 个「脏标记幽灵 id」（DB 中找不到对应正文章节）=[${ghostIds.join(", ")}]，建议清理脏标记后重试`;
+      fillErrorMeta = { kind: "all_skipped_mislabeled", processed, applied, skipped, failed: failedChapters, nodeIds: skippedNodeIds };
+    } else {
+      // 全部跳过节点均为真实已校验章节 → 干净态，判 ok，不诱导重填。
+      ok = true;
+      fillErrorMeta = { kind: "all_clean", processed, applied, skipped, failed: failedChapters, nodeIds: skippedNodeIds };
+    }
+  } else if (failedChapters > 0) {
+    ok = false;
+    error = `有 ${failedChapters}/${processed} 个章节填表失败，未全部完成（已落 ${applied} 条事实），请检查 LLM 配置/网络后重试`;
+    fillErrorMeta = { kind: "partial_failed", processed, applied, skipped, failed: failedChapters, nodeIds: skippedNodeIds };
+  } else if (applied === 0) {
+    ok = false;
+    error = `已处理 ${processed} 章但均未落地任何事实（applied=0），请检查 LLM 返回内容`;
+    fillErrorMeta = { kind: "no_applied", processed, applied, skipped, failed: failedChapters, nodeIds: skippedNodeIds };
+  }
+
+  // M2（墨白 Round12）：把「类型不匹配跳过条数」并入结构化诊断，便于 UI/诊断区分普通失败与报错不写错。
+  if (fillErrorMeta) fillErrorMeta.crossTableSkips = allCrossTableIssues.length;
+
+  return {
+    ok,
+    failed: failedChapters,
+    processed,
+    skipped,
+    operations,
+    applied,
+    error,
+    fillErrorMeta,
+    skippedOps: allSkippedOps,
+    warnings,
+    selfCheck,
+  };
+}
+
+/**
+ * 填后自检：扫描所有表的所有行，
+ *  - 名称正确性：每个名称值能否在全项目正文中检索到原文（检索不到=疑似错误地名）；
+ *  - 信息完整性：关键列（身份列）是否为空。
+ */
+export async function selfCheckFill(projectId: string): Promise<SelfCheckResult> {
+  const dbTables = await prisma.loreTable.findMany({ where: { projectId } });
+  const nodes = await prisma.storyNode.findMany({
+    where: { projectId, content: { not: null }, deletedAt: null },
+    orderBy: { order: "asc" },
+  });
+  const corpus = nodes.map((n) => (n.content || "")).join("\n").toLowerCase();
+
+  const issues: SelfCheckIssue[] = [];
+  let nameIssues = 0;
+  let completenessIssues = 0;
+  let crossTableIssues = 0;
+
+  // 跨表同名归属校验（F3）：先收集「每个身份列值在哪些表、哪些类别出现」。
+  const valueTables = new Map<string, { tables: string[]; categories: Set<string> }>();
+  // P1：归表错误检测需要「项目全部类别」与「各类别已有身份值集合」。
+  const projectCategories = new Set<string>();
+  const catValueSet = new Map<string, Set<string>>();
+
+  for (const t of dbTables) {
+    const rows = (t.rows as any[]) || [];
+    const idCol = getIdentityCol({ columns: t.columns as any[] });
+    const seenInTable = new Set<string>();
+    projectCategories.add(t.category || "custom");
+    for (const r of rows) {
+      const v = r[idCol];
+      if (v == null || String(v).trim() === "") {
+        completenessIssues++;
+        issues.push({ table: t.name, row: r.row_id ?? "?", value: "", issue: "关键列空值（缺少名称）" });
+        continue;
+      }
+      const s = String(v).trim();
+      if (s.length >= 2 && !corpus.includes(s.toLowerCase())) {
+        nameIssues++;
+        issues.push({ table: t.name, row: r.row_id ?? "?", value: s, issue: "疑似错误地名/名称（全正文检索不到原文）" });
+      }
+      // 跨表同名收集（同表内重复只记一次）
+      const sl = s.toLowerCase();
+      if (sl.length >= 2 && !seenInTable.has(sl)) {
+        seenInTable.add(sl);
+        if (!valueTables.has(sl)) valueTables.set(sl, { tables: [], categories: new Set() });
+        const e = valueTables.get(sl)!;
+        e.tables.push(t.name);
+        e.categories.add(t.category || "custom");
+        // 累计各类别已有身份值（供唯一名归表校验判断「其它类别表是否有值」）
+        const cat = t.category || "custom";
+        if (!catValueSet.has(cat)) catValueSet.set(cat, new Set());
+        catValueSet.get(cat)!.add(sl);
+      }
+    }
+    // P1-E（墨白）：表内同名异源弱告警 —— 同表内相同身份列值出现在 ≥2 行、
+    // 且来源章节（_src 中的 ch 序号）不同 → 疑似异体被分别落行、未被静默合并，提示人工核对。
+    // 不动 insert/update 去重逻辑（避免回归），仅“报告”不“自动合并”。
+    {
+      const nameSrc = new Map<string, { orders: Set<string>; hits: any[] }>();
+      for (const r of rows) {
+        const v = r[idCol];
+        if (v == null || String(v).trim() === "") continue;
+        const sl = String(v).trim().toLowerCase();
+        const src = typeof r._src === "string" ? r._src : "";
+        const order = src.startsWith("ch") ? src.split(":")[0] : src || "?";
+        if (!nameSrc.has(sl)) nameSrc.set(sl, { orders: new Set(), hits: [] });
+        const e = nameSrc.get(sl)!;
+        e.orders.add(order);
+        e.hits.push(r);
+      }
+      for (const [val, info] of nameSrc) {
+        if (info.hits.length >= 2 && info.orders.size >= 2) {
+          for (const r of info.hits) {
+            issues.push({
+              table: t.name,
+              row: r.row_id ?? "?",
+              value: val,
+              issue: "表内同名疑似异体，未静默合并，请人工核对",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 跨表同名：同一名称值出现在 ≥2 个不同表 → 归属待确认（自动填表可能把人名写进地点表等）。
+  // 不论是否跨类别都报（P1-②）：原逻辑强约束 categories.size>=2，导致两张同类别(custom)表互错填不报警。
+  // 类别分组：geo 类与 entity 类互相不应共享唯一名（写错表提示）
+  const GEO_LIKE = new Set([
+    "geo", "location", "place", "places", "building", "buildings", "map", "scene", "scenes",
+  ]);
+  const ENTITY_LIKE = new Set([
+    "characters", "character", "person", "people", "org", "organization",
+    "item", "items", "skill", "skills", "relation", "relations", "event", "events",
+    "creature", "creatures",
+  ]);
+  const groupOf = (cat: string): "geo" | "entity" | "other" =>
+    GEO_LIKE.has(cat) ? "geo" : ENTITY_LIKE.has(cat) ? "entity" : "other";
+
+  for (const [val, info] of valueTables) {
+    const distinct = Array.from(new Set(info.tables));
+    if (distinct.length >= 2) {
+      crossTableIssues++;
+      const others = distinct.join(" / ");
+      const sameCat = info.categories.size === 1;
+      const detail = sameCat
+        ? `同类别多表同名(归属待确认)：与表「${others}」同属「${Array.from(info.categories).join("/")}」却共享同名「${val}」`
+        : `跨类别同名(归属待确认)：与表「${others}」类别不同却共享同名「${val}」`;
+      for (const tname of distinct) {
+        issues.push({ table: tname, row: "跨表", value: val, issue: detail });
+      }
+    } else {
+      // P1：唯一名（仅落单表）却落在「非预期表」——归表错误漏报修复。
+      // 仅当唯一名落在 geo 类表、且项目同时存在有值的 entity 类表时告警（典型：人名写进 geo 表）。
+      // 单向判定以避免「人物本就在人物表却因项目含 geo 表被误报」。
+      const onlyCat = Array.from(info.categories)[0];
+      const g = groupOf(onlyCat);
+      if (g === "geo" && projectCategories.size >= 2) {
+        const conflict = Array.from(projectCategories)
+          .filter((c) => c !== onlyCat)
+          .some((c) => groupOf(c) === "entity" && (catValueSet.get(c)?.size || 0) > 0);
+        if (conflict) {
+          crossTableIssues++;
+          issues.push({
+            table: distinct[0],
+            row: "归表",
+            value: val,
+            issue: `唯一名「${val}」仅落在「${onlyCat}」类表，但项目同时含人物/组织等表，疑似写错表（归表错误，请核对）`,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    checkedTables: dbTables.length,
+    nameIssues,
+    completenessIssues,
+    crossTableIssues,
+    issues: issues.slice(0, 200),
+  };
+}
+
+/**
+ * v1.6.19 #6 修复：撤销章节时清理该章自动填入的结构化表格行。
+ *
+ * 仅删除「本次填表实际新增」的行（BabyloreFillBatch.insertedRowIds 记录），
+ * 不动被 update 的既有行、也不动其他章节后续新增/修改的行，避免数据丢失。
+ * 返回清理掉的行数。无该 nodeId 的溯源批次时直接返回 { removed: 0 }（幂等）。
+ */
+export async function revertBabyloreFill(projectId: string, nodeId: string): Promise<{ removed: number }> {
+  const batches = await prisma.babyloreFillBatch.findMany({ where: { projectId, nodeId } });
+  if (batches.length === 0) return { removed: 0 };
+
+  // v1.6.23 F2：计算「后续批次 touched 集合」——本项目内、创建时间晚于本批、且触及了同 row_id 的批次，
+  // 用于保护「后续章节也修改过同一行」的数据不被误还原/误删（数据安全优先）。
+  const allBatches = await prisma.babyloreFillBatch.findMany({ where: { projectId } });
+  const laterTouched = new Set<number>();
+  for (const b of batches) {
+    const bCreated = (b as any).createdAt?.getTime?.() ?? 0;
+    for (const other of allBatches) {
+      if (other === b) continue;
+      const oCreated = (other as any).createdAt?.getTime?.() ?? 0;
+      if (oCreated <= bCreated) continue; // 仅考虑「晚于本批创建」的后续批次
+      const oIns = (other.insertedRowIds as number[]) || [];
+      const oUpd = (other.updatedRowsBefore as any) || {};
+      for (const id of oIns) laterTouched.add(id);
+      for (const k of Object.keys(oUpd)) laterTouched.add(Number(k));
+    }
+  }
+
+  // 按 loreTableId 归并：del=本次需删除的新增行；restore=需还原为更新前的既有行
+  const byTable = new Map<string, { del: Set<number>; restore: Map<number, any> }>();
+  for (const b of batches) {
+    const ins = (b.insertedRowIds as number[]) || [];
+    const upd = (b.updatedRowsBefore as any) || {};
+    if (!byTable.has(b.loreTableId)) byTable.set(b.loreTableId, { del: new Set(), restore: new Map() });
+    const entry = byTable.get(b.loreTableId)!;
+    for (const id of ins) if (!laterTouched.has(id)) entry.del.add(id);
+    for (const k of Object.keys(upd)) {
+      const id = Number(k);
+      if (!laterTouched.has(id)) entry.restore.set(id, upd[k]);
+    }
+  }
+
+  let removed = 0;
+  for (const [loreTableId, plan] of byTable) {
+    const t = await prisma.loreTable.findUnique({ where: { id: loreTableId } });
+    if (!t) continue;
+    const rows = (t.rows as any[]) || [];
+    // 先删新增行
+    let kept = rows.filter((r) => !plan.del.has(r.row_id));
+    const delta = rows.length - kept.length;
+    // 再还原被 update 的既有行（用更新前快照替换当前行）
+    if (plan.restore.size > 0) {
+      const restoreById = plan.restore;
+      kept = kept.map((r) => (restoreById.has(r.row_id) ? restoreById.get(r.row_id) : r));
+    }
+    if (delta > 0 || plan.restore.size > 0) {
+      await prisma.loreTable.update({ where: { id: loreTableId }, data: { rows: kept } });
+      removed += delta;
+    }
+  }
+  // 清理该 nodeId 的溯源批次，避免重复撤销（撤销一次即清除，幂等）
+  await prisma.babyloreFillBatch.deleteMany({ where: { projectId, nodeId } });
+  return { removed };
+}

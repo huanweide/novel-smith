@@ -1,0 +1,86 @@
+# 版本一致性守卫
+#
+# 为什么需要：v3.1.85 ~ v3.1.135 之间连续 51 个版本写进了 CHANGELOG，
+# 但既没有 tag 也没有 Release（2026-10-16 补发 v3.1.135 时才发现）。
+# 根因不是忘了发版，而是**没有任何机制在版本号推进时提醒**，
+# 于是「代码在涨、tag 不动」可以静默持续几个月。
+#
+# 本 workflow 不自动打 tag（发版时机应由人决定），
+# 只做一件事：**把漂移暴露出来**，在 PR / push 上留一条红色 warning。
+#
+# 检查三处是否一致：
+#   package.json          version
+#   src/lib/changelog-meta.ts   LATEST_VERSION / CHANGELOG_BRIEF
+#   最新 git tag
+# 另额外检查 CHANGELOG.md 的最新条目与 LATEST_VERSION 是否一致。
+
+name: Version Check
+
+# 注：on 必须加引号。YAML 1.1 会把裸 on 解析成布尔 true，
+# 部分校验器据此报错；GitHub 自己能容忍，但加了引号更稳。
+"on":
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Collect version strings
+        id: v
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          # LATEST_VERSION / tag 都带 v 前缀，package.json 不带 —— 统一剥掉再比，
+          # 否则 pkg 与 meta 永远不等（本 workflow 第一版就踩了这个，误报 drift）。
+          meta=$(grep -oP 'LATEST_VERSION\s*=\s*"\Kv?[0-9.]+' src/lib/changelog-meta.ts | sed 's/^v//' || true)
+          changelog=$(grep -oP '^## v\K[0-9.]+(?= )' CHANGELOG.md | head -1 || true)
+          latest_tag=$(git tag --list 'v*' --sort=-v:refname | head -1 || true)
+          latest_tag=${latest_tag#v}
+          {
+            echo "pkg=$pkg"
+            echo "meta=$meta"
+            echo "changelog=$changelog"
+            echo "latest_tag=$latest_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report drift
+        run: |
+          set -u
+          drift=0
+          echo "版本一致性检查"
+          echo "  package.json:               v${{ steps.v.outputs.pkg }}"
+          echo "  changelog-meta.ts: v${{ steps.v.outputs.meta }}"
+          echo "  CHANGELOG.md 最新条目:        v${{ steps.v.outputs.changelog }}"
+          echo "  最新 git tag:               v${{ steps.v.outputs.latest_tag }}"
+
+          same() { [ "$1" = "$2" ] && [ -n "$1" ]; }
+
+          if ! same "${{ steps.v.outputs.pkg }}" "${{ steps.v.outputs.meta }}"; then
+            echo "::error::package.json(${{ steps.v.outputs.pkg }}) 与 LATEST_VERSION(${{ steps.v.outputs.meta }}) 不一致"
+            drift=1
+          fi
+          if ! same "${{ steps.v.outputs.pkg }}" "${{ steps.v.outputs.changelog }}"; then
+            echo "::error::package.json(${{ steps.v.outputs.pkg }}) 与 CHANGELOG 最新条目(${{ steps.v.outputs.changelog }}) 不一致"
+            drift=1
+          fi
+          # 最新 tag 落后于代码版本 —— 这正是 51 个版本的漏发形态。
+          # 不作为 error：作者可能有意不发版。但必须警告。
+          # latest_tag 为空 = 仓库一个 tag 都没有，此时不做判断（不是「落后」，是「没开始」）。
+          if [ -n "${{ steps.v.outputs.latest_tag }}" ] && [ "${{ steps.v.outputs.latest_tag }}" != "${{ steps.v.outputs.pkg }}" ]; then
+            echo "::warning::最新 tag(v${{ steps.v.outputs.latest_tag }}) 落后于代码版本(v${{ steps.v.outputs.pkg }})。若 CHANGELOG 已写该版本条目，请补发 tag 与 Release（gh release create v${{ steps.v.outputs.pkg }} --target main）"
+          fi
+
+          if [ "$drift" -ne 0 ]; then
+            echo "版本号漂移：版本五件套必须同时更新。"
+            exit 1
+          fi
+          echo "版本号一致。"

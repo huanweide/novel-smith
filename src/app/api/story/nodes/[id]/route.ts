@@ -1,0 +1,355 @@
+import { jsonError } from "@/lib/api-error";
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
+import { snapshotRevision } from "@/lib/versions";
+import { safeFillAfterWriting } from "@/core/babylore/loop";
+import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING, STATUS_PENDING_CONFIRM } from "@/core/story-status";
+import { maybeAutoDeliver, triggerForeshadowDetect } from "@/core/confirm-guard";
+import { extractConsistencyFacts } from "@/core/consistency/extractFacts";
+import { revertBabyloreFill } from "@/core/babylore/fill";
+import { createSnapshot } from "@/lib/db-snapshot";
+import { renumberChapters, cascadeDeleteOrphans } from "@/lib/story-node-ops";
+
+// GET /api/story/nodes/[id]
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    // #123 软删防泄漏：正常 GET 必须排除已移入回收站的节点（自身 + 子节点），
+    // 软删节点按「不存在」返回 404，避免 tombstone 通过正常读取路径泄漏。
+    const node = await prisma.storyNode.findUnique({
+      where: { id, deletedAt: null },
+      include: { children: { where: { deletedAt: null }, orderBy: { order: "asc" } } },
+    });
+    if (!node) {
+      return NextResponse.json({ error: "节点不存在" }, { status: 404 });
+    }
+    return NextResponse.json(node);
+  } catch (err) {
+    return jsonError(err);
+  }
+}
+
+// PUT /api/story/nodes/[id]
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    // FE-N8：乐观锁——客户端可携带 expectedVersion，与库内 editVersion 比对以检测并发冲突
+    const expectedVersion =
+      typeof body.expectedVersion === "number" ? body.expectedVersion : undefined;
+
+    // BE-1：手动保存前快照当前正文（去重由 helper 处理）
+    const existingNode = await prisma.storyNode.findUnique({
+      where: { id },
+      select: { content: true, wordCount: true, projectId: true, editVersion: true, deletedAt: true },
+    });
+    if (!existingNode) {
+      return NextResponse.json({ error: "节点不存在" }, { status: 404 });
+    }
+    // #123 软删防复活：已移入回收站的节点不允许手动保存覆盖正文，避免污染 tombstone
+    if (existingNode.deletedAt) {
+      return NextResponse.json({ error: "该节点已被删除（回收站），无法保存。如需操作请先从回收站恢复" }, { status: 410 });
+    }
+
+    // FE-N8：编辑期间节点已被改写（如 AI 流式改写 outline）→ 409 冲突，返回库里当前快照
+    if (expectedVersion !== undefined && existingNode.editVersion !== expectedVersion) {
+      const server = await prisma.storyNode.findUnique({ where: { id } });
+      return NextResponse.json(
+        {
+          conflict: true,
+          message:
+            "保存冲突：该节点在您编辑期间已被其他操作（如 AI 改写）更新，请用冲突面板决定如何合并。",
+          server: server
+            ? {
+                editVersion: server.editVersion,
+                title: server.title,
+                outline: server.outline,
+                content: server.content,
+              }
+            : null,
+        },
+        { status: 409 }
+      );
+    }
+
+    if (body.content !== existingNode.content) {
+      await snapshotRevision({
+        nodeId: id,
+        projectId: existingNode.projectId,
+        source: "manual",
+        prevContent: existingNode.content ?? "",
+        prevWordCount: existingNode.wordCount,
+      });
+    }
+
+    const node = await prisma.storyNode.update({
+      where: expectedVersion !== undefined ? { id, editVersion: expectedVersion } : { id },
+      data: {
+        title: body.title,
+        order: body.order,
+        status: body.status,
+        outline: body.outline,
+        content: body.content,
+        wordCount: body.wordCount,
+        qualityScore: body.qualityScore,
+        humanizeScore: body.humanizeScore,
+        branchId: body.branchId,
+        isMainBranch: body.isMainBranch,
+        activeCharacters: body.activeCharacters,
+        activeLoreIds: body.activeLoreIds,
+        coreConflict: body.coreConflict,
+        settingDescription: body.settingDescription,
+        worldTime: body.worldTime,
+        notes: body.notes,
+        reviewLogs: body.reviewLogs,
+        revisionCount: body.revisionCount,
+        // FE-N8：每次成功保存版本号 +1，作为下一次保存的乐观锁基准
+        editVersion: { increment: 1 },
+      },
+    });
+
+    // v1.6.19 #6 修复：撤销章节（前端 undoRefine 带 undo:true）时，同步清理该章自动填入的
+    // 结构化表格行（仅删本次填表新增的行，不动他人数据），避免撤销正文后表格行残留。
+    if (body.undo === true) {
+      try {
+        const removed = await revertBabyloreFill(existingNode.projectId, id);
+        if (removed.removed > 0) console.log(`[undo] 章节 ${id} 撤销清理了 ${removed.removed} 行自动填表数据`);
+      } catch (e) {
+        // 填表回滚失败不影响正文撤销本身（正文已还原），仅记录告警
+        console.error(`[undo] 清理自动填表失败 node=${id}:`, e);
+      }
+    }
+
+    return NextResponse.json(node);
+  } catch (err) {
+    // FE-N8：并发窗口（预检后、更新前）节点又被改 → P2025，降级为 409 冲突
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      const p = await params;
+      const server = await prisma.storyNode.findUnique({ where: { id: p.id } }).catch(() => null);
+      return NextResponse.json(
+        {
+          conflict: true,
+          message: "保存冲突：该节点刚刚被其他操作更新，请用冲突面板决定如何合并。",
+          server: server
+            ? {
+                editVersion: server.editVersion,
+                title: server.title,
+                outline: server.outline,
+                content: server.content,
+              }
+            : null,
+        },
+        { status: 409 }
+      );
+    }
+    return jsonError(err);
+  }
+}
+
+// PATCH /api/story/nodes/[id] —— 确认流程动作（submit/confirm/reject/reopen/diagnose）
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const action = body.action as "submit" | "confirm" | "reject" | "reopen" | "diagnose" | undefined;
+    if (!action) return NextResponse.json({ error: "缺少 action" }, { status: 400 });
+
+    const node = await prisma.storyNode.findUnique({ where: { id } });
+    if (!node) return NextResponse.json({ error: "节点不存在" }, { status: 404 });
+    // #123 软删防复活：已移入回收站的节点不允许确认/提交/回退等动作，避免污染 tombstone
+    if (node.deletedAt) return NextResponse.json({ error: "该节点已被删除（回收站），无法执行该操作。如需操作请先从回收站恢复" }, { status: 410 });
+
+    const now = new Date();
+    const prevLogs: any[] = Array.isArray(node.reviewLogs) ? node.reviewLogs : [];
+    const pushLog = (entry: Record<string, unknown>) => [...prevLogs, { ...entry, at: now.toISOString() }];
+
+    let data: Record<string, unknown> = {};
+
+    switch (action) {
+      case "submit": {
+        if (node.status !== STATUS_COMPLETED && node.status !== STATUS_DRAFTING) {
+          return NextResponse.json({ error: `当前状态(${node.status})不可提交确认` }, { status: 409 });
+        }
+        data = { status: STATUS_PENDING_CONFIRM, reviewLogs: pushLog({ action: "submit" }) };
+        break;
+      }
+      case "confirm": {
+        if (node.status !== STATUS_PENDING_CONFIRM) {
+          return NextResponse.json({ error: `当前状态(${node.status})不可确认通过` }, { status: 409 });
+        }
+        // 人工确认护栏（与 guard 空正文/过短拦截对齐）：防止误点放行废章（Max Loop 审查 P3）
+        if (!node.content || node.content.trim().length < 50) {
+          return NextResponse.json({ error: "正文为空或过短（少于50字），不可确认通过" }, { status: 422 });
+        }
+        // 确认副作用：触发自动填表（回填结构化表格 / 记忆）—— 这是 confirm 的副作用，而非 write 的副作用
+        let fillMsg = "（无正文，跳过填表）";
+        if (node.content && node.content.length > 0) {
+          // IMP-002：用「node.order === 项目最大 order」判定最新章，使 skipLatestChapter 生效
+          let isLatestChapter = false;
+          try {
+            const agg = await prisma.storyNode.aggregate({
+              where: { projectId: node.projectId, deletedAt: null },
+              _max: { order: true },
+            });
+            isLatestChapter = node.order === (agg._max.order ?? node.order);
+          } catch {
+            /* 聚合失败则按非最新处理（保守：不跳过，仍可能填表） */
+          }
+          try {
+            const fillRes = await safeFillAfterWriting({
+              projectId: node.projectId,
+              content: node.content,
+              send: undefined,
+              nodeOrder: node.order,
+              isLatestChapter,
+              nodeId: node.id,
+              source: "manual",
+            });
+            // IMP-004：依据真实返回值决定文案，而非无条件声称「已执行」
+            if (fillRes.ok && fillRes.applied > 0) {
+              fillMsg = "自动填表已执行";
+            } else {
+              fillMsg = `未触发自动填表（${fillRes.error || "无事实可填"}）`;
+            }
+          } catch (e) {
+            fillMsg = `自动填表失败（不影响确认）: ${e instanceof Error ? e.message : "未知"}`;
+          }
+        }
+        // 幂等：条件更新（仅 pending_confirm 才终态），重复/并发点击不重复计数/追加（Max Loop 审查 P7）
+        const upd = await prisma.storyNode.updateMany({
+          where: { id, status: STATUS_PENDING_CONFIRM },
+          data: {
+            status: STATUS_CONFIRMED,
+            confirmedAt: now,
+            revisionCount: { increment: 1 },
+            reviewLogs: pushLog({ action: "confirm", fill: fillMsg }),
+          },
+        });
+        if (upd.count === 0) {
+          return NextResponse.json({ error: "节点状态已变化，未重复确认" }, { status: 409 });
+        }
+        // IMP-007 / R2-007 收口：确认通过后异步触发伏笔收束率检测。
+        // 用真实 request.url.origin（始终可达）+ 共享 helper（失败日志 + 轻量重试）。
+        void triggerForeshadowDetect({ projectId: node.projectId, origin: new URL(request.url).origin });
+        const fresh = await prisma.storyNode.findUnique({ where: { id } });
+        // v1.1.0：手动确认刚定稿，尝试自动整本交付（fire-and-forget，红利不阻塞响应）
+        void maybeAutoDeliver(node.projectId).catch(() => {});
+        // v1.6.52：手动确认定稿后触发一致性事实基线抽取（fire-and-forget，不阻塞响应），
+        // 与伏笔检测同链路，使基线随手动定稿同步更新。
+        void extractConsistencyFacts(node.projectId).catch(() => {});
+        return NextResponse.json(fresh);
+      }
+      case "reject": {
+        if (node.status !== STATUS_PENDING_CONFIRM) {
+          return NextResponse.json({ error: `当前状态(${node.status})不可打回` }, { status: 409 });
+        }
+        const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : "（未填写理由）";
+        data = {
+          status: STATUS_COMPLETED,
+          revisionCount: { increment: 1 },
+          reviewLogs: pushLog({ action: "reject", reason }),
+        };
+        // 打回使整本回到未交付状态
+        await prisma.project.updateMany({ where: { id: node.projectId, confirmedAt: { not: null } }, data: { confirmedAt: null } });
+        break;
+      }
+      case "reopen": {
+        if (node.status !== STATUS_CONFIRMED) {
+          return NextResponse.json({ error: `当前状态(${node.status})不可重开` }, { status: 409 });
+        }
+        data = { status: STATUS_COMPLETED, confirmedAt: null, reviewLogs: pushLog({ action: "reopen" }) };
+        // 重开使整本回到未交付状态
+        await prisma.project.updateMany({ where: { id: node.projectId, confirmedAt: { not: null } }, data: { confirmedAt: null } });
+        break;
+      }
+      case "diagnose": {
+        // 不改动状态，仅留痕（UI 打开 PostGenPanel 审校 Tab）
+        data = { reviewLogs: pushLog({ action: "diagnose" }) };
+        break;
+      }
+      default:
+        return NextResponse.json({ error: `未知 action: ${action}` }, { status: 400 });
+    }
+
+    const updated = await prisma.storyNode.update({ where: { id }, data });
+    return NextResponse.json(updated);
+  } catch (err) {
+    return jsonError(err);
+  }
+}
+
+// 收集某节点整棵子树（含自身）的全部 id —— 用于软删/彻底删的级联
+async function collectSubtreeIds(projectId: string, rootId: string): Promise<string[]> {
+  const all = await prisma.storyNode.findMany({
+    where: { projectId, deletedAt: null },
+    select: { id: true, parentId: true },
+  });
+  const childrenMap = new Map<string | null, string[]>();
+  for (const n of all) {
+    const key = n.parentId ?? null;
+    const arr = childrenMap.get(key) ?? [];
+    arr.push(n.id);
+    childrenMap.set(key, arr);
+  }
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const stack = [rootId];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    ids.push(cur);
+    for (const c of childrenMap.get(cur) ?? []) stack.push(c);
+  }
+  return ids;
+}
+
+// DELETE /api/story/nodes/[id] —— #123 软删除：仅标记 deletedAt，不物理删（可经回收站恢复）
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    const node = await prisma.storyNode.findUnique({ where: { id } });
+    if (!node) {
+      return NextResponse.json({ error: "节点不存在" }, { status: 404 });
+    }
+
+    // 防丢：删前自动留一份快照（可经「快照管理」恢复）
+    try {
+      await createSnapshot("pre-delete");
+    } catch {
+      /* 快照失败不阻断删除 */
+    }
+
+    // #123：级联软删整棵子树（含自身）
+    const subtreeIds = await collectSubtreeIds(node.projectId, id);
+    const now = new Date();
+    await prisma.storyNode.updateMany({
+      where: { id: { in: subtreeIds } },
+      data: { deletedAt: now },
+    });
+
+    // 级联清掉关联孤儿记录（摘要/节拍/伏笔/待办），避免脏数据污染写作上下文
+    await cascadeDeleteOrphans(subtreeIds);
+
+    // 重编号：顶层 + 各分卷内部各自从 第1章 起算
+    await renumberChapters(node.projectId);
+
+    return NextResponse.json({ success: true, softDeleted: true, renumbered: true, count: subtreeIds.length });
+  } catch (err) {
+    return jsonError(err);
+  }
+}

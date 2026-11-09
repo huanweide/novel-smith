@@ -1,0 +1,229 @@
+/**
+ * API 错误分类与可读化
+ *
+ * 把后端抛出的原始异常（Prisma 错误码、网络异常、LLM 异常）收敛为
+ * 「用户可理解 + 可操作」的 JSON 响应。前端拿到 { error, code, hint } 后
+ * 可以直接展示，而不是把 "P2021" / "PrismaClientKnownRequestError" 之类
+ * 的原始报错甩给用户——这正是此前「完全不能用却找不到原因」的根源。
+ *
+ * 用法：
+ *   try { ... } catch (err) { return jsonError(err); }
+ */
+import { NextResponse } from "next/server";
+
+export interface ApiErrorInfo {
+  status: number;
+  code: string;
+  error: string;
+  hint?: string;
+}
+
+/**
+ * Prisma 已知错误码 → 中文可读说明 + 修复指引。
+ * 覆盖 Novel Smith 实际会遇到的几类数据库连接 / 初始化问题。
+ */
+const PRISMA_HINTS: Record<string, { status: number; error: string; hint: string }> = {
+  // 无法连接数据库服务器（服务没起 / 地址错 / 端口错）
+  P1001: {
+    status: 503,
+    error: "数据库无法连接",
+    hint: "请确认 .env 中的 DATABASE_URL 指向本地 SQLite 文件（默认 `file:./data/novelforge.db`），并确认 `./data/` 目录可写；必要时运行 `npm run dev:db` 自动建库建表（本项目为本地文件库，无需 Docker / 外部数据库服务）。",
+  },
+  // 连接中途断开
+  P1002: {
+    status: 503,
+    error: "数据库连接中断",
+    hint: "数据库响应中断，请检查网络或数据库负载后重试。",
+  },
+  // 登录失败（账号 / 密码错）
+  P1000: {
+    status: 503,
+    error: "数据库登录失败",
+    hint: "DATABASE_URL 中的用户名 / 密码不正确，请核对后重试。",
+  },
+  // 表不存在（建了库但没建表）
+  P2021: {
+    status: 503,
+    error: "数据库表不存在",
+    hint: "数据库尚未初始化，请执行 `npx prisma db push` 建表后再试。",
+  },
+  // 连接池耗尽
+  P2024: {
+    status: 503,
+    error: "数据库连接池耗尽",
+    hint: "当前连接数已满，请稍后重试，或调大连接池上限。",
+  },
+  // 唯一约束冲突
+  P2002: {
+    status: 409,
+    error: "数据已存在（唯一约束冲突）",
+    hint: "存在重复记录，请检查输入内容是否重复。",
+  },
+  // 记录不存在：update / delete 的目标行已不在（重复删除、并发下被别人先删、ID 错）
+  // v3.1.124 黑箱实踩：删除一条已被删除的表格会抛 P2025，此前落到「其它 Prisma 错误」
+  // 兜底 → 503「数据库访问出错」+「请确认数据库已启动」，把「记录不存在」误导成
+  // 「数据库没起来」，用户会白折腾一遍 prisma db push。这里显式收敛为 404。
+  P2025: {
+    status: 404,
+    error: "记录不存在（可能已被删除）",
+    hint: "该记录可能已被删除，或 ID 不正确；请刷新列表后重试。",
+  },
+};
+
+/**
+ * 业务可读错误（路由显式抛出的中文提示，如「项目不存在」「缺少项目ID」）。
+ * 这些不是服务器内部故障，却因过去落入默认分支被误报成「服务器内部错误」+ 500，
+ * 既误导用户、又吞掉真实的「不存在 / 缺少」含义。这里显式归为 4xx 并原样透传文案。
+ */
+function businessError(msg: string): ApiErrorInfo {
+  // 「不存在 / 无权访问」→ 404；「缺少 / 非法 / 须为 / 频率 / 格式 / 必填…」→ 400
+  if (/(不存在|未找到|无权访问|not found)/i.test(msg)) {
+    return { status: 404, code: "BUSINESS", error: msg, hint: "请检查请求参数或目标记录是否存在。" };
+  }
+  return { status: 400, code: "BUSINESS", error: msg, hint: "请检查请求参数是否正确。" };
+}
+
+/**
+ * 判断一条错误消息是否为「业务可读错误」——即路由显式抛出的、用户可操作的中文
+ * 校验/存在性提示（如「项目不存在」「缺少项目ID」「参数非法」）。
+ *
+ * 必须用【正向关键词】匹配，而绝不能用「排除内部痕迹」的负向匹配：负向匹配会把
+ * 任何不含堆栈/SQL 的普通英文异常（如 "something failed"、"no such table"）也误判成
+ * 业务错误 → 400，从而击穿默认 500 分支、吞掉内部错误的正确归类（见 L2-003 修复）。
+ */
+function isBusinessMessage(msg: string): boolean {
+  return /(不存在|未找到|没有找到|缺少|缺失|未提供|未填写|必填|非法|无效|不合法|格式(错误|不符|不对)|须为|不得|不允许|已存在|重复|冲突|超出|已达|上限|已满|权限不足|无权(访问|操作)|拒绝访问|已过期|不匹配|不正确|参数(错误|缺失|不对))/i.test(
+    msg,
+  );
+}
+
+/** 把任意异常收敛为可读的错误信息 */
+export function classifyError(e: unknown): ApiErrorInfo {
+  const err = e instanceof Error ? e : new Error("未知错误");
+
+  // 1) Prisma 已知错误码
+  const code = (err as { code?: string }).code;
+  if (code && PRISMA_HINTS[code]) {
+    const h = PRISMA_HINTS[code];
+    return { status: h.status, code, error: h.error, hint: h.hint };
+  }
+
+  // 1.5) 原生模块加载失败（NODE_MODULE_VERSION / dlopen 不匹配）：
+  // 典型场景——better-sqlite3 按系统 Node 编译，但桌面端 Electron 运行时 ABI 不同，
+  // require 时抛 ERR_DLOPEN_FAILED，导致所有 DB 查询失败。这「不是」schema 不匹配，
+  // 之前误归到 2.1 会误导用户去重启 dev server / 重新 generate（对桌面端无效）。
+  // 准确修复是重装/重编对应 Electron ABI 的原生模块（或下载官方预编译包）。
+  if (
+    /ERR_DLOPEN_FAILED|NODE_MODULE_VERSION|compiled against a different|Could not locate the bindings|The specified procedure could not be found|bindings file/i.test(
+      err.message + " " + (err.stack || "")
+    )
+  ) {
+    return {
+      status: 503,
+      code: "NATIVE_MODULE_MISMATCH",
+      error: "原生模块（better-sqlite3）与运行时不兼容",
+      hint: "数据库原生模块与当前 Electron 运行时 ABI 不匹配（常见于打包时未按 Electron 重编原生模块）。请重新安装/更新到官方最新版，或执行 `npm rebuild better-sqlite3 --electron` 重新编译。",
+    };
+  }
+
+  // 2) 其它 Prisma 错误（未知 code 但以 Prisma 开头）
+  if (code?.startsWith("P") || /PrismaClient/i.test(err.name) || /Prisma/i.test(err.message)) {
+    // 2.1) schema 不匹配（stale client）：数据库连通，但本地 Prisma 客户端版本
+    // 与表结构不一致（常见于改了 schema 后未重启 dev server / 未重新 generate）。
+    // 此时若仍提示「请检查数据库已启动」会南辕北辙——DB 没问题，是 client 旧。
+    // v1.6.38 UI 复检实踩：dev server 旧进程加载不含 confirmed_at 列的旧 client，
+    // 单项目 include 重查询抛 client 侧校验错误，前端长期显示「项目加载失败（HTTP 503）」。
+    if (/Unknown arg|Invalid `prisma|does not exist|Unknown field|column .* does not exist|unknown field/i.test(err.message)) {
+      return {
+        status: 503,
+        code: code || "PRISMA_SCHEMA_MISMATCH",
+        error: "Prisma 客户端与数据库结构不匹配",
+        hint: "数据库已连接，但本地 Prisma 客户端版本与数据库表结构不一致（常见于改了 schema 后未重启 dev server）。请重启 dev server 或执行 `npx prisma generate` 后重试。",
+      };
+    }
+    return {
+      status: 503,
+      code: code || "PRISMA",
+      error: "数据库访问出错",
+      hint: "请确认数据库已启动且已执行 `npx prisma db push` 建表。",
+    };
+  }
+
+  // 3) 网络 / 外部服务不可达（AI 接口层）
+  if (err instanceof TypeError && /fetch|network|ENOTFOUND|ECONNREFUSED|Failed to fetch/i.test(err.message)) {
+    return {
+      status: 502,
+      code: "NETWORK",
+      error: "无法连接外部服务（AI 接口）",
+      hint: "请检查 Base URL 与网络是否可达。",
+    };
+  }
+
+  // 3.5) 我们自己写的可读业务错误（配置类）——直接透传，不再黑话化
+  // 这些错误来自 llm.ts / 设置页等模块，已经是「用户可操作」的中文提示
+  // （如「LLM API Key 未配置——请在设置页面填入 Key……」），若被默认分支兜底成
+  // 「服务器内部错误，请查看日志」会掩盖真实原因、让本地部署者无从下手。
+  // 判定依据：消息里含有明确的配置 / 操作中文关键词（而非堆栈 / SQL 片段），可安全展示。
+  if (/未配置|未填写|请在设置|填入|选择(提供商|模型)|Base URL|API Key|API 地址|本地推理需|无法解析/.test(err.message)) {
+    return {
+      status: 400,
+      code: "CONFIG",
+      error: err.message,
+      hint: "请在「设置」页（⚙️）补全配置，或在 .env 中设置对应环境变量（参考 .env.example）。",
+    };
+  }
+
+  // 3.6) 请求体不是合法 JSON —— 客户端发来的数据有问题，不是服务端故障
+  //
+  // 全站 137 个路由里有 71 个直接 `await request.json()`。客户端发畸形 JSON 时
+  // 它抛 SyntaxError，一路落到下面的默认分支，变成
+  // 「服务器内部错误，请查看日志」+ 500 ——把**客户端的锅甩给了服务器**：
+  // 用户看到 500 会以为服务挂了、还得去翻日志，而真实原因只是请求格式写错了。
+  //
+  // 权衡：服务端自己 JSON.parse 内部数据失败时同样抛 SyntaxError，理论上会被误判成 400。
+  // 但那类情况极罕见，且即使误判也不会泄露内部信息（文案是固定的），
+  // 相较之下「71 个路由把客户端错误报成 500」是每天都可能发生的真实问题。
+  // 更精确的做法是在路由层用 safeJson（语义明确、还能顺带校验字段），那一层仍然推荐；
+  // 这里只是兜底，让没改到的路由也不至于误导用户。
+  if (
+    err instanceof SyntaxError ||
+    /Unexpected token|Unexpected end of JSON|is not valid JSON|Failed to parse body|JSON\.parse/i.test(
+      err.message,
+    )
+  ) {
+    return {
+      status: 400,
+      code: "BAD_REQUEST",
+      error: "请求体不是合法 JSON",
+      hint: "请检查发送的数据格式：JSON 的键名与字符串都要用双引号，末尾不能有多余的逗号。",
+    };
+  }
+
+  // 4) 业务可读错误兜底：仅当消息明确为业务/校验提示（含中文业务关键词）时才归 4xx，
+  // 其余一律走默认 500（L2-003 不泄露内部信息）。
+  // 必须用正向关键词匹配，否则「排除内部痕迹」的负向判定会把普通英文异常也误判成 400，
+  // 击穿默认 500 分支（这是 3.1.161 回归的根因）。
+  if (isBusinessMessage(err.message)) {
+    return businessError(err.message);
+  }
+
+  // 5) 默认：泛化文案（L2-003 修复）
+  // 不再把原始 err.message 透传给客户端，避免泄露内部路径/SQL 片段/实现细节；
+  // 明细仅留存服务端日志（保留堆栈）供排查。
+  console.error("[api-error] 未分类异常:", err);
+  return {
+    status: 500,
+    code: "INTERNAL",
+    error: "服务器内部错误，请查看日志",
+    hint: "如问题持续，请查看服务端日志。",
+  };
+}
+
+/** 直接返回标准化错误响应，供路由 catch 块使用 */
+export function jsonError(e: unknown) {
+  const info = classifyError(e);
+  return NextResponse.json(
+    { error: info.error, code: info.code, hint: info.hint },
+    { status: info.status }
+  );
+}

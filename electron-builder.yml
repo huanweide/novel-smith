@@ -1,0 +1,75 @@
+appId: com.novelsmith.app
+productName: Novel Smith
+# electron-builder 要求精确版本（不能用 ^37.0.0 范围），否则无法下载对应运行时
+electronVersion: 37.10.3
+# 关键修复（v3.1.162）：原生模块 better-sqlite3 必须为 Electron-ABI(136)。
+# ⚠️ 实测教训（v3.1.159/160/161 三版都踩坑）：npmRebuild:true 在 buildFromSource=false 下，
+#   electron-rebuild 会去拉 electron 预编译，下载失败/无匹配包时**静默 fallback 到系统 Node-ABI(127)**
+#   并谎报 finished，导致打包产物在 Electron37 里 ERR_DLOPEN_FAILED → 所有 DB 查询 503 →
+#   系统自检横幅误报「原生模块与运行时不兼容」。这是真故障，不是误判。
+# 修复：改为 npmRebuild:false，打包时直接拷贝**已预编好**的 electron-v136 二进制。
+# 前置步骤（v3.1.166 整链已固化进 `npm run dist`）：rebuild:electron 在 node_modules/better-sqlite3
+#   目录内跑 prebuild-install --runtime=electron --target=37.10.3（⚠️ 必须在包目录内跑——在项目根跑会
+#   把本项目当目标包，GET undefined/releases/download/v3.1.166/... 必然静默失败；v3.1.162~166 的
+#   rebuild:electron script 一直因此从未生效，打包全靠 node_modules 恰好处于 Electron-ABI 的运气）。
+#   dist 尾部串 rebuild:node 恢复 Node-ABI（本机 Node 24 = ABI 137，vitest/next dev 需要）。
+# 国内网络：prebuild-install 默认从 GitHub Releases 下载（被墙超时）。本地 .npmrc 需配置镜像
+#   `better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3`（.npmrc 被
+#   .gitignore 忽略防 token 泄漏；CI 海外直连无需镜像，国内开发者首次跑 dist 前手动加这一行）。
+npmRebuild: false
+directories:
+  output: release
+  buildResources: assets
+# 自动更新发布源：将来在 GitHub Releases 发版即可触发自动更新。
+# 注意：build 本身不发布（除非显式 --publish），仅把更新地址写入 latest.yml。
+# 本地验证可用环境变量 NS_UPDATE_FEED 覆盖为自托管地址。
+publish:
+  provider: github
+  owner: huanweide
+  repo: novel-smith
+# 关键修复：asar 关闭。
+# 实测 electron-builder 26 + @electron/asar 在本机打出的 app.asar 头部带前导反斜杠（\package.json），
+# 导致 Electron 运行时无法解析 main 字段 → 主进程静默退出、窗口打不开、/api/health 无响应。
+# 改用 asar:false，应用以普通目录形式落在 resources/app，Electron 可直接加载，彻底规避 asar 损坏问题。
+# main.js 已兼容 asar:false（appRoot 回退到 resources/app，node_modules 走标准解析路径）。
+asar: false
+files:
+  - "package.json"
+  - "next.config.*"
+  - "src-electron/**/*"
+  - "src/generated/**/*"
+  - "public/**/*"
+  - "prisma/**/*"
+  - "assets/**/*"
+  - ".next/**/*"
+  # 显式放行 .next 内的嵌套 node_modules（Turbopack 把 @prisma 解引用后的真实目录放这里）。
+  # 不写这一条，electron-builder 默认规则可能把整层 .next/node_modules 剥离 → 运行时找不到 @prisma/client-<hash> → DB 路由 500。
+  - ".next/node_modules/**/*"
+  - "node_modules/**/*"
+electronDownload:
+  # 关键修复：mirror 必须以 / 结尾，否则 electron-builder 拼出的下载地址会丢失斜杠
+  # （例如 downloadv37.10.3 而非 download/v37.10.3），导致 404。
+  # 改用 npmmirror 二进制镜像，国内拉取更稳；末尾 / 不可省。
+  mirror: https://registry.npmmirror.com/-/binary/electron/
+win:
+  # 只出 nsis 安装包。electron-updater 的 latest.yml 只记录 setup.exe，
+  # portable / zip 没有固定安装目录，下载后无法自动更新（官方 Target 表把 portable 标为 Manual）。
+  # Release 不再上传便携版，保证用户从 GitHub 拿到的版本一定具备自动更新能力。
+  target: [nsis]
+  icon: assets/icon.ico
+  # 文件名用无空格 slug，保证 latest.yml 记录的更新地址与实际文件一致（否则自动更新会下载 404）
+  artifactName: NovelSmith-${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  artifactName: NovelSmith-${version}-setup.${ext}
+portable:
+  artifactName: NovelSmith-${version}-portable.${ext}
+mac:
+  target: [dmg]
+  category: public.app-category.writing
+linux:
+  target: [AppImage, deb]
+  category: Utility

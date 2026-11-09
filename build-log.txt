@@ -1,0 +1,412 @@
+npm warn Unknown project config "better_sqlite3_binary_host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> novel-smith@3.1.169 dist
+> npm run build && npm run rebuild:electron && node scripts/deref-prisma-symlinks.mjs && electron-builder --win --publish never && node scripts/check-dist-version.mjs && npm run rebuild:node
+
+npm warn Unknown env config "better-sqlite3-binary-host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "better_sqlite3_binary_host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> novel-smith@3.1.169 build
+> node scripts/safe-build.mjs
+
+[safe-build] 3001 上没有服务，直接构建
+[safe-build] OK README.md 版本号 v3.1.169 与 package.json 一致
+[safe-build] 开始 next build …
+
+(node:1740) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+npm warn Unknown env config "better-sqlite3-binary-host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "better_sqlite3_binary_host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.ts took 34ms
+⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 38.0s
+  Running TypeScript ...
+  Finished TypeScript in 2.3s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/100) ...
+  Generating static pages using 3 workers (25/100) 
+  Generating static pages using 3 workers (50/100) 
+  Generating static pages using 3 workers (75/100) 
+✓ Generating static pages using 3 workers (100/100) in 534ms
+Turbopack build encountered 5 warnings:
+./src/lib/db-snapshot.ts:60:8
+Warning: Dynamic filesystem access causes tracing of the whole project
+  58 | export function listSnapshots(): SnapshotMeta[] {
+  59 |   const { snapshotDir } = getDbPaths();
+> 60 |   if (!fs.existsSync(snapshotDir)) return [];
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  61 |   return fs
+  62 |     .readdirSync(snapshotDir)
+  63 |     .filter((f) => f.endsWith(".db"))
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+- opt out by adding an ignore comment to the highlighted call: fs.existsSync(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import trace:
+  App Route:
+    ./src/lib/db-snapshot.ts
+    ./src/app/api/story/nodes/[id]/purge/route.ts
+
+
+./src/lib/db-snapshot.ts:122:9
+Warning: Dynamic filesystem access causes tracing of the whole project
+  120 |   for (const ext of ["-wal", "-shm"]) {
+  121 |     const w = `${absPath}${ext}`;
+> 122 |     if (fs.existsSync(w)) {
+      |         ^^^^^^^^^^^^^^^^
+  123 |       try {
+  124 |         fs.rmSync(w);
+  125 |       } catch {
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+- opt out by adding an ignore comment to the highlighted call: fs.existsSync(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import trace:
+  App Route:
+    ./src/lib/db-snapshot.ts
+    ./src/app/api/story/nodes/[id]/purge/route.ts
+
+
+./src/lib/db-snapshot.ts:61:10
+Warning: Dynamic filesystem access causes tracing of the whole project
+  59 |   const { snapshotDir } = getDbPaths();
+  60 |   if (!fs.existsSync(snapshotDir)) return [];
+> 61 |   return fs
+     |          ^
+> 62 |     .readdirSync(snapshotDir)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  63 |     .filter((f) => f.endsWith(".db"))
+  64 |     .map((f) => {
+  65 |       const p = path.join(snapshotDir, f);
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+- opt out by adding an ignore comment to the highlighted call: fs.readdir(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import trace:
+  App Route:
+    ./src/lib/db-snapshot.ts
+    ./src/app/api/story/nodes/[id]/purge/route.ts
+
+
+./src/lib/db-snapshot.ts:38:7
+Warning: Dynamic filesystem access causes tracing of the whole project
+  36 |   const absPath = path.isAbsolute(dbPath)
+  37 |     ? dbPath
+> 38 |     : path.resolve(process.cwd(), dbPath);
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  39 |   const dir = path.dirname(absPath);
+  40 |   const snapshotDir = path.join(dir, "snapshots");
+  41 |   return { absPath, dir, snapshotDir };
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+  Finalizing page optimization ...
+- opt out by adding an ignore comment to the highlighted call: path.resolve(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import trace:
+  App Route:
+    ./src/lib/db-snapshot.ts
+    ./src/app/api/story/nodes/[id]/purge/route.ts
+
+
+./src/lib/prisma.ts:17:7
+Warning: Dynamic filesystem access causes tracing of the whole project
+  15 |   const absPath = path.isAbsolute(dbPath)
+  16 |     ? dbPath
+> 17 |     : path.resolve(process.cwd(), dbPath);
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  18 |   // 确保数据目录存在（better-sqlite3 只建文件、不建目录）
+  19 |   fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  20 |   const adapter = new PrismaBetterSqlite3({ url });
+
+Static analysis determined that this filesystem access causes the whole project to be traced and included in the output.
+This is usually unintentional and leads to all source files (including the public folder) to be deployed as part of the server code.
+This can slow down deployments or lead to failures when size limits are exceeded.
+To resolve this, you can
+- make sure the path is statically scoped to some subfolder, for example path.join(process.cwd(), 'data', bar), or
+- only use them in development, or
+- opt out by adding an ignore comment to the highlighted call: path.resolve(/*turbopackIgnore: true*/ ...), or
+- remove them.
+
+Import traces:
+  #1 [App Route]:
+    ./src/lib/prisma.ts
+    ./src/app/api/seed/presets/route.ts
+
+  #2 [App Route]:
+    ./src/lib/prisma.ts
+    ./src/lib/db-snapshot.ts
+    ./src/app/api/story/nodes/[id]/purge/route.ts
+
+  #3 [Server Component]:
+    ./src/lib/prisma.ts
+    ./src/lib/projects-service.ts
+    ./src/app/page.tsx
+
+
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/agent/analyze-chapter
+├ ƒ /api/agent/analyze-relationships
+├ ƒ /api/agent/apply-extraction
+├ ƒ /api/agent/character-chat
+├ ƒ /api/agent/content-safety
+├ ƒ /api/agent/extract-chapter
+├ ƒ /api/agent/sync-relations
+├ ƒ /api/babylore/clear-filled
+├ ƒ /api/babylore/fill
+├ ƒ /api/babylore/fill-all
+├ ƒ /api/babylore/fill-task/[taskId]
+├ ƒ /api/babylore/recall
+├ ƒ /api/characters
+├ ƒ /api/characters/[id]
+├ ƒ /api/characters/[id]/autofill
+├ ƒ /api/characters/apply-tags
+├ ƒ /api/characters/dedupe
+├ ƒ /api/characters/expand
+├ ƒ /api/characters/merge-confirm
+├ ƒ /api/characters/merge-ignore
+├ ƒ /api/characters/merge-pending
+├ ƒ /api/characters/merge-rollback
+├ ƒ /api/characters/remove-tag-type
+├ ƒ /api/cron/db-snapshot
+├ ƒ /api/cron/memory-decay
+├ ƒ /api/dissect/[id]
+├ ƒ /api/dissect/[id]/chat
+├ ƒ /api/dissect/[id]/dimensions
+├ ƒ /api/dissect/[id]/to-project
+├ ƒ /api/dissect/list
+├ ƒ /api/dissect/start
+├ ƒ /api/entities/highlight
+├ ƒ /api/explore/adopt
+├ ƒ /api/explore/adopt-batch
+├ ƒ /api/explore/chat
+├ ƒ /api/explore/create
+├ ƒ /api/foreshadowing/detect
+├ ƒ /api/foreshadowing/list
+├ ƒ /api/foreshadowing/update
+├ ƒ /api/game/action
+├ ƒ /api/game/concept
+├ ƒ /api/game/end
+├ ƒ /api/game/outline/chat
+├ ƒ /api/game/outline/generate
+├ ƒ /api/game/roll
+├ ƒ /api/game/saga
+├ ƒ /api/game/saga/[sagaId]
+├ ƒ /api/game/saga/[sagaId]/chapter
+├ ƒ /api/game/saga/[sagaId]/chapter/[chapterId]
+├ ƒ /api/game/saga/[sagaId]/characters
+├ ƒ /api/game/start
+├ ƒ /api/game/state
+├ ƒ /api/generate/audit
+├ ƒ /api/generate/audit/book
+├ ƒ /api/generate/chapter-outline
+├ ƒ /api/generate/chapter-outline/draw
+├ ƒ /api/generate/chat
+├ ƒ /api/generate/conflict
+├ ƒ /api/generate/continue
+├ ƒ /api/generate/digest/rebuild
+├ ƒ /api/generate/outline
+├ ƒ /api/generate/pre-write-cards
+├ ƒ /api/generate/preview-context
+├ ƒ /api/generate/refine
+├ ƒ /api/generate/summarize
+├ ƒ /api/generate/write
+├ ƒ /api/generation-metrics
+├ ƒ /api/generation-tasks
+├ ƒ /api/generation-tasks/[id]
+├ ƒ /api/health
+├ ƒ /api/imitate/start
+├ ƒ /api/import/[taskId]
+├ ƒ /api/import/commit
+├ ƒ /api/import/novel
+├ ƒ /api/import/novel/assets
+├ ƒ /api/import/novel/continue
+├ ƒ /api/import/parse
+├ ƒ /api/import/quick
+├ ƒ /api/lorebook
+├ ƒ /api/lorebook/[id]
+├ ƒ /api/lorebook/[id]/autofill
+├ ƒ /api/narrative-energy
+├ ƒ /api/parse-settings
+├ ƒ /api/presets
+├ ƒ /api/presets/[id]
+├ ƒ /api/presets/[id]/apply
+├ ƒ /api/presets/[id]/fork
+├ ƒ /api/presets/enrich
+├ ƒ /api/presets/import
+├ ƒ /api/presets/import-local-templates
+├ ƒ /api/projects
+├ ƒ /api/projects/[id]
+├ ƒ /api/projects/[id]/applied-presets
+├ ƒ /api/projects/[id]/backup
+├ ƒ /api/projects/[id]/build-config
+├ ƒ /api/projects/[id]/chapters
+├ ƒ /api/projects/[id]/config
+├ ƒ /api/projects/[id]/confirm
+├ ƒ /api/projects/[id]/consistency
+├ ƒ /api/projects/[id]/consistency/[factId]
+├ ƒ /api/projects/[id]/consistency/audit
+├ ƒ /api/projects/[id]/consistency/conflicts
+├ ƒ /api/projects/[id]/consistency/conflicts/suggest
+├ ƒ /api/projects/[id]/consistency/manual
+├ ƒ /api/projects/[id]/diagnostics
+├ ƒ /api/projects/[id]/editor-apply
+├ ƒ /api/projects/[id]/editor-review
+├ ƒ /api/projects/[id]/export
+├ ƒ /api/projects/[id]/export-chapters
+├ ƒ /api/projects/[id]/lore-tables
+├ ƒ /api/projects/[id]/lore-tables/[tableId]
+├ ƒ /api/projects/[id]/prompt-revisions
+├ ƒ /api/projects/[id]/prompt-revisions/rollback
+├ ƒ /api/projects/[id]/publish-check
+├ ƒ /api/projects/[id]/purge
+├ ƒ /api/projects/[id]/restore
+├ ƒ /api/projects/[id]/style
+├ ƒ /api/projects/[id]/stylecard
+├ ƒ /api/projects/import
+├ ƒ /api/projects/recycle
+├ ƒ /api/rules
+├ ƒ /api/rules/[id]
+├ ƒ /api/seed/genre-project
+├ ƒ /api/seed/presets
+├ ƒ /api/seed/sample-project
+├ ƒ /api/settings
+├ ƒ /api/settings/models
+├ ƒ /api/settings/test
+├ ƒ /api/snapshots
+├ ƒ /api/snapshots/[name]
+├ ƒ /api/snapshots/create
+├ ƒ /api/stats/monitor
+├ ƒ /api/story/batch-write
+├ ƒ /api/story/nodes
+├ ƒ /api/story/nodes/[id]
+├ ƒ /api/story/nodes/[id]/humanize
+├ ƒ /api/story/nodes/[id]/purge
+├ ƒ /api/story/nodes/[id]/restore
+├ ƒ /api/story/nodes/[id]/review
+├ ƒ /api/story/nodes/[id]/revisions
+├ ƒ /api/story/nodes/[id]/revisions/[revId]
+├ ƒ /api/story/nodes/[id]/rollback
+├ ƒ /api/story/nodes/auto-confirm
+├ ƒ /api/story/nodes/batch-confirm
+├ ƒ /api/story/nodes/recycle
+├ ƒ /api/story/search
+├ ƒ /api/storyline-events/[id]
+├ ƒ /api/storylines
+├ ƒ /api/storylines/[id]
+├ ƒ /api/storylines/[id]/events
+├ ƒ /api/storylines/generate
+├ ƒ /api/system/check-update
+├ ƒ /changelog
+├ ○ /detector
+├ ○ /dissect
+├ ƒ /dissect/[id]
+├ ○ /dissect/new
+├ ○ /explore
+├ ○ /gamesaga
+├ ƒ /gamesaga/[sagaId]
+├ ƒ /read/[projectId]
+├ ○ /recycle
+├ ○ /settings
+├ ○ /workshop
+├ ƒ /workspace/[projectId]
+├ ƒ /workspace/[projectId]/game/[nodeId]
+└ ƒ /workspace/[projectId]/tables
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+npm warn Unknown env config "better-sqlite3-binary-host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "better_sqlite3_binary_host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> novel-smith@3.1.169 rebuild:electron
+> cd node_modules/better-sqlite3 && npx prebuild-install --runtime=electron --target=37.10.3 --arch=x64 --platform=win32
+
+npm warn Unknown env config "better-sqlite3-binary-host". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+(node:2432) [DEP0176] DeprecationWarning: fs.R_OK is deprecated, use fs.constants.R_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[deref] SYMLINK .next\node_modules\@prisma\adapter-better-sqlite3-da039dd0f7229020 -> D:\a\novel-smith\novel-smith\node_modules\@prisma\adapter-better-sqlite3
+[deref] SYMLINK .next\node_modules\@prisma\client-2c3a283f134fdcb6 -> D:\a\novel-smith\novel-smith\node_modules\@prisma\client
+[deref] prisma symlinks dereferenced (if any).
+  • electron-builder  version=26.18.0 os=10.0.26100
+  • loaded configuration  file=D:\a\novel-smith\novel-smith\electron-builder.yml
+  • description is missed in the package.json  appPackageFile=D:\a\novel-smith\novel-smith\package.json
+  • author is missed in the package.json  appPackageFile=D:\a\novel-smith\novel-smith\package.json
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=37.10.3 appOutDir=release\win-unpacked
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=D:\a\novel-smith\novel-smith\release\win-unpacked
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • searching for node modules  pm=npm searchDir=D:\a\novel-smith\novel-smith
+  • duplicate dependency references  dependencies=["@types/react@19.3.0","react-dom@19.3.1","react-dom@19.3.1","react-dom@19.3.1","better-sqlite3@12.11.1","prisma@7.10.0","once@1.4.0","once@1.4.0","pump@3.0.4","string_decoder@1.1.1","end-of-stream@1.4.5","string_decoder@1.1.1","@types/react@19.3.0","react-dom@19.3.1","@babel/parser@7.29.7","@babel/types@7.29.7","proper-lockfile@4.1.2","cross-spawn@7.0.6","typescript@7.0.2","@types/react@19.3.0","@types/react@19.3.0","@types/react@19.3.0","react-dom@19.3.1","@types/react@19.3.0","@types/react@19.3.0","@types/react@19.3.0","@types/react@19.3.0","@types/react@19.3.0","react-dom@19.3.1","@types/react@19.3.0","d3-array@3.2.4","d3-array@3.2.4","d3-interpolate@3.0.1","d3-time-format@4.1.0","d3-time@3.1.0","d3-shape@3.2.0","d3-time@3.1.0","d3-array@3.2.4","@types/react@19.3.0","@types/react@19.3.0","@visx/curve@4.0.1-alpha.0","@visx/group@4.0.1-alpha.0","@visx/scale@4.0.1-alpha.0","@visx/shape@4.0.1-alpha.0","@types/react@19.3.0","@types/react@19.3.0","@visx/vendor@4.0.0-alpha.0","@types/react@19.3.0","@visx/curve@4.0.1-alpha.0","@visx/group@4.0.1-alpha.0","@visx/scale@4.0.1-alpha.0","@visx/vendor@4.0.0-alpha.0","react-dom@19.3.1","better-sqlite3@12.11.1","typescript@7.0.2","@types/react@19.3.0","@types/hast@3.0.4","devlop@1.1.0","@types/hast@3.0.4","@types/hast@3.0.4","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/estree-jsx@1.0.5","@types/hast@3.0.4","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","decode-named-character-reference@1.3.0","vfile-message@4.0.3","@types/estree-jsx@1.0.5","@types/hast@3.0.4","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","unist-util-stringify-position@4.0.0","@types/hast@3.0.4","@types/mdast@4.0.4","devlop@1.1.0","unist-util-position@5.0.0","unist-util-visit@5.1.0","vfile@6.0.3","@types/mdast@4.0.4","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","decode-named-character-reference@1.3.0","micromark-util-character@2.1.1","micromark-util-decode-numeric-character-reference@2.0.2","debug@4.4.3","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-core-commonmark@2.0.3","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-combine-extensions@2.0.1","micromark-util-decode-numeric-character-reference@2.0.2","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-chunked@2.0.1","unist-util-stringify-position@4.0.0","unified@11.0.5","@types/hast@3.0.4","@types/mdast@4.0.4","mdast-util-to-hast@13.2.1","unified@11.0.5","vfile@6.0.3","devlop@1.1.0","vfile@6.0.3","unist-util-is@6.0.1","vfile-message@4.0.3","@types/hast@3.0.4","@types/hast@3.0.4","@types/hast@3.0.4","devlop@1.1.0","@types/hast@3.0.4","@types/hast@3.0.4","vfile@6.0.3","vfile@6.0.3","@types/hast@3.0.4","devlop@1.1.0","mdast-util-to-hast@13.2.1","unist-util-position@5.0.0","unist-util-visit@5.1.0","vfile@6.0.3","vfile@6.0.3","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","unist-util-is@6.0.1","unist-util-visit-parents@6.0.2","micromark-util-character@2.1.1","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","micromark-util-normalize-identifier@2.0.1","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","@types/mdast@4.0.4","unist-util-is@6.0.1","mdast-util-to-string@4.0.0","micromark-util-character@2.1.1","micromark-util-decode-string@2.0.1","unist-util-visit@5.1.0","micromark-util-character@2.1.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-util-character@2.1.1","devlop@1.1.0","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-classify-character@2.0.1","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-subtokenize@2.1.0","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-normalize-identifier@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-classify-character@2.0.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","remark-parse@11.0.0","@types/mdast@4.0.4","mdast-util-to-markdown@2.1.2","unified@11.0.5","unified@11.0.5","@babel/parser@7.29.7","@babel/types@7.29.7","@jridgewell/trace-mapping@0.3.31","browserslist@4.28.2","@babel/core@7.29.7","@babel/traverse@7.29.7","@babel/types@7.29.7","@babel/traverse@7.29.7","@babel/template@7.29.7","@babel/types@7.29.7","@babel/parser@7.29.7","@babel/code-frame@7.29.7","@babel/parser@7.29.7","@babel/types@7.29.7","@babel/code-frame@7.29.7","@babel/generator@7.29.7","@babel/parser@7.29.7","@babel/template@7.29.7","@babel/types@7.29.7","debug@4.4.3","@jridgewell/gen-mapping@0.3.13","@jridgewell/trace-mapping@0.3.31","debug@4.4.3","@babel/types@7.29.7","@babel/core@7.29.7","@babel/types@7.29.7","@babel/core@7.29.7","@babel/helper-annotate-as-pure@7.29.7","@babel/traverse@7.29.7","@babel/types@7.29.7","@babel/types@7.29.7","@babel/core@7.29.7","@babel/helper-member-expression-to-functions@7.29.7","@babel/helper-optimise-call-expression@7.29.7","@babel/traverse@7.29.7","@babel/helper-skip-transparent-expression-wrappers@7.29.7","@babel/traverse@7.29.7","@babel/traverse@7.29.7","@babel/types@7.29.7","@babel/core@7.29.7","@babel/core@7.29.7","@babel/core@7.29.7","@babel/core@7.29.7","@babel/helper-module-transforms@7.29.7","@babel/plugin-transform-typescript@7.29.7","cross-spawn@7.0.6","express@5.2.1","mime-types@3.0.2","debug@4.4.3","http-errors@2.0.1","iconv-lite@0.7.2","on-finished@2.4.1","qs@6.15.2","raw-body@3.0.2","type-is@2.1.0","debug@4.4.3","debug@4.4.3","on-finished@2.4.1","once@1.4.0","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.2","call-bound@1.0.4","get-intrinsic@1.3.0","side-channel-map@1.0.1","debug@4.4.3","debug@4.4.3","http-errors@2.0.1","mime-types@3.0.2","on-finished@2.4.1","send@1.2.1","mime-types@3.0.2","http-errors@2.0.1","iconv-lite@0.7.2","browserslist@4.28.2","js-yaml@4.3.2","@babel/code-frame@7.29.7","typescript@7.0.2","cross-spawn@7.0.6","jsonfile@6.2.1","is-inside-container@1.0.0","@nodelib/fs.walk@1.2.8","is-glob@4.0.3","micromatch@4.0.8","@types/react@19.3.0"]
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\resources\app\node_modules\@prisma\engines\schema-engine-windows.exe
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\Novel Smith.exe
+  • building        target=nsis file=release\NovelSmith-3.1.169-setup.exe archs=x64 oneClick=false perMachine=false
+  • downloaded      label=7zip-win-x64.tar.gz progress=100%
+  ⨯ Response code 504 (Gateway Time-out)  failedTask=build stackTrace=HTTPError: Response code 504 (Gateway Time-out)
+    at Request._onResponseBase (D:\a\novel-smith\novel-smith\node_modules\got\dist\source\core\index.js:913:31)
+    at Request._onResponse (D:\a\novel-smith\novel-smith\node_modules\got\dist\source\core\index.js:948:24)
+    at ClientRequest.<anonymous> (D:\a\novel-smith\novel-smith\node_modules\got\dist\source\core\index.js:962:23)
+    at ClientRequest.wrapper (node:events:639:12)
+    at ClientRequest.emit (node:events:526:24)
+    at ClientRequest.origin.emit (D:\a\novel-smith\novel-smith\node_modules\@szmarczak\http-timer\dist\source\index.js:43:20)
+    at HTTPParser.parserOnIncomingClient (node:_http_client:979:27)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+    at TLSSocket.socketOnData (node:_http_client:814:22)
+    at TLSSocket.emit (node:events:514:28)
+    at addChunk (node:internal/streams/readable:569:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:520:3)
+    at TLSSocket.Readable.push (node:internal/streams/readable:400:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:194:23)
+
+==== CI META ====
+run: 42569272908
+ref: v3.1.169
+sha: c1a1e8c93462ca565b31b31b5318da094b17f438
+C: free bytes: 29770276864

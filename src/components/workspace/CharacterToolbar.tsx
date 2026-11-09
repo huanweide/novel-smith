@@ -1,0 +1,104 @@
+"use client";
+
+import { Icon } from "@/components/ui/icons";
+import { RangeSelector } from "./RangeSelector";
+
+/**
+ * 角色面板工具条（v2.0.4）
+ * - 移除「自动分类」（改由 LLM 检测 + 玩家自建标签）；
+ * - 所有按钮统一尺寸 / 边框 / 圆角，仅激活 / 禁用态用各自语义色，保证视觉一致性。
+ */
+export function CharacterToolbar({
+  filtered,
+  selectedIds,
+  allInViewSelected,
+  expanding,
+  expandDone,
+  expandTotal,
+  onToggleAll,
+  onExpand,
+  onRange,
+  onClear,
+  // v2.0.14：自建标签输入与打标——移入工具栏保持同一 base 样式
+  newTag,
+  onNewTagChange,
+  onApplyTags,
+  applying,
+  selectedCount,
+}: {
+  filtered: { id: string }[];
+  selectedIds: Set<string>;
+  allInViewSelected: boolean;
+  expanding: boolean;
+  expandDone: number;
+  expandTotal: number;
+  onToggleAll: () => void;
+  onExpand: () => void;
+  onRange: (indices: Set<number>) => void;
+  onClear: () => void;
+  // v2.0.14：自建标签输入与打标
+  newTag: string;
+  onNewTagChange: (v: string) => void;
+  onApplyTags: () => void;
+  applying: boolean;
+  selectedCount: number;
+}) {
+  // 统一的按钮基础样式：相同高度 / 边框 / 圆角 / 字号（v3.1.168 重排：两行结构化，消除 wrap 乱排）
+  const base =
+    "text-xs px-2 h-6 rounded border transition-colors inline-flex items-center gap-1 whitespace-nowrap";
+  const neutral =
+    "border-[var(--nv-border-1)] text-[var(--nv-text-secondary)] hover:border-[var(--nv-border-2)] hover:text-[var(--nv-text-primary)]";
+  const disabled =
+    "border-[var(--nv-border-1)] text-[var(--nv-text-tertiary)] cursor-not-allowed";
+
+  return (
+    <div className="mb-2 px-2 space-y-1">
+      {/* 第一行：选择工具（全选 / 范围 / 清空） */}
+      <div className="flex items-center gap-1">
+        <button onClick={onToggleAll} className={`${base} ${neutral}`} title="全选当前视图的角色">
+          {allInViewSelected ? "取消全选" : `全选(${filtered.length})`}
+        </button>
+        <RangeSelector
+          total={filtered.length}
+          placeholder={`1-${filtered.length}`}
+          onSelect={onRange}
+        />
+        {selectedIds.size > 0 && (
+          <button onClick={onClear} className={`${base} ${neutral}`} title="清空勾选">
+            清空({selectedIds.size})
+          </button>
+        )}
+      </div>
+      {/* 第二行：AI 加工（扩展 / 打标）——输入标签名后「打标」点亮 */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={onExpand}
+          disabled={selectedIds.size === 0 || expanding}
+          title="对勾选的角色用 AI 扩充设定（性格/关系/背景等）"
+          className={`${base} ${selectedIds.size > 0 && !expanding ? "border-[var(--nv-accent-soft)] text-[var(--nv-accent)] hover:border-[var(--nv-accent)]" : disabled}`}
+        >
+          {expanding ? (
+            <span className="flex items-center gap-1"><Icon name="loader" size={10} className="animate-spin" />{expandDone}/{expandTotal}</span>
+          ) : (
+            <span className="flex items-center gap-1"><Icon name="sparkles" size={10} className="text-[var(--nv-accent)]" />AI扩展</span>
+          )}
+        </button>
+        <input
+          value={newTag}
+          onChange={(e) => onNewTagChange(e.target.value)}
+          placeholder="标签名…"
+          aria-label="新建标签名"
+          className="flex-1 min-w-0 text-xs px-2 h-6 rounded border border-[var(--nv-border-1)] bg-transparent text-[var(--nv-text-primary)] placeholder:text-[var(--nv-text-tertiary)] focus:outline-none focus:border-[var(--nv-primary)]"
+        />
+        <button
+          onClick={onApplyTags}
+          disabled={applying || newTag.trim() === "" || selectedCount === 0}
+          title="把当前勾选的角色全部打上新标签；角色原有标签会保留（并集）"
+          className={`${base} ${applying || newTag.trim() === "" || selectedCount === 0 ? disabled : "border-[var(--nv-primary-soft)] text-[var(--nv-primary)] hover:border-[var(--nv-primary)]"}`}
+        >
+          {applying ? <span className="flex items-center gap-1"><Icon name="loader" size={10} className="animate-spin" />打标中…</span> : <span>打标</span>}
+        </button>
+      </div>
+    </div>
+  );
+}

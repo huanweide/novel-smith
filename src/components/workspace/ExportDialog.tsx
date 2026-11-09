@@ -1,0 +1,356 @@
+"use client";
+
+import { useState } from "react";
+import { Icon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { toastSuccess, toastWarning } from "@/components/ui/toast";
+
+type ExportFormat = "markdown" | "txt" | "html" | "docx" | "epub";
+
+const BASIC_FORMATS: { key: ExportFormat; label: string; hint: string }[] = [
+  { key: "markdown", label: "Markdown", hint: ".md · 可再编辑" },
+  { key: "txt", label: "纯文本", hint: ".txt · 极简" },
+  { key: "html", label: "网页 HTML", hint: "可打印 PDF" },
+];
+const ADVANCED_FORMATS: { key: ExportFormat; label: string; hint: string }[] = [
+  { key: "docx", label: "Word 文档", hint: ".docx · 投稿首选" },
+  { key: "epub", label: "电子书", hint: ".epub · 阅读器" },
+];
+
+interface ChapterOption {
+  id: string;
+  title: string;
+}
+
+export function ExportDialog({
+  projectId,
+  projectName,
+  chapters,
+  onClose,
+}: {
+  projectId: string;
+  projectName: string;
+  chapters: ChapterOption[];
+  onClose: () => void;
+}) {
+  const [format, setFormat] = useState<ExportFormat>("markdown");
+  const [range, setRange] = useState<"all" | "selected">("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [includeOutline, setIncludeOutline] = useState(true);
+  const [author, setAuthor] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [pendingHits, setPendingHits] = useState<{
+    total: number;
+    hits: { word: string; chapter: string; context: string }[];
+  } | null>(null);
+  // v3.1.65：导出前排版预览（HTML 样张）
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const toggleChapter = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const buildParams = (withCheck: boolean) => {
+    const params = new URLSearchParams({ format });
+    if (withCheck) params.set("check", "1");
+    if (!includeOutline) params.set("includeOutline", "false");
+    if (author.trim()) params.set("author", author.trim());
+    if (range === "selected" && selected.size > 0) {
+      params.set("chapterIds", [...selected].join(","));
+    }
+    return params;
+  };
+
+  // 真正触发下载（不带 check）
+  const proceedExport = () => {
+    window.open(`/api/projects/${projectId}/export?${buildParams(false).toString()}`, "_blank");
+    setPendingHits(null);
+    toastSuccess("已开始导出，文件将在新标签页下载");
+    onClose();
+  };
+
+  // FE-N7：导出前先跑违禁词预检，命中则弹确认清单
+  const doExport = async () => {
+    // R2-008/P1：选章模式下未勾选任何章节时，给出非阻塞提示并中止，避免静默导出整本或空文件
+    if (range === "selected" && selected.size === 0) {
+      toastWarning("未选中任何章节");
+      return;
+    }
+
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/export?${buildParams(true).toString()}`);
+      if (!res.ok) {
+        // 预检失败时不盲目降级导出：若后端明确是「未选中/无内容」类错误，提示作者而非静默下载空白文件
+        let emptyHint: string | null = null;
+        try {
+          const errData = (await res.json()) as { error?: string };
+          if (errData?.error && /未选中|没有内容|没有有效章节|没有可导出正文|无可导出正文/.test(errData.error)) {
+            emptyHint = errData.error;
+          }
+        } catch {
+          /* 解析失败则按原有降级逻辑处理 */
+        }
+        if (emptyHint) {
+          toastWarning(emptyHint);
+          return;
+        }
+        proceedExport();
+        return;
+      }
+      const data = (await res.json()) as { total: number; hits: { word: string; chapter: string; context: string }[] };
+      if (data.total > 0) {
+        setPendingHits(data);
+        return;
+      }
+      proceedExport();
+    } catch {
+      // 预检失败时退化为直接导出，不打断用户
+      proceedExport();
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  // v3.1.65：导出前排版预览 —— 以 HTML 样张代表最终排版，避免「导完才发现格式不对」
+  // DOCX/EPUB 为同排版二进制文档，HTML 样张最直观反映最终观感
+  const previewExport = async () => {
+    if (range === "selected" && selected.size === 0) {
+      toastWarning("未选中任何章节");
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const params = buildParams(false);
+      params.set("format", "html"); // 始终取 HTML 样张
+      const res = await fetch(`/api/projects/${projectId}/export?${params.toString()}`);
+      if (!res.ok) {
+        let msg = "预览生成失败";
+        try {
+          const d = (await res.json()) as { error?: string };
+          if (d?.error) msg = d.error;
+        } catch {
+          /* ignore */
+        }
+        toastWarning(msg);
+        return;
+      }
+      setPreviewHtml(await res.text());
+      setShowPreview(true);
+    } catch {
+      toastWarning("预览生成失败，可直接导出");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      bare
+      ariaLabel="导出小说"
+      panelClassName={showPreview ? "max-w-3xl max-h-[92vh] overflow-hidden" : "max-w-md max-h-[85vh] overflow-y-auto"}
+    >
+      {showPreview ? (
+        <div className="flex h-[88vh] flex-col">
+          <div className="flex items-center justify-between border-b border-[var(--nv-border-2)] px-5 py-3">
+            <div>
+              <h3 className="text-base font-semibold text-[var(--nv-text-primary)]">排版预览（HTML 样张）</h3>
+              <p className="mt-0.5 text-[11px] text-[var(--nv-text-tertiary)]">
+                所见即所得：DOCX / EPUB 导出为同排版电子文档，此 HTML 样张最直观反映最终排版
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowPreview(false)} className="btn-ghost h-8 text-sm">
+                返回设置
+              </Button>
+              <button
+                onClick={onClose}
+                className="shrink-0 text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-text-primary)]"
+                aria-label="关闭"
+              >
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+          </div>
+          <iframe srcDoc={previewHtml ?? ""} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" title="排版预览" />
+        </div>
+      ) : (
+      <div className="p-5">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-[var(--nv-text-primary)]">导出小说</h3>
+            <p className="mt-0.5 text-xs text-[var(--nv-text-tertiary)]">{projectName}</p>
+          </div>
+          <button onClick={onClose} className="shrink-0 text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-text-primary)]" aria-label="关闭">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+
+        {/* 格式 */}
+        <div className="mb-4">
+          <div className="mb-2 text-[11px] text-[var(--nv-text-tertiary)]">导出格式</div>
+          <div className="grid grid-cols-2 gap-2">
+            {BASIC_FORMATS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFormat(f.key)}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                  format === f.key
+                    ? "border-[var(--nv-primary)] bg-[var(--nv-primary-soft)]"
+                    : "border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] hover:border-[var(--nv-border-3)]"
+                }`}
+              >
+                <Icon name="file" size={15} className={format === f.key ? "text-[var(--nv-primary)]" : "text-[var(--nv-text-tertiary)]"} />
+                <div>
+                  <div className="text-xs font-medium text-[var(--nv-text-primary)]">{f.label}</div>
+                  <div className="text-[9px] text-[var(--nv-text-tertiary)]">{f.hint}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="mt-2 flex w-full items-center justify-between rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] px-3 py-1.5 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-border-3)]"
+          >
+            <span>进阶格式（Word / 电子书）</span>
+            <span className="text-[var(--nv-text-tertiary)]">{showAdvanced ? "▴" : "▾"}</span>
+          </button>
+          {showAdvanced && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {ADVANCED_FORMATS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFormat(f.key)}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                    format === f.key
+                      ? "border-[var(--nv-primary)] bg-[var(--nv-primary-soft)]"
+                      : "border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] hover:border-[var(--nv-border-3)]"
+                  }`}
+                >
+                  <Icon name="file" size={15} className={format === f.key ? "text-[var(--nv-primary)]" : "text-[var(--nv-text-tertiary)]"} />
+                  <div>
+                    <div className="text-xs font-medium text-[var(--nv-text-primary)]">{f.label}</div>
+                    <div className="text-[9px] text-[var(--nv-text-tertiary)]">{f.hint}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 范围 */}
+        <div className="mb-4">
+          <div className="mb-2 text-[11px] text-[var(--nv-text-tertiary)]">导出范围</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setRange("all")}
+              className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                range === "all" ? "border-[var(--nv-primary)] bg-[var(--nv-primary-soft)] text-[var(--nv-primary)]" : "border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] text-[var(--nv-text-secondary)]"
+              }`}
+            >
+              全书
+            </button>
+            <button
+              onClick={() => setRange("selected")}
+              className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                range === "selected" ? "border-[var(--nv-primary)] bg-[var(--nv-primary-soft)] text-[var(--nv-primary)]" : "border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] text-[var(--nv-text-secondary)]"
+              }`}
+            >
+              选章（{selected.size}）
+            </button>
+          </div>
+          {range === "selected" && (
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-2">
+              {chapters.length === 0 && (
+                <div className="px-1 py-2 text-[10px] text-[var(--nv-text-muted)]">暂无章节可选</div>
+              )}
+              {chapters.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs hover:bg-[var(--nv-surface-2)]">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.id)}
+                    onChange={() => toggleChapter(c.id)}
+                    className="accent-[var(--nv-primary)]"
+                  />
+                  <span className="truncate text-[var(--nv-text-secondary)]">{c.title}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 选项 */}
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-[var(--nv-text-secondary)]">包含章节大纲</span>
+            <Switch checked={includeOutline} onCheckedChange={(next) => setIncludeOutline(next)} size="sm" />
+          </div>
+          <div>
+            <div className="mb-1 text-[11px] text-[var(--nv-text-tertiary)]">作者署名（可选）</div>
+            <input
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder="如：huanweide"
+              className="input-glass w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <p className="mb-2 text-[10px] leading-relaxed text-[var(--nv-text-muted)]">
+          导出前会自动跑一遍违禁词预检（可在「设置 → 违禁词」自定义词库）。
+        </p>
+
+        {pendingHits ? (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-[var(--nv-danger-soft)] bg-[var(--nv-danger-soft)]/40 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-[var(--nv-danger)]">
+                <Icon name="alert" size={16} /> 预检发现 {pendingHits.total} 处疑似违禁词
+              </div>
+              <p className="mt-1 text-[10px] text-[var(--nv-text-tertiary)]">
+                以下为候选命中（仅显示前 {pendingHits.hits.length} 条），是否真违禁由你判断，工具不自动删改。
+              </p>
+            </div>
+            <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-2">
+              {pendingHits.hits.map((h, i) => (
+                <div key={i} className="rounded px-2 py-1.5 text-[11px]">
+                  <span className="font-medium text-[var(--nv-danger)]">{h.word}</span>
+                  <span className="text-[var(--nv-text-tertiary)]"> · {h.chapter}</span>
+                  <p className="mt-0.5 truncate text-[var(--nv-text-secondary)]">…{h.context}…</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setPendingHits(null)} className="btn-ghost h-9 flex-1 text-sm">
+                返回修改
+              </Button>
+              <Button onClick={proceedExport} className="btn-primary h-9 flex-1 text-sm">
+                仍要导出
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button onClick={previewExport} disabled={previewLoading} className="btn-ghost h-9 flex-1 text-sm">
+              <Icon name="eye" size={14} /> {previewLoading ? "生成预览…" : "预览排版"}
+            </Button>
+            <Button onClick={doExport} disabled={checking} className="btn-primary h-9 flex-[2] text-sm">
+              <Icon name="upload" size={14} /> {checking ? "预检中…" : `导出 ${[...BASIC_FORMATS, ...ADVANCED_FORMATS].find((f) => f.key === format)?.label}`}
+            </Button>
+          </div>
+        )}
+      </div>
+      )}
+    </Modal>
+  );
+}
