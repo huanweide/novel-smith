@@ -78,6 +78,24 @@ jobs:
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```' -Encoding utf8
           }
 
+      # 三保险：artifact 与 step summary 都需要登录才能看；再把日志推到 ci-logs 分支，
+      # 本机只要 git fetch 就能读到失败原因（无 token 环境的唯一可靠通道）。
+      - name: Publish build log to ci-logs branch
+        if: failure()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          if (Test-Path build-log.txt) {
+            $free = (Get-PSDrive C).Free
+            Add-Content build-log.txt "`n==== CI META ====`nrun: $env:GITHUB_RUN_ID`nref: $env:GITHUB_REF_NAME`nsha: $env:GITHUB_SHA`nC: free bytes: $free"
+            git config user.name "ci-bot"
+            git config user.email "ci-bot@users.noreply.github.com"
+            git checkout --orphan "ci-log-$env:GITHUB_RUN_ID"
+            git add -f build-log.txt
+            git commit -m "ci: build log (run $env:GITHUB_RUN_ID)"
+            git push origin "HEAD:refs/heads/ci-logs" --force
+          }
+
       # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
