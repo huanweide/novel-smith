@@ -30,12 +30,15 @@ jobs:
       # （实测 v12.11.1 的 electron-v136 返回 404，只有 npmmirror 二进制镜像里有），
       # 而 .npmrc 被 gitignore（防 token），CI 默认拿不到镜像 → prebuild-install 找不到二进制
       # → rebuild:electron 非零退出 → dist 链路中断。构建前把镜像写进 CI 的 .npmrc。
+      # 同时给 electron-builder 的工具下载（nsis/winCodeSign/7zip）也配镜像：
+      # 实测直连 GitHub 下载这一步会偶发 504 Gateway Time-out，导致 installer 阶段挂掉。
       - name: Configure native binary mirrors
         shell: pwsh
         run: |
           Add-Content -Path .npmrc -Value "better_sqlite3_binary_host=https://registry.npmmirror.com/-/binary/better-sqlite3"
           Add-Content -Path .npmrc -Value "electron_mirror=https://registry.npmmirror.com/-/binary/electron/"
           Get-Content .npmrc
+          "ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/" | Add-Content -Path $env:GITHUB_ENV
 
       - name: Install
         run: npm ci
