@@ -40,10 +40,17 @@ const errors = [];
 if (installers.length === 0) {
   errors.push(`未找到 nsis 安装包（期望 NovelSmith-<version>-setup.exe），release 内容：${files.join(", ")}`);
 }
-for (const f of installers) {
-  if (!f.includes(version)) {
-    errors.push(`安装包 "${f}" 文件名不含版本号 v${version}，可能版本漂移`);
-  }
+// 判据只认「本次版本」：必须存在一个含当前版本的安装包。
+// 历史版本的安装包（本地 release/ 常留着上几个版本的产物）不算漂移——那是残留，
+// 只提示不影响门禁；否则本地 dist 只要有旧包就必挂（CI 干净环境才碰不到）。
+const matched = installers.filter((f) => f.includes(version));
+const staleInstallers = installers.filter((f) => !f.includes(version));
+if (installers.length > 0 && matched.length === 0) {
+  errors.push(`release/ 下没有任何含当前版本 v${version} 的安装包（现有：${installers.join(", ")}），可能版本漂移`);
+}
+if (staleInstallers.length > 0) {
+  console.warn("[check-dist-version] 注意：release/ 里有历史版本安装包（不影响门禁，但禁止上传）：");
+  console.warn("  " + staleInstallers.join(", "));
 }
 if (latestYml.length === 0) {
   errors.push("未生成 latest.yml（自动更新版本清单缺失）");
@@ -56,9 +63,9 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `[check-dist-version] OK：version=v${version}，安装包 ${installers.length} 个均含版本号，latest.yml 已生成`,
+  `[check-dist-version] OK：version=v${version}，当前版本安装包 ${matched.length} 个，latest.yml 已生成`,
 );
-console.log("  安装包：" + installers.join(", "));
+console.log("  安装包：" + matched.join(", "));
 if (portableLeftovers.length > 0) {
   console.warn("[check-dist-version] 注意：release/ 里仍有便携版残留产物，禁止上传到 GitHub Releases：");
   console.warn("  " + portableLeftovers.join(", "));

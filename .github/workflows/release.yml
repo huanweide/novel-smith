@@ -64,6 +64,20 @@ jobs:
           name: build-log
           path: build-log.txt
 
+      # 双保险：artifact 下载要登录，公开仓库匿名看不了；把日志尾部写进 run 的 step summary，
+      # 这样不看 artifact 也能直接看到失败原因（本地没有 token 时唯一可读通道）。
+      - name: Dump build log tail to summary
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path build-log.txt) {
+            $lines = Get-Content build-log.txt -Tail 120
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Build log tail (last 120 lines)" -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```' -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n") -Encoding utf8
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```' -Encoding utf8
+          }
+
       # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
