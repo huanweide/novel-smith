@@ -143,7 +143,13 @@ export interface GameSessionContext {
   totalWords: number;
   maxWords: number;
   plotProgress: number;
-  // 暗账（表层/真相分层，P1）：仅注入 prompt 给 AI，UI 不显示
+  // 叙事视点（三档，随 AI 演算自然切换玩法感）：
+  // first 第一人称单一视角（第二人称「你」，只知道扮演角色所知）
+  // third 第三人称小说视角（镜头跟随某角色，像读小说）
+  // god   群像上帝/GM（不扮演任何人，全知多线，输入是导演编排）
+  narrativeMode?: "first" | "third" | "god";
+  playAsName?: string | null; // first/third 的镜头角色
+  // 暗账（表层/真相分层，P1）：仅注入 prompt 给 AI，UI 不显示（god 模式例外：上帝本就全知）
   secretLedger?: Array<{ name: string; owner: string; truth: string; round: number }>;
 }
 

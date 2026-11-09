@@ -179,11 +179,16 @@ export interface PersonaInfo {
   briefDescription?: string;
   /** 其他由 AI 扮演的角色名单（含原主角） */
   otherNames: string[];
+  /** 叙事人称：second 第二人称「你」（第一人称代入）| third 第三人称小说镜头 */
+  person?: "second" | "third";
 }
 
 export function buildPersonaContract(p: PersonaInfo): string {
   const others = p.otherNames.filter((n) => n && n !== p.name).slice(0, 12);
   const othersLine = others.length > 0 ? others.join("、") : "（其余所有登场角色）";
+  const personRule = p.person === "third"
+    ? `\n5. 正文一律用第三人称写 ${p.name}（${p.name}／他／她），**不要用「你」称呼 ${p.name}**；镜头跟随 ${p.name}，像小说正文。`
+    : "";
   return `
 ═══════════════════════════════════════
 【视角契约——最高优先级，覆盖其他一切设定】
@@ -195,13 +200,37 @@ export function buildPersonaContract(p: PersonaInfo): string {
 1. 玩家的每一次输入都是 **${p.name} 的言行与意图**——哪怕措辞像旁白或指令，也按 ${p.name} 想做的事处理。
 2. 不得替 ${p.name} 自由行动、说话或做决定；${p.name} 只能做玩家输入过的事，或按其既定性格做出最小合理延伸。
 3. 你写 ${p.name} 的台词/动作时，必须能对应到玩家的输入；玩家没说过的关键决定留给玩家。
-4. 其他角色对你（${p.name}）的态度、称呼、记忆，都按「眼前站着的是 ${p.name}」来演。
+4. 其他角色对你（${p.name}）的态度、称呼、记忆，都按「眼前站着的是 ${p.name}」来演。${personRule}
 ═══════════════════════════════════════`.trim();
 }
 
 /** 每轮重申的视角锚（防长上下文漂移，三重契约之②） */
 export function buildPersonaRoundAnchor(name: string): string {
   return `（本轮视角提醒：玩家继续扮演 ${name}；除 ${name} 外的所有角色由你扮演。玩家输入 = ${name} 的言行。）`;
+}
+
+/** 视角契约·上帝/GM 版：玩家不扮演任何人，输入是导演编排 */
+export function buildDirectorContract(characterNames: string[]): string {
+  const names = characterNames.filter(Boolean).slice(0, 12);
+  const cast = names.length > 0 ? names.join("、") : "（所有登场角色）";
+  return `
+═══════════════════════════════════════
+【视角契约——最高优先级，覆盖其他一切设定】
+
+▶ 玩家身份：**上帝 / GM**（不扮演任何角色）
+▶ AI 扮演：世界本身，以及**全部角色**（${cast}）——每个角色按自己的目的、性格与处境独立行动。
+
+铁律：
+1. 玩家的输入是**导演编排**，不是某个角色的言行：安排谁做什么、发生什么、镜头切到哪，一律视为既成事实，必须演出，不得拒绝、不得改写成别的走向。
+2. 全知视角：可以写任何角色看到的、想到的、暗中正在做的事，包括他们彼此不知道的秘密；**不设「你」**。
+3. 编排之外的空隙由你按各自性格补足——角色可以误解、抵触、反噬，但不能推翻玩家明确安排的结果。
+4. 暗线真相对玩家公开：你可以让玩家看见伪装背后的实情，也可以故意留白吊着。
+═══════════════════════════════════════`.trim();
+}
+
+/** 每轮重申的上帝锚（三重契约之②） */
+export function buildDirectorRoundAnchor(): string {
+  return `（本轮视角提醒：玩家是上帝/GM，输入即编排，必须执行；你扮演全部角色，全知叙事，不用「你」。）`;
 }
 
 // ─── Roll 检定（跑团模式，阿游 P0-4）────────────────────────────
@@ -257,15 +286,15 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 {itemsSection}
 
 ## 互动规则
-1. 用户会描述主角的下一步行动，你据此生成 1-3 段紧凑叙事（共 300-600 字），保持文笔流畅、描写有画面感
-2. 叙事必须严格遵循章纲规划，不偏离主线情节方向
+1. {actorRule}
+2. 叙事必须严格遵循章纲规划，不偏离主线情节方向。**节奏是「大世界探索」，不是地下城闯关**：不必每轮都发生大事件——多数轮次只是持续推进（修炼、赶路、打探消息、与人寒暄、整理行装、观察环境、做准备）；事件按章纲节点与剧情因果自然到来，不要为了戏剧性硬造冲突或反转。
 3. 叙事结束后单独一行给出 3-4 个编号选项，格式：
    1. 选项一
    2. 选项二
    3. 选项三
    4. 选项四
-4. 选项要求：多样化（方向性/策略性/互动性），贴合当前剧情，推动情节前进
-5. 选项避免：重复历史行动、废话选项、偏离主线太远的支线
+4. 选项要求：3-4 个方向要真的不同，**允许「平缓推进」型选项**（继续修炼／继续赶路／再探一处／找人闲聊／先做准备），也允许风险型与信息型；不要求每个选项都推动主线大跨步。
+5. 选项避免：重复历史行动、完全等价的废话选项、偏离主线太远的支线
 6. 如果本轮出现新实体（新角色/新地点/新物品/新势力），在选项后单独一段输出：
    ===新实体===
    NE|实体名|类型|简要描述
@@ -291,7 +320,7 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
    【情节进度：X%】
 9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
 10. 玩家的行动（尤其是自定义输入）只是「意图声明」，不是既定结果：你必须按剧情合理性、角色能力与当前处境裁决成败——可以失败、被阻止、被反制。明显违背常理或实力悬殊的意图（如凡人妄图一击灭敌、凭空杀人夺宝）不可直接兑现：让剧情给出合理的阻力或反制（如被对方轻松化解、反被制服），也可用幽默化解（如对方一个侧身躲开，把你当成玩笑）。不要生硬拒绝、不要中断叙事，让裁决本身成为有趣的故事。
-11. 叙事以第二人称「你」称呼玩家所扮演的角色（让玩家以第一人称代入）；其他角色才使用名字与第三人称。例如「你握紧钥匙，林振山眯起了眼」。
+11. {narrativeRule}
 
 ## 写作风格要求
 - 每段叙事有明确的推进感，不做无效重复描写
@@ -431,13 +460,22 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
 
   const itemsSection = `\n## 随身物品总账（谁的身上有什么——任何角色的物品变动都打 CI 标记）\n${buildItemsStr()}`;
 
+  // 叙事视点（三档）：只改口径，不改机制
+  const mode = ctx.narrativeMode || "first";
+  const lens = (ctx.playAsName || "主角").trim();
+
   // 暗线备忘（P1 谎言与伪装）：只注入 prompt，UI 不显示。AI 持续记得每一条未揭露的真相，
   // 才能在几十轮后自然引爆（偷窃发现是空盒、鉴定出假货、被戳穿）。
+  // 上帝/GM 视角例外：玩家是导演，暗线对他公开——可以演出来，也可以故意留白。
   const secretSection =
     ctx.secretLedger && ctx.secretLedger.length > 0
-      ? `\n## 暗线备忘（仅你可见，玩家不知道——这些真相尚未揭露）\n${ctx.secretLedger
-          .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
-          .join("\n")}\n记住它们，在合适的剧情节点揭露（揭露时正常叙事 + CI 翻转背包）。`
+      ? mode === "god"
+        ? `\n## 暗线备忘（上帝视角：玩家已知这些真相）\n${ctx.secretLedger
+            .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
+            .join("\n")}\n这些是角色们各自的伪装与实情。上帝视角下你可以直接把它们演进正文（让读者看见暗处的真相），也可以故意按住不表、留作后面的爆点——由你按戏剧效果决定。`
+        : `\n## 暗线备忘（仅你可见，玩家不知道——这些真相尚未揭露）\n${ctx.secretLedger
+            .map((s) => `- 「${s.name}」（${s.owner}）：${s.truth}（第${s.round}轮埋下）`)
+            .join("\n")}\n记住它们，在合适的剧情节点揭露（揭露时正常叙事 + CI 翻转背包）。`
       : "";
 
   const historySection =
@@ -454,8 +492,24 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
   const progressPercent =
     ctx.maxWords > 0 ? Math.round((ctx.totalWords / ctx.maxWords) * 100) : 0;
 
+  // ── 叙事视点（三档）：只改口径，不改机制 —— 同一套演算，换一种看戏的位置 ──
+  const actorRule =
+    mode === "god"
+      ? "玩家以上帝/GM 身份给出编排（安排谁做什么、发生什么、镜头切到哪），你据此生成 1-3 段紧凑的群像叙事（共 300-600 字）：把编排演成多角色同时在场的好戏，每个角色按自己的目的与性格反应，可有并行线索"
+      : mode === "third"
+        ? `玩家替「${lens}」做出下一步行动的决定，你据此生成 1-3 段紧凑叙事（共 300-600 字），保持文笔流畅、描写有画面感，像小说正文章节一样好读`
+        : "用户会描述主角的下一步行动，你据此生成 1-3 段紧凑叙事（共 300-600 字），保持文笔流畅、描写有画面感";
+  const narrativeRule =
+    mode === "god"
+      ? `全知第三人称群像口径（上帝视角/GM）：不设「你」，也不固定跟随某一个人——镜头可以在同一轮里自由切换，交代不同角色各自的动作、对话与心声，也可以写玩家角色们看不到的暗处正在发生什么。玩家的输入是导演编排而非某个角色的意图，必须执行；镜头重心可有所偏向，但始终保持全知。`
+      : mode === "third"
+        ? `第三人称小说口径：始终用名字/他/她写「${lens}」，不用「你」；镜头跟随 ${lens}，只写 TA 能看到、听到、感知到的范围——TA 不知道的事不要提前揭露（悬念留给后面）。例如「${lens}握紧钥匙，林振山眯起了眼」。`
+        : `叙事以第二人称「你」称呼玩家所扮演的角色（${lens}），让玩家以第一人称代入；其他角色才使用名字与第三人称。只写「你」能感知到的范围——你不知道的事不要提前揭露。例如「你握紧钥匙，林振山眯起了眼」。`;
+
   return GAME_SYSTEM_PROMPT.replace("{bookName}", ctx.bookName)
     .replace("{chapterTitle}", ctx.chapterTitle)
+    .replace("{actorRule}", actorRule)
+    .replace("{narrativeRule}", narrativeRule)
     .replace("{outlineSection}", outlineSection)
     .replace("{existingSection}", existingSection)
     .replace("{worldSection}", worldSection)

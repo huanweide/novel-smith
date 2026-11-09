@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       projectId: result.projectId,
       sagaChapterId: result.sagaChapterId,
       finalContent: result.finalContent,
+      endingNarrative: result.endingNarrative,
       totalWords: result.totalWords,
       status: result.status,
       autoConfirmed: result.autoConfirmed,

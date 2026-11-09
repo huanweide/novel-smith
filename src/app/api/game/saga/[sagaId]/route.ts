@@ -70,6 +70,12 @@ export async function GET(_req: Request, { params }: Params) {
       hotspotNames,
       playAsCharacterId: saga.playAsCharacterId,
       playAsName: saga.playAsName,
+      // 叙事视点：first 第二人称亲历 | third 第三人称小说镜头 | god 群像上帝/GM
+      narrativeMode: (saga as any).narrativeMode || "first",
+      // 暗线账本：仅上帝/GM 视角对玩家公开真相；其他视角永远只见表层（空数组）
+      secretLedger: ((saga as any).narrativeMode || "first") === "god"
+        ? (() => { try { return JSON.parse(saga.secretLedger || "[]"); } catch { return []; } })()
+        : [],
       // 是否已有可编辑角色卡档案（前端据此在首次进入时弹一次「确认你的角色」）
       hasCharacterSheets: !!saga.characterSheets && Object.keys(saga.characterSheets as object).length > 0,
       rollMode: saga.rollMode,
@@ -99,6 +105,9 @@ export async function PATCH(req: Request, { params }: Params) {
     if (typeof body.playAsCharacterId === "string" || body.playAsCharacterId === null) data.playAsCharacterId = body.playAsCharacterId;
     if (typeof body.playAsName === "string" || body.playAsName === null) data.playAsName = body.playAsName;
     if (body.rollMode === "free" || body.rollMode === "tabletop") data.rollMode = body.rollMode;
+    if (body.narrativeMode === "first" || body.narrativeMode === "third" || body.narrativeMode === "god") {
+      data.narrativeMode = body.narrativeMode;
+    }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "无可更新字段" }, { status: 400 });
     }

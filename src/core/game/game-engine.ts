@@ -16,7 +16,7 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 import { getEffectiveConfig, createLLMClient } from "@/core/llm/client";
 import { evaluateConfirmEligibility, applyConfirm } from "@/core/confirm-guard";
 import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING } from "@/core/story-status";
-import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, isConfrontationalAction } from "./game-prompts";
+import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, buildDirectorContract, buildDirectorRoundAnchor, isConfrontationalAction } from "./game-prompts";
 import { arbitrateRoll, computeAdjustments, nextRollStats, judgeRoll, rateLabel, type RollStats } from "./roll-arbiter";
 import type { GameActionInput, GameTurnOutput, GameSessionContext, GameEntity, GameItem, GameOption, GameSessionSummary } from "./types";
 
@@ -374,6 +374,9 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
       totalWords: session.totalWords,
       maxWords: session.maxWords,
       plotProgress: session.plotProgress,
+      // 叙事视点：first 第二人称亲历 | third 第三人称小说镜头 | god 群像上帝/GM
+      narrativeMode: ((saga as any).narrativeMode || "first") as "first" | "third" | "god",
+      playAsName: saga.playAsName ?? null,
       // 暗账（P1 谎言与伪装）：未揭露的真相注入 prompt（仅 AI 可见），跨章持久
       secretLedger: (() => {
         try { return JSON.parse(saga.secretLedger || "[]"); } catch { return []; }
@@ -507,25 +510,32 @@ async function* runLockedTurn(
   const ctx = await loadGameContext(session);
 
   // 2. 组装提示词
-  // 视角契约（P0-3）：saga 扮演态每轮注入——系统提示词置顶契约块 + user prompt 轮锚（三重契约之①②）
+  // 视角契约（三档）：first/third 扮演镜头角色；god 不扮演任何人，注入导演契约（三重契约之①②）
   let personaBlock = "";
   let personaAnchor = "";
+  const narrativeMode = ctx.narrativeMode || "first";
   if (session.sagaId) {
-    const saga = await prisma.gameSaga.findUnique({
-      where: { id: session.sagaId },
-      select: { playAsCharacterId: true, playAsName: true },
-    });
-    const target = (saga?.playAsCharacterId || saga?.playAsName)
-      ? ctx.characters.find((c) => c.name === saga!.playAsName)
-      : undefined;
-    if (target) {
-      personaBlock = buildPersonaContract({
-        name: target.name,
-        role: target.role,
-        briefDescription: target.briefDescription,
-        otherNames: ctx.characters.filter((c) => c.name !== target.name).map((c) => c.name),
+    if (narrativeMode === "god") {
+      personaBlock = buildDirectorContract(ctx.characters.map((c) => c.name));
+      personaAnchor = `${buildDirectorRoundAnchor()}\n\n`;
+    } else {
+      const saga = await prisma.gameSaga.findUnique({
+        where: { id: session.sagaId },
+        select: { playAsCharacterId: true, playAsName: true },
       });
-      personaAnchor = `${buildPersonaRoundAnchor(target.name)}\n\n`;
+      const target = (saga?.playAsCharacterId || saga?.playAsName)
+        ? ctx.characters.find((c) => c.name === saga!.playAsName)
+        : undefined;
+      if (target) {
+        personaBlock = buildPersonaContract({
+          name: target.name,
+          role: target.role,
+          briefDescription: target.briefDescription,
+          otherNames: ctx.characters.filter((c) => c.name !== target.name).map((c) => c.name),
+          person: narrativeMode === "third" ? "third" : "second",
+        });
+        personaAnchor = `${buildPersonaRoundAnchor(target.name)}\n\n`;
+      }
     }
   }
   const systemPrompt = personaBlock ? `${personaBlock}\n\n${buildGameSystemPrompt(ctx)}` : buildGameSystemPrompt(ctx);
@@ -537,7 +547,11 @@ async function* runLockedTurn(
     const hit = opts.find((o: any) => o?.index === input.selectedOption);
     if (hit) selectedOptionText = hit.text;
   }
-  const userPromptBase = buildActionPrompt({ ...input, selectedOptionText });
+  let userPromptBase = buildActionPrompt({ ...input, selectedOptionText });
+  // 上帝/GM：玩家输入是导演编排（而非某角色言行），显式标注，避免 AI 当成角色台词
+  if (narrativeMode === "god") {
+    userPromptBase = `【导演编排｜上帝视角】\n${userPromptBase}`;
+  }
 
   // 骰子检定（P0-4 + 检定官进阶 + 两段式）：saga 跑团模式下，对抗类行动先由检定官裁定
   // 动态成功率（能力对比/情境修正/连胜连败/重复惩罚），再掷 d100 定结果，AI 只演不判。
@@ -548,7 +562,7 @@ async function* runLockedTurn(
       where: { id: session.sagaId },
       select: { rollMode: true, rollStats: true, playAsName: true, projectId: true },
     });
-    if (sagaRoll?.rollMode === "tabletop" && isConfrontationalAction(input.actionType, input.actionText)) {
+    if (narrativeMode !== "god" && sagaRoll?.rollMode === "tabletop" && isConfrontationalAction(input.actionType, input.actionText)) {
       // 行动指纹（重复检测）
       const actionKey = `${input.actionType}|${(input.actionText || "").slice(0, 40)}|${input.target ?? ""}`;
       const prevStats: RollStats = (sagaRoll.rollStats as any) || { winStreak: 0, loseStreak: 0, lastKey: "", repeatCount: 0 };
@@ -931,6 +945,7 @@ export async function* processGameStart(
   let characters: Array<{ name: string; role: string; currentStatus: string; background?: string }>;
   let loreEntries: Array<{ title: string; content: string }>;
   let sagaPlayAs: { playAsCharacterId: string | null; playAsName: string | null } | null = null;
+  let sagaNarrativeMode: "first" | "third" | "god" = "first";
   let personaBlock = "";
   let sagaSynopsis = "";
 
@@ -944,6 +959,7 @@ export async function* processGameStart(
       return;
     }
     sagaPlayAs = { playAsCharacterId: saga.playAsCharacterId, playAsName: saga.playAsName };
+    sagaNarrativeMode = ((saga as any).narrativeMode || "first") as "first" | "third" | "god";
     let snap: any = {};
     try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
     sagaSynopsis = typeof snap.synopsis === "string" ? snap.synopsis : "";
@@ -1008,29 +1024,39 @@ export async function* processGameStart(
     totalWords: existingContent.length,
     maxWords: 3000,
     plotProgress: 0,
+    narrativeMode: sagaNarrativeMode,
+    playAsName: sagaPlayAs?.playAsName ?? null,
   };
 
   const systemPromptBase = buildGameSystemPrompt(ctx);
-  const userPrompt = existingContent
+  const userPromptBase = existingContent
     ? `【开始游戏】本章已有正文 ${existingContent.length} 字。请从现有正文的结尾自然续接，为游戏开场：简短承接上一段情节，然后给出 3-4 个编号选项让玩家选择接下来的行动。`
     : chapterOutline
       ? `【开始游戏】根据章纲，为本章写一个开场。从"${chapterOutline.slice(0, 80)}..."开始，生成精彩的入场叙事。记住在叙事结束后给出 3-4 个编号选项。`
       : `【开始游戏】为本章写一个精彩的开场。描述场景、氛围和角色的初始状态，然后给出 3-4 个编号选项。`;
+  const userPrompt = sagaNarrativeMode === "god"
+    ? `${userPromptBase}\n\n（上帝视角：开场用全知群像写，不设「你」；给出的 3-4 个编号选项要写成「接下来可以怎么编排」的方向，例如：把镜头切到某人／让某事发生／同时推进两条线。）`
+    : userPromptBase;
 
-  // 视角契约（P0-3 扮演任意角色）：saga.playAs 指定扮演者时置顶注入契约 + 每轮锚
+  // 视角契约（三档）：first/third 需要扮演者；god 不扮演任何人，注入导演契约
   let personaName: string | null = null;
   if (isSaga) {
-    const target = characters.find(
-      (c: any) => c.id === (sagaPlayAs?.playAsCharacterId ?? null) || c.name === sagaPlayAs?.playAsName
-    );
-    if (target) {
-      personaName = target.name;
-      personaBlock = buildPersonaContract({
-        name: target.name,
-        role: target.role,
-        briefDescription: target.background || "",
-        otherNames: characters.filter((c: any) => c.name !== target.name).map((c: any) => c.name),
-      });
+    if (sagaNarrativeMode === "god") {
+      personaBlock = buildDirectorContract(characters.map((c: any) => c.name));
+    } else {
+      const target = characters.find(
+        (c: any) => c.id === (sagaPlayAs?.playAsCharacterId ?? null) || c.name === sagaPlayAs?.playAsName
+      );
+      if (target) {
+        personaName = target.name;
+        personaBlock = buildPersonaContract({
+          name: target.name,
+          role: target.role,
+          briefDescription: target.background || "",
+          otherNames: characters.filter((c: any) => c.name !== target.name).map((c: any) => c.name),
+          person: sagaNarrativeMode === "third" ? "third" : "second",
+        });
+      }
     }
   }
   const systemPrompt = personaBlock ? `${personaBlock}\n\n${systemPromptBase}` : systemPromptBase;
@@ -1199,6 +1225,8 @@ export async function endGameAndExport(sessionId: string): Promise<{
   /** 游戏本（Saga）模式：归档目标章节 */
   sagaChapterId: string | null;
   finalContent: string;
+  /** 本次结束本章时 AI 新写的收尾段（前端用它即时上屏，不必等重新拉全章） */
+  endingNarrative: string;
   totalWords: number;
   status: string;
   autoConfirmed: boolean;
@@ -1254,19 +1282,39 @@ export async function endGameAndExport(sessionId: string): Promise<{
     }
   }
 
+  // 收尾口径必须跟当前叙事视点一致，否则上帝/第三人称收尾突然变回「你」会跳戏
+  let endingPersonaRule = "";
+  if (isSaga) {
+    const book = await prisma.gameSaga.findUnique({
+      where: { id: session.sagaChapter!.sagaId },
+      select: { narrativeMode: true, playAsName: true },
+    });
+    const emode = book?.narrativeMode || "first";
+    const elens = (book?.playAsName || "主角").trim();
+    endingPersonaRule = emode === "god"
+      ? "本章收尾用全知群像口径：不设「你」，交代各方人物此刻各自的状态、去向或心事，像群像剧落幕。"
+      : emode === "third"
+        ? `本章收尾用第三人称写「${elens}」（${elens}／他／她），不要用「你」。`
+        : "本章收尾用第二人称「你」写主角。";
+  }
+
   // 3. 调用 LLM 生成结尾
   const llmConfig = await getEffectiveConfig();
   const client = createLLMClient(llmConfig);
 
   let endingPrompt: string;
   if (endingHook) {
-    endingPrompt = `本章即将结束。章纲预定了一个章节结尾的悬念钩子：
+    endingPrompt = `${endingPersonaRule}
+
+本章即将结束。章纲预定了一个章节结尾的悬念钩子：
 
 【章尾悬念】：${endingHook}
 
-请基于此钩子，结合前面已完成的剧情，生成 2-3 段叙事为本草收尾。保留悬念感和余韵，但也要给本章一个完整的收束。不要出现任何游戏标记（NE/CI/PROGRESS/选项编号）。像正常小说章节一样自然收尾。`;
+请基于此钩子，结合前面已完成的剧情，生成 2-3 段叙事为本章收尾。保留悬念感和余韵，但也要给本章一个完整的收束。不要出现任何游戏标记（NE/CI/PROGRESS/选项编号）。像正常小说章节一样自然收尾。`;
   } else {
-    endingPrompt = `本章即将结束。请基于前面已完成的剧情，生成 2-3 段叙事为本草收尾。可以是：
+    endingPrompt = `${endingPersonaRule}
+
+本章即将结束。请基于前面已完成的剧情，生成 2-3 段叙事为本章收尾。可以是：
 - 环境的淡出描写
 - 角色的内心独白
 - 时间的过渡提示
@@ -1399,6 +1447,7 @@ export async function endGameAndExport(sessionId: string): Promise<{
     projectId: session.projectId,
     sagaChapterId: session.sagaChapterId,
     finalContent,
+    endingNarrative,
     totalWords: finalWordCount,
     status: isSaga ? "archived" : autoConfirmed ? STATUS_CONFIRMED : STATUS_DRAFTING,
     autoConfirmed,

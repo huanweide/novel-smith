@@ -46,6 +46,10 @@ interface SagaDetail {
   hotspotNames: string[];
   playAsCharacterId: string | null;
   playAsName: string | null;
+  /** 叙事视点：first 第二人称亲历 | third 第三人称小说镜头 | god 群像上帝/GM */
+  narrativeMode: string;
+  /** 暗线账本：仅上帝/GM 视角返回真相（其他视角为空数组） */
+  secretLedger: Array<{ name: string; owner: string; truth: string; round: number }>;
   rollMode: string;
   rollDifficulty: string;
   playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }>;
@@ -88,6 +92,14 @@ const QUICK_ACTIONS = [
   { type: "explore", label: "探索", icon: "map", desc: "探索新区域" },
   { type: "use_item", label: "使用物品", icon: "backpack", desc: "使用背包物品" },
   { type: "rest", label: "休息", icon: "moon", desc: "休息恢复" },
+];
+/** 上帝/GM 的导演编排项：点击把半成品编排填进输入框，补一句就发（不直接消耗一轮） */
+const GM_ACTIONS = [
+  { fill: "【推进时间】时间推进到 ", icon: "hourglass", label: "推进时间", desc: "让时间/局势向前走一段" },
+  { fill: "【切换镜头】把镜头切到 ", icon: "eye", label: "切镜头", desc: "把镜头交给另一个人或另一个地方" },
+  { fill: "【制造意外】突然发生：", icon: "sparkles", label: "制造意外", desc: "在当下抛出一个变故" },
+  { fill: "【旁人视角】与此同时，另一边：", icon: "user", label: "旁人视角", desc: "写此刻别人在做什么" },
+  { fill: "【多线并行】两条线同时推进：", icon: "gitBranch", label: "多线并行", desc: "同一轮里推进两条线索" },
 ];
 
 /**
@@ -136,6 +148,8 @@ function SagaDetailInner() {
   const [activeChapter, setActiveChapter] = useState<SagaChapter | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "generating" | "playing">("idle");
+  /** 正在结束本章（AI 写收尾中）—— 用来给按钮单独显示进度，不与普通回合生成混淆 */
+  const [endingChapter, setEndingChapter] = useState(false);
   const [narrative, setNarrative] = useState("");
   const [streamed, setStreamed] = useState("");
   const [options, setOptions] = useState<GameOption[]>([]);
@@ -180,7 +194,9 @@ function SagaDetailInner() {
       if (!res.ok) throw new Error(data.error || "加载失败");
       setSaga(data.saga);
       // 首次进入且还没有角色卡档案、但存在可确认的角色：自动打开「我的角色」让你确认/填写
+      // （上帝视角不扮演任何人，不弹）
       if (data.saga && data.saga.hasCharacterSheets === false
+        && data.saga.narrativeMode !== "god"
         && (data.saga.playAsName || (data.saga.playAsCandidates || []).length > 0)
         && !sheetPromptedRef.current) {
         sheetPromptedRef.current = true;
@@ -390,7 +406,8 @@ function SagaDetailInner() {
 
   const act = async (actionType: string, actionText: string, selectedOption?: number) => {
     if (!sessionId || status !== "playing") return;
-    if (saga?.rollMode === "tabletop" && isConfrontationalAction(actionType, actionText)) {
+    // 上帝/GM 视角不掷骰：没有"我在冒险"，编排里的成败由 AI 按戏剧性演（也避免上帝给自己作弊）
+    if (saga?.narrativeMode !== "god" && saga?.rollMode === "tabletop" && isConfrontationalAction(actionType, actionText)) {
       pendingActionRef.current = { actionType, actionText, selectedOption };
       setDice({ rolling: true, result: null });
       await doRoll(false);
@@ -604,6 +621,7 @@ function SagaDetailInner() {
   // ── 收束本章 → 自动建下一章 → 自动开始（连续扮演：一键无缝进入下一章）──
   const continueNextChapter = async () => {
     if (!sessionId || !activeChapter) return;
+    setEndingChapter(true);
     setStatus("generating");
     try {
       const res = await fetch("/api/game/end", {
@@ -630,12 +648,16 @@ function SagaDetailInner() {
     } catch (e: any) {
       toastError(e.message || "续章失败");
       setStatus("playing");
+    } finally {
+      setEndingChapter(false);
     }
   };
 
-  // ── 只收束不续章（想停下来时用）──
-  const endOnly = async () => {
+  // ── 结束本章：AI 自动写收尾（2-3 段，按当前视角口径）→ 归档本章（想停下来时用）──
+  const endChapter = async () => {
     if (!sessionId) return;
+    if (!confirm("结束本章？\n\nAI 会先为这一章自动写 2-3 段收尾（小说的自然落幕），然后把本章归档。\n归档后可在左侧章节列表回看正文，随时点「继续本章」或开新章。")) return;
+    setEndingChapter(true);
     setStatus("generating");
     try {
       const res = await fetch("/api/game/end", {
@@ -645,14 +667,21 @@ function SagaDetailInner() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "收束失败");
-      toastSuccess("本章已收束归档");
-      setStatus("idle");
-      setActiveChapter(null);
+      // 收尾段即时上屏：作为「本章收束」一条轮次留在正文里（同时已落库到章节 content）
+      if (data.endingNarrative) {
+        setTurns((prev) => [...prev, { round: (prev[prev.length - 1]?.round ?? round) + 1, playerAction: "本章收束", narrative: data.endingNarrative }]);
+      }
+      if (data.totalWords) setTotalWords(data.totalWords);
+      setActiveChapter((prev) => (prev ? { ...prev, status: "archived", wordCount: data.totalWords || prev.wordCount } : prev));
       setSessionId(null);
+      toastSuccess("AI 已为本章写好收尾，本章已归档");
+      setStatus("idle");
       load();
     } catch (e: any) {
       toastError(e.message || "收束失败");
       setStatus("playing");
+    } finally {
+      setEndingChapter(false);
     }
   };
 
@@ -700,6 +729,24 @@ function SagaDetailInner() {
       load();
     } catch (e: any) {
       toastError(e.message || "设置失败");
+    }
+  };
+
+  // ── 叙事视点（三档）：第一人称亲历 / 第三人称小说镜头 / 群像上帝·GM ──
+  const setNarrativeMode = async (mode: string) => {
+    try {
+      const res = await fetch(`/api/game/saga/${sagaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ narrativeMode: mode }),
+      });
+      if (!res.ok) throw new Error("切换失败");
+      const label = mode === "god" ? "上帝视角：你不再扮演任何人，输入即导演编排" : mode === "third" ? "第三人称小说视角：镜头跟随你的角色" : "第一人称：你就是你的角色";
+      if (mode === "god") setLeftTab("plot"); // 暗线账本在「情节」页，切过去就能看见
+      toastSuccess(label);
+      load();
+    } catch (e: any) {
+      toastError(e.message || "切换失败");
     }
   };
 
@@ -778,16 +825,48 @@ function SagaDetailInner() {
             <h1 className="truncate text-lg font-bold text-[var(--nv-text-primary)]">{saga.title}</h1>
             <p className="text-xs text-[var(--nv-text-tertiary)]">
               {saga.sourceBookName ? `前传：《${saga.sourceBookName}》 · ` : ""}{saga.chapters.length} 章
-              {saga.playAsName ? ` · 扮演 ${saga.playAsName}` : ""}
+              {saga.narrativeMode === "god"
+                ? " · 上帝视角（不扮演任何人）"
+                : saga.playAsName
+                  ? ` · ${saga.narrativeMode === "third" ? "跟随" : "扮演"} ${saga.playAsName}`
+                  : ""}
               {activeChapter ? ` · 第 ${round} 轮 · ${totalWords} 字` : ""}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {/* 玩法教程（本页直达） */}
           <Button onClick={() => setShowTutorial(true)} className="btn-ghost h-8 rounded-lg px-3 text-xs" title="怎么玩：模式区别 / 背包世界 / 发现提示">
             <Icon name="lightbulb" size={12} /> 玩法
           </Button>
+          {/* 叙事视点（三档）：亲历 / 小说 / 上帝——分段控件比下拉更直观 */}
+          <div
+            className="flex h-8 items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-0.5"
+            title="亲历=你就是角色（第二人称「你」）；小说=第三人称镜头跟随你的角色；上帝=不扮演任何人，输入即导演编排，暗线真相对你公开"
+          >
+            {([
+              { v: "first", label: "亲历", icon: "user" },
+              { v: "third", label: "小说", icon: "book" },
+              { v: "god", label: "上帝", icon: "eye" },
+            ] as const).map((m) => {
+              const on = (saga.narrativeMode || "first") === m.v;
+              return (
+                <button
+                  key={m.v}
+                  onClick={() => { if (!on) setNarrativeMode(m.v); }}
+                  className={`flex h-full items-center gap-1 rounded-md px-2 text-[11px] transition-colors ${
+                    on
+                      ? m.v === "god"
+                        ? "bg-[var(--nv-primary)]/15 font-medium text-[var(--nv-primary)]"
+                        : "bg-[var(--nv-creative-soft)] font-medium text-[var(--nv-creative)]"
+                      : "text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
+                  }`}
+                >
+                  <Icon name={m.icon as IconName} size={11} /> {m.label}
+                </button>
+              );
+            })}
+          </div>
           {/* 交互模式开关（P0-4）：自由叙事 / 跑团检定 */}
           <select
             value={saga.rollMode || "free"}
@@ -807,7 +886,7 @@ function SagaDetailInner() {
               }
             }}
             title="自由叙事=AI 裁决一切；跑团检定=对抗行动掷骰定结果，AI 只演不判"
-            className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+            className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
           >
             <option value="free">模式：自由叙事（无骰子）</option>
             <option value="tabletop">模式：跑团检定（对抗掷骰）</option>
@@ -832,20 +911,20 @@ function SagaDetailInner() {
                 }
               }}
               title="简单=无限重骰；困难=每章 3 次重骰；真实=骰出什么是什么，不能重骰"
-              className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+              className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
             >
               <option value="easy">难度：简单</option>
               <option value="hard">难度：困难</option>
               <option value="real">难度：真实</option>
             </select>
           )}
-          {/* 扮演选择（P0-3） */}
-          {saga.playAsCandidates.length > 0 && (
+          {/* 扮演选择（P0-3）：上帝视角不扮演任何人，隐藏 */}
+          {saga.narrativeMode !== "god" && saga.playAsCandidates.length > 0 && (
             <select
               value={saga.playAsName || ""}
               onChange={(e) => setPlayAs(e.target.value)}
               title="选择你扮演的角色（局级设置，下一章生效）"
-              className="h-8 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none focus:border-[var(--nv-creative-soft)]"
+              className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
             >
               <option value="">扮演：默认主角</option>
               {saga.playAsCandidates.map((c) => (
@@ -939,6 +1018,25 @@ function SagaDetailInner() {
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 text-xs">
             {leftTab === "plot" && (
               <div>
+                {/* 上帝/GM：暗线账本（全知特权的可视证据）——放在默认的情节页，进来就能看见 */}
+                {saga.narrativeMode === "god" && (
+                  <div className="mb-3 rounded-xl border border-[var(--nv-creative)]/25 bg-[var(--nv-creative-soft)]/40 p-2">
+                    <p className="mb-1 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
+                      <Icon name="eye" size={12} className="text-[var(--nv-creative)]" /> 暗线账本
+                      <span className="rounded-full bg-[var(--nv-creative-soft)] px-1.5 text-[9px] text-[var(--nv-creative)]">上帝可见</span>
+                    </p>
+                    {saga.secretLedger.length === 0 && (
+                      <p className="italic text-[var(--nv-text-muted)]">还没有埋设中的暗线——AI 藏起来的伪装与真相会记在这里</p>
+                    )}
+                    {saga.secretLedger.map((s, i) => (
+                      <div key={`${s.name}-${i}`} className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/60 px-2 py-1.5">
+                        <p className="text-[var(--nv-text-primary)]">{s.name}{s.owner ? ` · ${s.owner}` : ""}</p>
+                        <p className="mt-0.5 text-[var(--nv-text-tertiary)]">真相：{s.truth}</p>
+                        <p className="mt-0.5 text-[9px] text-[var(--nv-text-muted)]">第 {s.round} 轮埋设</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <p className="mb-2 font-medium text-[var(--nv-text-primary)]">情节进度</p>
                 <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--nv-surface-2)]">
                   <div className="h-full rounded-full bg-[var(--nv-creative)] transition-all duration-700" style={{ width: `${plotProgress}%` }} />
@@ -960,24 +1058,28 @@ function SagaDetailInner() {
             )}
             {leftTab === "characters" && (
               <div>
-                {/* 我的角色：个人界面入口（此前左栏只有同伴，玩家看不到「我」） */}
-                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">我的角色</p>
-                <button
-                  onClick={() => { setSheetName(saga.playAsName || null); setSheetOpen(true); }}
-                  title="打开我的角色卡：个人状态 / 个人背包 / 能力 / 编辑"
-                  className="block w-full rounded-xl border border-[var(--nv-primary)]/30 bg-[var(--nv-primary)]/[0.07] px-2.5 py-2 text-left transition-colors hover:border-[var(--nv-primary)]/60"
-                >
-                  <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[var(--nv-primary)]/15 text-[10px] font-bold text-[var(--nv-primary)]">
-                      {(saga.playAsName || "主").slice(0, 1)}
-                    </span>
-                    <span className="truncate font-medium">{saga.playAsName || "主角"}</span>
-                    <span className="ml-auto shrink-0 rounded-full bg-[var(--nv-surface-3)] px-1.5 text-[9px] text-[var(--nv-text-tertiary)]">
-                      背包 {myItemCount}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-[10px] text-[var(--nv-text-tertiary)]">点开个人界面 · 状态 / 背包 / 能力 / 编辑</p>
-                </button>
+                {/* 我的角色：个人界面入口；上帝视角不扮演任何人 → 不显示（暗线账本在「情节」页） */}
+                {saga.narrativeMode !== "god" && (
+                  <>
+                    <p className="mb-2 font-medium text-[var(--nv-text-primary)]">我的角色</p>
+                    <button
+                      onClick={() => { setSheetName(saga.playAsName || null); setSheetOpen(true); }}
+                      title="打开我的角色卡：个人状态 / 个人背包 / 能力 / 编辑"
+                      className="block w-full rounded-xl border border-[var(--nv-primary)]/30 bg-[var(--nv-primary)]/[0.07] px-2.5 py-2 text-left transition-colors hover:border-[var(--nv-primary)]/60"
+                    >
+                      <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[var(--nv-primary)]/15 text-[10px] font-bold text-[var(--nv-primary)]">
+                          {(saga.playAsName || "主").slice(0, 1)}
+                        </span>
+                        <span className="truncate font-medium">{saga.playAsName || "主角"}</span>
+                        <span className="ml-auto shrink-0 rounded-full bg-[var(--nv-surface-3)] px-1.5 text-[9px] text-[var(--nv-text-tertiary)]">
+                          背包 {myItemCount}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-[10px] text-[var(--nv-text-tertiary)]">点开个人界面 · 状态 / 背包 / 能力 / 编辑</p>
+                    </button>
+                  </>
+                )}
 
                 <p className="mb-2 mt-4 font-medium text-[var(--nv-text-primary)]">场景角色</p>
                 {charEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
@@ -994,7 +1096,7 @@ function SagaDetailInner() {
                       <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
                         <Icon name="user" size={12} className="text-[var(--nv-text-tertiary)]" />
                         {e.name}
-                        {e.name === saga.playAsName && <span className="rounded bg-[var(--nv-primary)]/12 px-1 text-[9px] text-[var(--nv-primary)]">你</span>}
+                        {e.name === saga.playAsName && saga.narrativeMode !== "god" && <span className="rounded bg-[var(--nv-primary)]/12 px-1 text-[9px] text-[var(--nv-primary)]">你</span>}
                       </p>
                       <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-muted)]">{e.description}</p>
                     </button>
@@ -1059,10 +1161,15 @@ function SagaDetailInner() {
           ) : (
             <>
               <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-medium text-[var(--nv-text-primary)]">
-                  第 {activeChapter.index} 章 · {activeChapter.title}
-                </p>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="truncate text-sm font-medium text-[var(--nv-text-primary)]">
+                    第 {activeChapter.index} 章 · {activeChapter.title}
+                  </p>
+                  {status === "idle" && activeChapter.status === "archived" && (
+                    <span className="shrink-0 rounded-full bg-[var(--nv-surface-3)] px-2 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">已归档 · 正文含 AI 收尾</span>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {rollInfo && (
                     <span
                       className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
@@ -1071,24 +1178,38 @@ function SagaDetailInner() {
                       🎲 d100={rollInfo.d100} / 成功率{rollInfo.successRate ?? "?"}% · {rollInfo.label}
                     </span>
                   )}
-                  {status === "playing" && (
+                  {(status === "playing" || endingChapter) && (
                     <>
                       <Button
                         onClick={rollbackLastRound}
-                        disabled={round <= 1}
+                        disabled={round <= 1 || endingChapter}
                         className="btn-ghost h-7 rounded-lg px-3 text-xs"
                         title="撤回本轮：删除该轮叙事与物品变动，换一个行动重来（第 1 轮不可回退）"
                       >
                         回退一轮
                       </Button>
-                      <Button onClick={endOnly} className="btn-ghost h-7 rounded-lg px-3 text-xs" title="本章归档，停在这里">停下</Button>
-                      <Button onClick={continueNextChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章并无缝开启下一章（前情自动继承）">
+                      <Button
+                        onClick={endChapter}
+                        disabled={endingChapter}
+                        className="flex h-7 items-center gap-1 rounded-lg border border-[var(--nv-creative)]/40 bg-[var(--nv-creative-soft)] px-3 text-xs text-[var(--nv-creative)] transition-colors hover:border-[var(--nv-creative)] disabled:cursor-wait disabled:opacity-70"
+                        title="结束本章：AI 自动为这一章写 2-3 段收尾，然后归档（不丢正文）"
+                      >
+                        <Icon name={endingChapter ? "loader" : "pencil"} size={11} />
+                        {endingChapter ? "正在写收尾…" : "结束本章"}
+                      </Button>
+                      <Button onClick={continueNextChapter} disabled={endingChapter} className="btn-primary h-7 rounded-lg px-3 text-xs" title="收束本章（自动写收尾）并无缝开启下一章（前情自动继承）">
                         继续下一章 <Icon name="arrowRight" size={12} />
                       </Button>
                     </>
                   )}
                 </div>
               </div>
+              {status === "idle" && activeChapter.status === "archived" && (
+                <div className="mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 px-3 py-1.5 text-[11px] text-[var(--nv-text-tertiary)]">
+                  <Icon name="check" size={12} className="text-[var(--nv-creative)]" />
+                  本章已结束并归档（收尾已写入正文）。点左侧另一章继续，或右上「新章」开启下一章。
+                </div>
+              )}
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 {streamed ? (
                   <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{streamed}</p>
@@ -1157,27 +1278,46 @@ function SagaDetailInner() {
                       ))}
                     </div>
                   )}
-                  {/* 快捷动作（移植自旧游戏模式） */}
+                  {/* 快捷条：上帝视角=导演编排（点击填入半成品，补完再发），其余=角色行动（点了即发） */}
                   <div className="flex gap-1.5">
-                    {QUICK_ACTIONS.map((action) => (
-                      <button
-                        key={action.type}
-                        onClick={() => act(action.type, action.label)}
-                        disabled={status !== "playing"}
-                        title={action.desc}
-                        className="group flex flex-1 flex-col items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] py-1.5 text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Icon name={action.icon as IconName} size={14} />
-                        <span className="text-[10px]">{action.label}</span>
-                      </button>
-                    ))}
+                    {saga.narrativeMode === "god"
+                      ? GM_ACTIONS.map((action) => (
+                          <button
+                            key={action.label}
+                            onClick={() => setCustomInput(action.fill)}
+                            disabled={status !== "playing"}
+                            title={action.desc}
+                            className="group flex flex-1 flex-col items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] py-1.5 text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Icon name={action.icon as IconName} size={14} />
+                            <span className="text-[10px]">{action.label}</span>
+                          </button>
+                        ))
+                      : QUICK_ACTIONS.map((action) => (
+                          <button
+                            key={action.type}
+                            onClick={() => act(action.type, action.label)}
+                            disabled={status !== "playing"}
+                            title={action.desc}
+                            className="group flex flex-1 flex-col items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] py-1.5 text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Icon name={action.icon as IconName} size={14} />
+                            <span className="text-[10px]">{action.label}</span>
+                          </button>
+                        ))}
                   </div>
                   <div className="flex gap-2">
                     <input
                       value={customInput}
                       onChange={(e) => setCustomInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && customInput.trim()) { act("custom", customInput.trim()); setCustomInput(""); } }}
-                      placeholder="描述你的行动…"
+                      placeholder={
+                        saga.narrativeMode === "god"
+                          ? "写下你的编排：安排谁做什么、发生什么、镜头切到哪…"
+                          : saga.narrativeMode === "third"
+                            ? `替「${saga.playAsName || "你的角色"}」决定下一步…`
+                            : "描述你的行动…"
+                      }
                       className="input-glass flex-1 rounded-lg px-3 py-2 text-sm"
                     />
                     <Button
@@ -1597,12 +1737,18 @@ function SagaDetailInner() {
                 <p className="text-xs"><span className="text-[var(--nv-text-primary)]">跑团检定</span>：战斗/偷袭/说服等对抗行动先掷骰（d100 对比成功率），骰出什么是什么，AI 只负责把结果演成剧情。难度档决定重骰次数：简单无限 / 困难 3 次 / 真实不可重骰。</p>
               </div>
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">三种叙事视点（顶栏「视角」随时切换）</p>
+                <p className="text-xs"><span className="text-[var(--nv-text-primary)]">第一人称·亲历</span>：你就是你的角色，正文用「你」写；你只知道 TA 能感知到的。</p>
+                <p className="text-xs"><span className="text-[var(--nv-text-primary)]">第三人称·小说</span>：你替角色做决定，正文用名字/他/她写 TA，镜头跟着 TA 走，像读小说，悬念不提前揭。</p>
+                <p className="text-xs"><span className="text-[var(--nv-text-primary)]">上帝·群像编排</span>：不扮演任何人。你的输入是导演编排（安排谁做什么、镜头切到哪、发生什么），AI 必须照演；快捷条变成「推进时间 / 切镜头 / 制造意外 / 旁人视角 / 多线并行」，左栏还会显示 AI 藏起来的暗线真相。</p>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
                 <p className="text-xs font-medium text-[var(--nv-text-primary)]">面板速览</p>
                 <p className="text-xs">左栏：章节切换 + 情节进度 + 遇到的角色与势力；右栏：正文累计、背包（物品可一键「使用/装备」作为行动）、世界观与世界书。</p>
               </div>
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
                 <p className="text-xs font-medium text-[var(--nv-text-primary)]">连续游玩</p>
-                <p className="text-xs">一章玩到想收尾时点「继续下一章」：本章自动归档，新章自动继承前情，不用退出重来。</p>
+                <p className="text-xs">一章玩到想收尾时点「结束本章」：AI 会先自动写 2-3 段收尾（按当前视角口径），然后把本章归档，正文不丢。点「继续下一章」则连收尾带开新章一次做完，新章自动继承前情，不用退出重来。</p>
               </div>
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
                 <p className="text-xs font-medium text-[var(--nv-text-primary)]">「化身角色亲历剧情」一轮到底发生什么</p>
@@ -1611,7 +1757,7 @@ function SagaDetailInner() {
                   <li><span className="text-[var(--nv-text-primary)]">判定</span>（仅跑团检定）：检定官先读你的能力与处境，给出成功率与理由 → d100 掷骰（右下角动画，不挡操作）→ 骰出什么是什么，成败再交给叙事。能力写在角色卡里就会成为加成依据。</li>
                   <li><span className="text-[var(--nv-text-primary)]">演出</span>：AI 用第二人称「你」写这一轮；遇到的每个角色都按自己的目的行动——可以合作、敷衍、撒谎，也可能趁你不备做点什么。</li>
                   <li><span className="text-[var(--nv-text-primary)]">实时演算</span>：途中发现的人/势力/物品即时上屏；拿到、失去、损坏、被转移的物品立即更新到对应角色的背包（不等轮末）。</li>
-                  <li><span className="text-[var(--nv-text-primary)]">接续</span>：每轮结尾给你 2-4 个后续选项，也可以完全不理它们、输入自己的行动；情节进度与正文累计同步增长。</li>
+                  <li><span className="text-[var(--nv-text-primary)]">接续</span>：每轮 300-600 字结束后给 3-4 个抉择，也可以完全不理它们、输入自己的行动。这是大世界探索的节奏——抉择不必都是大事件，「继续修炼」「继续赶路」「再探一处」这类平缓推进同样成立；事件按章纲与因果自然到来。</li>
                 </ol>
               </div>
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">

@@ -559,6 +559,8 @@ model GameSaga {
   status            String   @default("active") // active | archived
   // 前传快照（派生时冻结）：{ bookName, synopsis, chapters:[{id,title,content}], characters, lore, derivedAt }
   sourceSnapshot    String   @default("")
+  // 叙事视点：first 第一人称单一视角（第二人称「你」）| third 第三人称小说视角（镜头跟随）| god 群像上帝/GM（全知多线，不扮演任何人）
+  narrativeMode     String   @default("first")
   // 扮演态（P0-3 扩展用）
   playAsCharacterId String? // 扮演的角色卡 id（null=默认主角视角）
   playAsName        String? // 扮演者名快照
