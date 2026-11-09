@@ -11,9 +11,10 @@
  * - 及时演算：token 流中 NE|/CI| 标记实时解析，发现/物品变动即时上屏（不再等轮末）
  */
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { CharacterSheetPanel } from "@/components/game/saga/CharacterSheetPanel";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/States";
 import { Modal } from "@/components/ui/Modal";
@@ -178,6 +179,14 @@ function SagaDetailInner() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "加载失败");
       setSaga(data.saga);
+      // 首次进入且还没有角色卡档案、但存在可确认的角色：自动打开「我的角色」让你确认/填写
+      if (data.saga && data.saga.hasCharacterSheets === false
+        && (data.saga.playAsName || (data.saga.playAsCandidates || []).length > 0)
+        && !sheetPromptedRef.current) {
+        sheetPromptedRef.current = true;
+        setSheetName(data.saga.playAsName || null);
+        setSheetOpen(true);
+      }
     } catch {
       setNotFound(true);
     }
@@ -523,6 +532,15 @@ function SagaDetailInner() {
 
   // ── 角色交互（P1 自由操作）：点人/点热点 → 交互菜单（行动即模板，后果由 AI 演）──
   const [interactChar, setInteractChar] = useState<string | null>(null);
+  // 角色卡 / 个人界面
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetName, setSheetName] = useState<string | null>(null);
+  const sheetPromptedRef = useRef(false); // 首次进入只自动弹一次
+  // 我的角色背包件数（左栏摘要）
+  const myItemCount = useMemo(() => {
+    const asName = saga?.playAsName || "主角";
+    return items.filter((i) => (i.owner || asName) === asName).length;
+  }, [items, saga?.playAsName]);
   const [showGive, setShowGive] = useState(false); // 赠予：展开主角物品选择
   const interactWith = (name: string, actionType: string, text: string) => {
     setInteractChar(null);
@@ -942,21 +960,54 @@ function SagaDetailInner() {
             )}
             {leftTab === "characters" && (
               <div>
-                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">场景角色</p>
+                {/* 我的角色：个人界面入口（此前左栏只有同伴，玩家看不到「我」） */}
+                <p className="mb-2 font-medium text-[var(--nv-text-primary)]">我的角色</p>
+                <button
+                  onClick={() => { setSheetName(saga.playAsName || null); setSheetOpen(true); }}
+                  title="打开我的角色卡：个人状态 / 个人背包 / 能力 / 编辑"
+                  className="block w-full rounded-xl border border-[var(--nv-primary)]/30 bg-[var(--nv-primary)]/[0.07] px-2.5 py-2 text-left transition-colors hover:border-[var(--nv-primary)]/60"
+                >
+                  <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[var(--nv-primary)]/15 text-[10px] font-bold text-[var(--nv-primary)]">
+                      {(saga.playAsName || "主").slice(0, 1)}
+                    </span>
+                    <span className="truncate font-medium">{saga.playAsName || "主角"}</span>
+                    <span className="ml-auto shrink-0 rounded-full bg-[var(--nv-surface-3)] px-1.5 text-[9px] text-[var(--nv-text-tertiary)]">
+                      背包 {myItemCount}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-[10px] text-[var(--nv-text-tertiary)]">点开个人界面 · 状态 / 背包 / 能力 / 编辑</p>
+                </button>
+
+                <p className="mb-2 mt-4 font-medium text-[var(--nv-text-primary)]">场景角色</p>
                 {charEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
                 {charEntities.map((e) => (
-                  <button
+                  <div
                     key={e.name}
-                    onClick={() => setInteractChar(e.name)}
-                    title={`与${e.name}交互（观察/对话/交易/赠予/偷窃/抢夺）`}
-                    className="mt-2 block w-full rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 text-left transition-colors hover:border-[var(--nv-creative-soft)]"
+                    className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 transition-colors hover:border-[var(--nv-creative-soft)]"
                   >
-                    <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
-                      <Icon name="user" size={12} className="text-[var(--nv-text-tertiary)]" />
-                      {e.name}
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-muted)]">{e.description}</p>
-                  </button>
+                    <button
+                      onClick={() => { setSheetName(e.name); setSheetOpen(true); }}
+                      title={`查看${e.name}的角色卡（状态/背包/能力，可编辑）`}
+                      className="block w-full text-left"
+                    >
+                      <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
+                        <Icon name="user" size={12} className="text-[var(--nv-text-tertiary)]" />
+                        {e.name}
+                        {e.name === saga.playAsName && <span className="rounded bg-[var(--nv-primary)]/12 px-1 text-[9px] text-[var(--nv-primary)]">你</span>}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-[var(--nv-text-muted)]">{e.description}</p>
+                    </button>
+                    <div className="mt-1 flex justify-end">
+                      <button
+                        onClick={() => setInteractChar(e.name)}
+                        className="rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[9px] text-[var(--nv-text-tertiary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-creative)]"
+                        title={`与${e.name}交互（观察/对话/交易/赠予/偷窃/抢夺）`}
+                      >
+                        交互
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -1515,6 +1566,18 @@ function SagaDetailInner() {
         </Modal>
       )}
 
+      {/* ── 角色卡 / 个人界面（我的角色 + 同伴） ── */}
+      <CharacterSheetPanel
+        sagaId={sagaId}
+        open={sheetOpen}
+        initialName={sheetName}
+        isPlayerView
+        items={items.map((i) => ({ name: i.name, category: i.category, owner: i.owner, broken: i.damaged, effect: i.source }))}
+        onClose={() => setSheetOpen(false)}
+        onPlayAsChanged={() => { void load(); }}
+        onUseItem={(itemName) => { setSheetOpen(false); void runAction("custom", `使用「${itemName}」`, undefined, undefined); }}
+      />
+
       {/* ── 玩法教程（本页直达） ── */}
       {showTutorial && (
         <Modal open onClose={() => setShowTutorial(false)} bare panelClassName="max-w-lg" labelledBy="saga-tutorial-title">
@@ -1540,6 +1603,20 @@ function SagaDetailInner() {
               <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
                 <p className="text-xs font-medium text-[var(--nv-text-primary)]">连续游玩</p>
                 <p className="text-xs">一章玩到想收尾时点「继续下一章」：本章自动归档，新章自动继承前情，不用退出重来。</p>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">「化身角色亲历剧情」一轮到底发生什么</p>
+                <ol className="space-y-1 pl-4 text-xs list-decimal">
+                  <li><span className="text-[var(--nv-text-primary)]">你出招</span>：点选项 / 快捷动作 / 角色交互（观察·对话·交易·讨要·偷窃·抢夺·赠予）/ 从角色卡用装备 / 或直接自由输入任何行动。</li>
+                  <li><span className="text-[var(--nv-text-primary)]">判定</span>（仅跑团检定）：检定官先读你的能力与处境，给出成功率与理由 → d100 掷骰（右下角动画，不挡操作）→ 骰出什么是什么，成败再交给叙事。能力写在角色卡里就会成为加成依据。</li>
+                  <li><span className="text-[var(--nv-text-primary)]">演出</span>：AI 用第二人称「你」写这一轮；遇到的每个角色都按自己的目的行动——可以合作、敷衍、撒谎，也可能趁你不备做点什么。</li>
+                  <li><span className="text-[var(--nv-text-primary)]">实时演算</span>：途中发现的人/势力/物品即时上屏；拿到、失去、损坏、被转移的物品立即更新到对应角色的背包（不等轮末）。</li>
+                  <li><span className="text-[var(--nv-text-primary)]">接续</span>：每轮结尾给你 2-4 个后续选项，也可以完全不理它们、输入自己的行动；情节进度与正文累计同步增长。</li>
+                </ol>
+              </div>
+              <div className="rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3 space-y-1.5">
+                <p className="text-xs font-medium text-[var(--nv-text-primary)]">角色卡与个人界面</p>
+                <p className="text-xs">左栏「我的角色」点开是你的个人界面：状态（体力/精神/伤势/情绪/位置）、个人背包、能力（检定时加成）、关系与备注，可逐项编辑。点任意同伴也能看 TA 的角色卡；底部「以 TA 的身份继续」即可换人——世界与进度不变，只换视角。</p>
               </div>
             </div>
             <button onClick={() => setShowTutorial(false)} className="mt-5 w-full btn-primary rounded-xl py-2.5 text-sm font-medium">

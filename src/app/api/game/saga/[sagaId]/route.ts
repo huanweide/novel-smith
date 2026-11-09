@@ -70,6 +70,8 @@ export async function GET(_req: Request, { params }: Params) {
       hotspotNames,
       playAsCharacterId: saga.playAsCharacterId,
       playAsName: saga.playAsName,
+      // 是否已有可编辑角色卡档案（前端据此在首次进入时弹一次「确认你的角色」）
+      hasCharacterSheets: !!saga.characterSheets && Object.keys(saga.characterSheets as object).length > 0,
       rollMode: saga.rollMode,
       playAsCandidates,
       chapters: saga.chapters.map((c) => ({
