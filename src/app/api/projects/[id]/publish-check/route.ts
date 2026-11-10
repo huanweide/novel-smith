@@ -1,10 +1,14 @@
 /**
  * 发布与过检统一检查（M2 + M3 + M4 一次拿全）
  *
- * 一次请求返回三份报告，避免前端为三块内容发三次请求：
+ * 一次请求返回四份报告，避免前端为四块内容发四次请求：
  *   - risk        M2 平台级过审预检（按目标平台口味预判被判 AI 的风险）
  *   - consistency M3 长篇一致性巡检（性别指代 / 外貌 / 已故仍活动 / 伏笔拖延）
  *   - publish     M4 发布管线诊断（逐章字数是否达标、断章合并建议）
+ *   - preflight   番茄发布体检（逐章：字数硬门槛/AI 痕迹/对话/段落/标点/标题）
+ *
+ * ⚠️ 单一判据：preflight 与「番茄发布台」用的是同一个函数（core/publish/fanqie/preflight），
+ *    同一个问题不会在工作台说合格、到发布台又说不行。改规矩只改那一处。
  *
  * 全部纯本地计算，不联网、不调 LLM、不上传稿件。
  */
@@ -19,6 +23,7 @@ import {
   buildAttributionHtml,
   type PublishPlatform,
 } from "@/core/publish/pipeline";
+import { preflightChapters } from "@/core/publish/fanqie/preflight";
 
 /** M2 支持的平台 */
 const RISK_PLATFORMS: PlatformId[] = ["fanqie", "qidian", "jjwxc", "general"];
@@ -82,6 +87,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   );
   const publish = buildPublishReport(nodes, publishPlatform);
 
+  // 番茄发布体检：与发布台同源。只对番茄有意义，其它平台返回空数组（不假装通用）。
+  const preflight = publishPlatform === "fanqie" ? preflightChapters(nodes) : [];
+  const preflightSummary =
+    preflight.length > 0
+      ? {
+          total: preflight.length,
+          pass: preflight.filter((r) => r.preflight.pass).length,
+          blocked: preflight.filter((r) => !r.preflight.pass).length,
+          avgScore: Math.round(
+            preflight.reduce((s, r) => s + r.preflight.score, 0) / preflight.length,
+          ),
+        }
+      : null;
+
   // 按目标平台排版并组合成可直接下载/粘贴的文稿
   const activeNodes = (nodes || [])
     .filter((n) => (n.content || "").trim())
@@ -130,6 +149,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     risk,
     consistency,
     publish,
+    preflight,
+    preflightSummary,
     export: { text: exportText, html: exportHtml },
     meta: {
       platform,

@@ -15,6 +15,7 @@
 //   - 标点：连续感叹号/问号、全半角混用会被判格式问题
 
 import { analyzeText } from "../../humanize";
+import { countWords, formatChapterTitle, formatForPlatform } from "../pipeline";
 import {
   FANQIE_BEST_WORDS,
   FANQIE_MAX_PARAGRAPH,
@@ -23,11 +24,6 @@ import {
   type PreflightResult,
   type PreflightStats,
 } from "./types";
-
-/** 去掉空白后的字数（网文平台惯例：中文按字算） */
-function countWords(text: string): number {
-  return (text || "").replace(/\s+/g, "").length;
-}
 
 function splitParagraphs(text: string): string[] {
   return (text || "")
@@ -205,4 +201,46 @@ export function preflightChapter(input: PreflightInput): PreflightResult {
     stats,
     checkedAt: new Date().toISOString(),
   };
+}
+
+export interface ChapterPreflightRow {
+  nodeId: string;
+  /** 章节序号（1 起） */
+  chapterOrder: number;
+  title: string;
+  /** 排版后的正文（番茄口径）。默认不返回，避免整本书正文塞进诊断响应 */
+  content?: string;
+  wordCount: number;
+  preflight: PreflightResult;
+}
+
+/**
+ * 批量体检一本书的所有章节（工作台「发布与过检」面板与发布台共用同一份判据）。
+ *
+ * 为什么放在这里而不是各页面各写一套：番茄的规矩只应该有一个实现。
+ * 之前工作台只做字数诊断、发布台才有深度体检，用户要在两个页面看两套结论——
+ * 同一条内容两处判断不一致，比没有检查更糟。
+ *
+ * @param withContent 是否返回排版后的正文；诊断场景不要开（整本书正文体积很大）
+ */
+export function preflightChapters(
+  nodes: Array<{ id: string; order: number; title?: string | null; content?: string | null }>,
+  options: { withContent?: boolean } = {},
+): ChapterPreflightRow[] {
+  return (nodes || [])
+    .filter((n) => n && (n.content || "").trim())
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((n, i) => {
+      const chapterOrder = i + 1;
+      const title = formatChapterTitle(n.title, chapterOrder - 1, "fanqie");
+      const content = formatForPlatform(n.content || "", "fanqie");
+      return {
+        nodeId: n.id,
+        chapterOrder,
+        title,
+        ...(options.withContent ? { content } : {}),
+        wordCount: countWords(content),
+        preflight: preflightChapter({ title, content, chapterOrder }),
+      };
+    });
 }

@@ -78,6 +78,25 @@ export async function POST(req: Request) {
       const title = formatChapterTitle(String(body.chapterTitle || ""), order - 1, "fanqie");
       const content = formatForPlatform(rawContent, "fanqie");
       const pre = preflightChapter({ title, content, chapterOrder: order });
+
+      // 幂等：同一个 node 已经在队列里（非取消态）就不再建一条，
+      // 否则连点两次按钮会把同一章发两遍——这是最容易发生的重复发布事故。
+      const nodeId = body.nodeId ? String(body.nodeId) : null;
+      if (nodeId) {
+        const existing = await prisma.publishTask.findFirst({
+          where: { accountId, nodeId, status: { not: "canceled" } },
+        });
+        if (existing) {
+          return NextResponse.json({
+            ok: true,
+            task: existing,
+            preflight: pre,
+            deduped: true,
+            message: "这一章已经在队列里，没有重复入队",
+          });
+        }
+      }
+
       const task = await prisma.publishTask.create({
         data: {
           accountId,
@@ -99,11 +118,18 @@ export async function POST(req: Request) {
       const projectId = String(body.projectId || "");
       if (!projectId) return NextResponse.json({ error: "缺少 projectId" }, { status: 400 });
       const nodeIds: string[] = Array.isArray(body.nodeIds) ? body.nodeIds.map(String) : [];
-      const nodes = await prisma.storyNode.findMany({
-        where: nodeIds.length > 0 ? { id: { in: nodeIds }, projectId } : { projectId },
+      // 全书章节（用于算真实章节号：只入队第 5 章时它仍是「第5章」，不能变「第1章」）
+      const allNodes = await prisma.storyNode.findMany({
+        where: { projectId },
         orderBy: { order: "asc" },
+        select: { id: true, title: true, content: true, order: true },
       });
-      const candidates = nodes.filter((n) => (n.content || "").trim().length > 0);
+      const allWithContent = allNodes.filter((n) => (n.content || "").trim().length > 0);
+      const posMap = new Map(allWithContent.map((n, i) => [n.id, i + 1]));
+
+      const candidates = (
+        nodeIds.length > 0 ? allWithContent.filter((n) => nodeIds.includes(n.id)) : allWithContent
+      ).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       if (candidates.length === 0) {
         return NextResponse.json({ error: "该项目还没有可发的正文（章节内容为空）" }, { status: 400 });
       }
@@ -112,19 +138,32 @@ export async function POST(req: Request) {
       const perDay = Math.max(1, Math.floor(Number(body.perDay) || account?.dailyLimit || 1));
       const startDate = String(body.startDate || "").trim() || new Date().toISOString().slice(0, 10);
 
+      const created: Array<{ id: string; chapterOrder: number; chapterTitle: string; at: string | null; pass: boolean; score: number }> = [];
+      // 已在队列里的 node 跳过：重复入队 = 同一章会发两遍
+      const existingNodes = new Set(
+        (
+          await prisma.publishTask.findMany({
+            where: { accountId, status: { not: "canceled" }, nodeId: { not: null } },
+            select: { nodeId: true },
+          })
+        ).map((t) => t.nodeId!),
+      );
+      const fresh = candidates.filter((n) => !existingNodes.has(n.id));
+      const skippedCount = candidates.length - fresh.length;
+
+      // 排期只按真正要发的章数算，避免给已入队的章白占槽位
       const plan = planSchedule({
         startDate,
-        count: candidates.length,
+        count: fresh.length,
         perDay,
         dailyLimit: account?.dailyLimit || 1,
         windowStartMin: account?.windowStartMin ?? 480,
         windowEndMin: account?.windowEndMin ?? 540,
       });
 
-      const created: Array<{ id: string; chapterOrder: number; chapterTitle: string; at: string | null; pass: boolean; score: number }> = [];
-      for (let i = 0; i < candidates.length; i++) {
-        const node = candidates[i];
-        const order = i + 1;
+      for (let i = 0; i < fresh.length; i++) {
+        const node = fresh[i];
+        const order = posMap.get(node.id) ?? i + 1;
         const title = formatChapterTitle(node.title, order - 1, "fanqie");
         const content = formatForPlatform(node.content || "", "fanqie");
         const pre = preflightChapter({ title, content, chapterOrder: order });
@@ -150,6 +189,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         created,
+        skipped: skippedCount,
         warnings: plan.warnings,
         dailyCap: FANQIE_DAILY_HARD_CAP,
       });

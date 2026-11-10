@@ -12,11 +12,12 @@
  *   ④ 平台改版是常态——探测/DOM 检查按钮就在手边，不让人对着黑箱猜。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { toastError, toastSuccess } from "@/components/ui/toast";
+import { hhmmToMinutes, minutesToHHMM } from "@/core/publish/fanqie/types";
 
 interface Account {
   id: string;
@@ -116,17 +117,18 @@ function fmtTime(iso: string | null): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-function minToHHMM(min: number): string {
-  return `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
-}
-function hhmmToMin(v: string): number {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(v);
-  if (!m) return 0;
-  return Number(m[1]) * 60 + Number(m[2]);
-}
 
 export default function PublishPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-xs text-[var(--nv-text-tertiary)]">加载发布台…</div>}>
+      <PublishInner />
+    </Suspense>
+  );
+}
+
+function PublishInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [account, setAccount] = useState<Account | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
@@ -151,6 +153,8 @@ export default function PublishPage() {
   // 排期参数
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [perDay, setPerDay] = useState(1);
+  /** 存稿池每章的番茄体检结果（与工作台「发布与过检」同源，nodeId → 结果） */
+  const [chapterHealth, setChapterHealth] = useState<Record<string, { pass: boolean; score: number }>>({});
 
   const [probe, setProbe] = useState<{ ok: boolean; status: number; sample: string; error?: string } | null>(null);
   const [cdpInfo, setCdpInfo] = useState<{ ok: boolean; page?: { title: string; url: string }; editorReady?: boolean; error?: string } | null>(null);
@@ -169,8 +173,8 @@ export default function PublishPage() {
       setCdpEndpoint(a.cdpEndpoint);
       setAutoMode(a.autoMode);
       setDailyLimit(a.dailyLimit);
-      setWinStart(minToHHMM(a.windowStartMin));
-      setWinEnd(minToHHMM(a.windowEndMin));
+      setWinStart(minutesToHHMM(a.windowStartMin));
+      setWinEnd(minutesToHHMM(a.windowEndMin));
     } catch (e: any) {
       toastError(e.message || "加载账号失败");
     }
@@ -212,6 +216,12 @@ export default function PublishPage() {
   }, [projectId]);
 
   useEffect(() => {
+    // 支持从工作台「发布与过检」带 ?projectId= 跳进来，直接定位到那本书
+    const fromQuery = searchParams.get("projectId");
+    if (fromQuery) setProjectId(fromQuery);
+  }, [searchParams]);
+
+  useEffect(() => {
     void loadAccount();
     void loadTasks();
     void loadLogs();
@@ -221,6 +231,7 @@ export default function PublishPage() {
   const loadChapters = useCallback(async (pid: string) => {
     if (!pid) {
       setChapters([]);
+      setChapterHealth({});
       return;
     }
     try {
@@ -231,9 +242,29 @@ export default function PublishPage() {
         .filter((c: any) => c.words > 0)
         .map((c: any) => ({ id: c.id, order: c.order, title: c.title, words: c.words }));
       setChapters(list);
+
+      // 复用工作台同一份体检（publish-check），避免两处判据不一致
+      try {
+        const pr = await fetch(`/api/projects/${pid}/publish-check`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform: "fanqie" }),
+        });
+        const pd = await pr.json();
+        if (pr.ok && Array.isArray(pd?.preflight)) {
+          const map: Record<string, { pass: boolean; score: number }> = {};
+          for (const row of pd.preflight) {
+            map[row.nodeId] = { pass: !!row.preflight?.pass, score: row.preflight?.score ?? 0 };
+          }
+          setChapterHealth(map);
+        }
+      } catch {
+        /* 体检失败不影响入队：入队时后端还会再算一次 */
+      }
     } catch (e: any) {
       toastError(e.message || "读取章节失败");
       setChapters([]);
+      setChapterHealth({});
     }
   }, []);
 
@@ -287,8 +318,8 @@ export default function PublishPage() {
         cdpEndpoint,
         autoMode,
         dailyLimit,
-        windowStartMin: hhmmToMin(winStart),
-        windowEndMin: hhmmToMin(winEnd),
+        windowStartMin: hhmmToMinutes(winStart) ?? 480,
+        windowEndMin: hhmmToMinutes(winEnd) ?? 540,
       });
       toastSuccess("配置已保存");
       void loadAccount();
@@ -633,6 +664,7 @@ export default function PublishPage() {
               )}
               {chapters.map((c) => {
                 const done = enqueuedNodeIds.has(c.id);
+                const health = chapterHealth[c.id];
                 return (
                   <label
                     key={c.id}
@@ -646,6 +678,16 @@ export default function PublishPage() {
                   >
                     <input type="checkbox" checked={picked.has(c.id)} disabled={done} onChange={() => togglePick(c.id)} className="accent-[var(--nv-creative)]" />
                     <span className="min-w-0 flex-1 truncate text-[var(--nv-text-primary)]">{c.title}</span>
+                    {health && (
+                      <span
+                        className={`shrink-0 rounded px-1 text-[10px] ${
+                          health.pass ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"
+                        }`}
+                        title={health.pass ? "体检通过（与工作台同一份判据）" : "体检有硬伤：入队后会被拦在发布前"}
+                      >
+                        体检 {health.score}
+                      </span>
+                    )}
                     <span className="shrink-0 text-[var(--nv-text-tertiary)]">{c.words} 字</span>
                     {done && <span className="shrink-0 rounded bg-[var(--nv-surface-3)] px-1.5 text-[10px] text-[var(--nv-text-muted)]">已入队</span>}
                   </label>

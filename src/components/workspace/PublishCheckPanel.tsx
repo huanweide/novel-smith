@@ -438,6 +438,7 @@ export function PublishCheckPanel({ projectId }: { projectId: string }) {
             risk={risk}
             consistency={consistency}
             chapters={chapters}
+            projectId={projectId}
           />
         ) : (
           <ReviewTab
@@ -502,6 +503,7 @@ function ExportTab({
   risk,
   consistency,
   chapters,
+  projectId,
 }: any) {
   return (
     <div className="space-y-2">
@@ -599,8 +601,21 @@ function ExportTab({
 
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {chapters.map((c: any) => {
-                const dot =
-                  c.status === "ok" ? "var(--nv-primary)" : c.status === "short" ? "#d99300" : "#3b82f6";
+                // 番茄口径的深度体检（与发布台同源）：有就用分数与 block 标记，没有就退回字数点
+                const pf = (exportData?.preflight || []).find((r: any) => r.nodeId === c.nodeId);
+                const blocked = pf && !pf.preflight?.pass;
+                const warned = pf && pf.preflight?.pass && (pf.preflight.score ?? 100) < 85;
+                const dot = blocked
+                  ? "var(--nv-danger)"
+                  : warned
+                    ? "#d99300"
+                    : pf
+                      ? "var(--nv-primary)"
+                      : c.status === "ok"
+                        ? "var(--nv-primary)"
+                        : c.status === "short"
+                          ? "#d99300"
+                          : "#3b82f6";
                 return (
                   <div
                     key={c.nodeId}
@@ -610,14 +625,52 @@ function ExportTab({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[10px] text-[var(--nv-text-primary)]">{c.title}</span>
-                        <span className="shrink-0 text-[9px] text-[var(--nv-text-tertiary)]">{c.words} 字</span>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <span className="text-[9px] text-[var(--nv-text-tertiary)]">{c.words} 字</span>
+                          {pf && (
+                            <span
+                              className={`rounded px-1 text-[9px] ${
+                                blocked
+                                  ? "bg-[var(--nv-danger)]/15 text-[var(--nv-danger)]"
+                                  : warned
+                                    ? "bg-[#d99300]/15 text-[#d99300]"
+                                    : "bg-[var(--nv-primary)]/15 text-[var(--nv-primary)]"
+                              }`}
+                              title={(pf.preflight?.items || [])
+                                .map((i: any) => `${i.label}：${i.detail}`)
+                                .join("\n")}
+                            >
+                              体检 {pf.preflight?.score}
+                            </span>
+                          )}
+                        </span>
                       </div>
-                      <div className="text-[9px] text-[var(--nv-text-muted)] leading-snug">{c.advice}</div>
+                      <div className="text-[9px] text-[var(--nv-text-muted)] leading-snug">
+                        {blocked
+                          ? (pf.preflight?.items || [])
+                              .filter((i: any) => i.level === "block")
+                              .map((i: any) => `${i.label}：${i.detail}`)
+                              .join("；")
+                          : c.advice}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {exportData?.preflightSummary && (
+              <div className="rounded border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 text-[10px] text-[var(--nv-text-tertiary)]">
+                番茄体检：{exportData.preflightSummary.pass}/{exportData.preflightSummary.total} 章可发
+                {exportData.preflightSummary.blocked > 0 && (
+                  <span className="text-[var(--nv-danger)]">，{exportData.preflightSummary.blocked} 章会被拦下</span>
+                )}
+                <span className="ml-1">· 均分 {exportData.preflightSummary.avgScore}</span>
+                <Link href={`/publish?projectId=${projectId}`} className="ml-2 underline decoration-dotted text-[var(--nv-primary)]">
+                  去番茄发布台 →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}

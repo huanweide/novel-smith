@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { preflightChapter } from "./preflight";
+import { preflightChapter, preflightChapters } from "./preflight";
 import { FANQIE_MIN_WORDS } from "./types";
 
 /** 造一段"像人写的"干净正文：段落短、有对话、无 AI 套话、不重复开头 */
@@ -97,5 +97,44 @@ describe("番茄发布体检", () => {
     const clean = preflightChapter({ title: "第1章 渡口", content: buildCleanContent(), chapterOrder: 1 });
     const bad = preflightChapter({ title: "第1章", content: "太短了。", chapterOrder: 1 });
     expect(clean.score).toBeGreaterThan(bad.score);
+  });
+});
+
+describe("批量体检（工作台与发布台共用同一判据）", () => {
+  const nodes = [
+    { id: "n2", order: 1, title: "第二章", content: buildCleanContent() },
+    { id: "n1", order: 0, title: "第一章", content: buildCleanContent() },
+    { id: "empty", order: 2, title: "空章", content: "   " },
+  ];
+
+  it("按 order 排序、跳过空章、章节号从 1 连续编号", () => {
+    const rows = preflightChapters(nodes);
+    expect(rows.map((r) => r.nodeId)).toEqual(["n1", "n2"]);
+    expect(rows.map((r) => r.chapterOrder)).toEqual([1, 2]);
+    expect(rows[0].title).toBe("第1章 第一章");
+  });
+
+  it("默认不返回正文（避免整本书正文塞进诊断响应）", () => {
+    const rows = preflightChapters(nodes);
+    expect(rows[0].content).toBeUndefined();
+    expect(rows[0].wordCount).toBeGreaterThan(0);
+  });
+
+  it("显式要求时才带排版后的正文", () => {
+    const rows = preflightChapters(nodes, { withContent: true });
+    expect(rows[0].content).toBeTruthy();
+    expect(rows[0].content).toContain("\n");
+  });
+
+  it("同一份内容，批量与单章结论一致（不会两处判据打架）", () => {
+    // 批量内部会先按番茄排版再体检，所以对拍也要用排版后的正文
+    const rows = preflightChapters(nodes, { withContent: true });
+    const single = preflightChapter({
+      title: rows[0].title,
+      content: rows[0].content!,
+      chapterOrder: 1,
+    });
+    expect(rows[0].preflight.pass).toBe(single.pass);
+    expect(rows[0].preflight.score).toBe(single.score);
   });
 });
