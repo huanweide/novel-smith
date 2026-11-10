@@ -929,3 +929,74 @@ model ChatSession {
 
   @@index([projectId])
 }
+
+// ─── 平台发布（番茄小说）──────────────────────────────────────
+// 定位：本机个人验证用，不上线、不对外。凭据只存加密密文（AES-256-GCM，
+// 密钥在本机数据目录），绝不明文落库；发布目标 bookId 走白名单，防止误发到别的书。
+
+model PublishAccount {
+  id       String @id @default(cuid())
+  platform String @default("fanqie") // 目前只支持 fanqie
+  label    String @default("我的番茄账号")
+  /** 凭据密文：{cookie, csrfToken} 的加密串（见 fanqie/credentials.ts）。null=未连接 */
+  credentialCipher String?
+  credentialUpdatedAt DateTime?
+  /** 发布目标白名单：只允许发到这本书（空=未绑定，禁止发布） */
+  bookId    String?
+  bookTitle String?
+  /** 通道偏好：api=接口直打（快，可无人值守）| cdp=浏览器自动化（稳，能处理弹窗）| auto=接口优先失败降级 */
+  channel   String @default("auto")
+  /** CDP 调试地址（用户自己开 Chrome --remote-debugging-port=9222 时用） */
+  cdpEndpoint String @default("http://127.0.0.1:9222")
+  /** 自动化边界：confirm=发前必须点确认 | auto=到点直接发（受每日上限约束） */
+  autoMode  String @default("confirm")
+  /** 每日发布上限（硬上限 3，防手滑配置成量产） */
+  dailyLimit Int   @default(2)
+  /** 更新时段窗口（分钟数，从 0 点起算）。默认 08:00-09:00 */
+  windowStartMin Int @default(480)
+  windowEndMin   Int @default(540)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PublishTask {
+  id        String @id @default(cuid())
+  accountId String
+  projectId String?
+  nodeId    String?
+  platform  String @default("fanqie")
+  /** 章节序号（1 起，按项目内顺序） */
+  chapterOrder Int
+  chapterTitle String
+  /** 待发正文（发布前最后一版，已按平台排版） */
+  content   String
+  wordCount Int
+  /** held=待确认 | scheduled=已排期 | filling=发布中 | published=已发布 | failed=失败 | canceled=已取消 */
+  status    String @default("held")
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  attempts  Int     @default(0)
+  lastError String?
+  /** 实际走通的通道：api | cdp */
+  channel   String?
+  /** 体检快照（JSON：preflight 结果，发布前那一刻的质量证据） */
+  preflight String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId, status])
+  @@index([status, scheduledAt])
+}
+
+model PublishLog {
+  id        String   @id @default(cuid())
+  accountId String?
+  taskId    String?
+  level     String   @default("info") // info | warn | error
+  message   String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([createdAt])
+}

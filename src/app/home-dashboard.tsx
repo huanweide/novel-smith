@@ -227,6 +227,9 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
             <Link href="/workshop" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">
               <Icon name="sparkles" size={13} /> <span className="hidden sm:inline">创意工坊</span>
             </Link>
+            <Link href="/publish" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5 tooltip-trigger" data-tooltip="番茄发布台：按平台规矩体检、排版、排期并发布（本机个人验证）">
+              <Icon name="upload" size={13} /> <span className="hidden sm:inline">发布</span>
+            </Link>
             <Link href="/recycle" className="btn-ghost text-xs h-8 px-3 rounded-xl inline-flex items-center gap-1.5">
               <Icon name="trash" size={13} /> <span className="hidden sm:inline">回收站</span>
             </Link>
