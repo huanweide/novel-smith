@@ -242,3 +242,101 @@ export function injectOptimizedMemory(
   // Step 3: 分层截断（策略 5）
   return truncateByBudget(sLines, aLines, bLines, budget, countTokens);
 }
+
+// ═══════════════════════════════════════════
+// 阶段2-② 上下文质量维护 · 丢弃归因（只读诊断）
+// ═══════════════════════════════════════════
+
+export type MemoryDropReason = "dedup_dropped" | "budget_truncated";
+
+export interface MemoryDropItem {
+  tier: "S" | "A" | "B";
+  content: string;
+  chapterNumber?: number;
+  importance: string;
+  reason: MemoryDropReason;
+}
+
+export interface MemoryInjectionDiagnostics {
+  /** 最终注入文本，与 injectOptimizedMemory 返回值逐字一致（同一函数产出） */
+  injectedText: string;
+  injectedCount: number;
+  /** 未进入注入文本的事件及原因 */
+  dropped: MemoryDropItem[];
+  byTier: Record<"S" | "A" | "B", { total: number; injected: number }>;
+  usedTokens: number;
+  budgetTokens: number;
+}
+
+const DEDUPE_WINDOW = 30;
+
+/** 与策略3 dedupeEvents 完全同口径：事件任意 30 字符子串命中 recentContext 即视为重复。 */
+function isDuplicateWithRecent(content: string, recentContext: string): boolean {
+  if (!recentContext || recentContext.length < DEDUPE_WINDOW) return false;
+  const ctx = recentContext.toLowerCase();
+  const c = content.toLowerCase();
+  for (let i = 0; i <= c.length - DEDUPE_WINDOW; i++) {
+    if (ctx.includes(c.slice(i, i + DEDUPE_WINDOW))) return true;
+  }
+  return false;
+}
+
+/** 取事件在注入文本中的稳定签名（对齐 formatSTierStructured / formatATierSelective / formatBTierCompressed 的截断口径）。 */
+function injectionSignature(content: string, tier: "S" | "A" | "B"): string {
+  if (tier === "S") {
+    return content.replace(/^【[^】]+】/, "").replace(/^第\d+章[—\-]\s*/, "").slice(0, 24).trim();
+  }
+  if (tier === "A") return content.replace(/^第\d+章[—\-]\s*/, "").slice(0, 24).trim();
+  return content.replace(/^第\d+章[—\-]\s*/, "").replace(/^【[^】]+】/, "").slice(0, 8).trim();
+}
+
+/**
+ * 诊断「为什么某条记忆没被注入」——阶段2-② 第③件事的数据源。
+ *
+ * 背景：truncateByBudget（策略5）超预算时静默丢弃尾部条目，源码注释明写「不提示」，
+ * 排查「AI 为什么忘了某条线」时完全看不见丢弃动作。本函数是**只读旁路**：
+ * 直接复用 injectOptimizedMemory 的真实产出做归因，不改动它的任何行为，生成链路零风险。
+ *
+ * 归因优先级：先判策略3 增量去重（dedup_dropped），未去重却未出现在注入文本 → 策略5 预算截断（budget_truncated）。
+ */
+export function analyzeMemoryInjection(
+  tieredMemory: TieredMemory,
+  recentContext: string,
+  budget: InjectionBudget = DEFAULT_BUDGET,
+  countTokens: (text: string) => number,
+): MemoryInjectionDiagnostics {
+  const injectedText = injectOptimizedMemory(tieredMemory, recentContext, budget, countTokens);
+  const lowText = injectedText.toLowerCase();
+  const byTier: Record<"S" | "A" | "B", { total: number; injected: number }> = {
+    S: { total: 0, injected: 0 }, A: { total: 0, injected: 0 }, B: { total: 0, injected: 0 },
+  };
+  const dropped: MemoryDropItem[] = [];
+
+  const walk = (tier: "S" | "A" | "B", events: TieredEvent[]) => {
+    for (const e of events) {
+      byTier[tier].total++;
+      const sig = injectionSignature(e.content, tier);
+      const appeared = sig.length > 0 && lowText.includes(sig.toLowerCase());
+      if (appeared) { byTier[tier].injected++; continue; }
+      dropped.push({
+        tier,
+        content: e.content,
+        chapterNumber: e.chapterNumber,
+        importance: e.importance,
+        reason: isDuplicateWithRecent(e.content, recentContext) ? "dedup_dropped" : "budget_truncated",
+      });
+    }
+  };
+  walk("S", tieredMemory.sTier || []);
+  walk("A", tieredMemory.aTier || []);
+  walk("B", tieredMemory.bTier || []);
+
+  return {
+    injectedText,
+    injectedCount: byTier.S.injected + byTier.A.injected + byTier.B.injected,
+    dropped,
+    byTier,
+    usedTokens: countTokens(injectedText),
+    budgetTokens: budget.maxTokens,
+  };
+}

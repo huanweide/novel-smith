@@ -597,7 +597,7 @@ export default function WorkspacePage() {
   // ── 生成前确认 ────────────────────────────
   const [drawSelectedCharIds, setDrawSelectedCharIds] = useState<string[]>([]);
   const [preGenOpen, setPreGenOpen] = useState(false);
-  const [preGenMode, setPreGenMode] = useState<"write" | "refine" | "continue" | "outline">("write");
+  const [preGenMode, setPreGenMode] = useState<"write" | "refine" | "continue" | "outline" | "roll">("write");
   const [outlineGenConfig, setOutlineGenConfig] = useState<{ chapterCount: number; customPrompt: string } | null>(null);
 
   // ═══════════════════════════════════════════
@@ -766,6 +766,13 @@ export default function WorkspacePage() {
 
   const handleWrite = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("write"); setPreGenOpen(true); };
   const handleRefine = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("refine"); setPreGenOpen(true); };
+  // 阶段3 整章重掷：与微调共用「指令输入框」（refineInstruction 即重写需求），走 refine 路由 mode:"roll"，
+  // 允许 LLM 按需求从头重写全章，不要求保留原文。与 onWrite（按大纲生成新章）语义不同。
+  const handleRoll = async () => {
+    if (!selectedNode || !project) return;
+    setRefineMode(true); // 切到「微调/重写需求」输入框，让重写需求与微调指令共用同一个入口
+    setGenStep("confirming"); setPreGenMode("roll"); setPreGenOpen(true);
+  };
   // D1：编辑器内选中片段→AI 快改。复用既有 refine 弹窗与 SSE/落库管线，仅预填选中文本与默认指令，不擅自改。
   const handleSelectionRefine = (text: string, action: "polish" | "expand" | "continue" | "custom") => {
     if (!selectedNode || !project) return;
@@ -782,6 +789,14 @@ export default function WorkspacePage() {
     setRefineInstruction(presets[action]);
     setRefineMode(true);
     setGenStep("confirming"); setPreGenMode("refine"); setPreGenOpen(true);
+  };
+  const handleRollConfirmed = async (cards: string[], notes: Record<string, string>, newChars: string[], finalAuthorNote: string, storylineId?: string, diffuseCompleted?: boolean) => {
+    if (!selectedNode || !project) return;
+    setPreGenOpen(false); setGenStep("generating"); setIsGenerating(true); useWriterStore.getState().resetStream(); setReviewResult(null);
+    const rollTarget = Math.min(targetWordCount, 5000);
+    const rollInstruction = refineInstruction || "重新写一版本章，保持人物设定与已定稿剧情走向一致，给出全新的叙事节奏与文字表达";
+    await streamSSE("/api/generate/refine", { projectId: project.id, nodeId: selectedNode.id, mode: "roll", instruction: rollInstruction, targetWords: rollTarget, confirmedCardIds: cards, cardNotes: notes, newCharacterRequests: newChars, authorNote: finalAuthorNote || authorNote || undefined, storylineId, diffuseCompleted: !!diffuseCompleted });
+    setIsGenerating(false);
   };
   const handleContinue = async () => { if (!selectedNode || !project) return; setGenStep("confirming"); setPreGenMode("continue"); setPreGenOpen(true); };
 
@@ -1377,6 +1392,7 @@ export default function WorkspacePage() {
             projectId={project.id}
             refineMode={refineMode} onToggleRefineMode={() => setRefineMode(!refineMode)}
             refineInstruction={refineInstruction} onRefineInstructionChange={handleRefineInstructionChange} onRefine={handleRefine}
+            onRoll={handleRoll}
             onSelectionRefine={handleSelectionRefine}
             chapterOutlinePrompt={chapterOutlinePrompt} onChapterOutlinePromptChange={handleChapterOutlinePromptChange}
             genStep={genStep} genStepLabels={genStepLabels} chapterOutlineStatus={chapterOutlineStatus}
@@ -1534,7 +1550,7 @@ export default function WorkspacePage() {
           authorNote={authorNote}
           storylineId={writeFromStorylineId.current ?? undefined}
           autoConfirm={skipConfirm}
-          title={preGenMode === "write" ? "生成前确认——角色调度" : preGenMode === "refine" ? "微调前确认——角色调度" : preGenMode === "continue" ? "续写前确认——角色调度" : "大纲生成前确认——角色调度"}
+          title={preGenMode === "write" ? "生成前确认——角色调度" : preGenMode === "refine" ? "微调前确认——角色调度" : preGenMode === "roll" ? "整章重掷前确认——角色调度" : preGenMode === "continue" ? "续写前确认——角色调度" : "大纲生成前确认——角色调度"}
           onAuthorNoteChange={handleAuthorNoteChange}
           onConfirm={(cards, notes, newChars, finalAuthorNote, storylineId) => {
             // R2-004：单章 PreGen 确认后，把用户选定的角色卡 / 新角色请求持久化到 localStorage，
@@ -1555,6 +1571,7 @@ export default function WorkspacePage() {
             switch (preGenMode) {
               case "write": handleWriteConfirmed(cards, notes, newChars, finalAuthorNote, storylineId, diffuseCompleted); break;
               case "refine": handleRefineConfirmed(cards, notes, newChars, finalAuthorNote, storylineId, diffuseCompleted); break;
+              case "roll": handleRollConfirmed(cards, notes, newChars, finalAuthorNote, storylineId, diffuseCompleted); break;
               case "continue": handleContinueConfirmed(cards, notes, newChars, finalAuthorNote, storylineId, diffuseCompleted); break;
               case "outline": handleOutlineConfirmed(cards, notes, newChars, finalAuthorNote); break;
             }

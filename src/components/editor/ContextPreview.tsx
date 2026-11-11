@@ -44,6 +44,18 @@ interface ContextData {
       forbiddenLabelPos: number;
     };
   };
+  /** 阶段2-② 上下文质量维护（只读诊断，可能为 null=审计降级） */
+  quality?: ContextQualityData | null;
+}
+
+/** 与 src/core/consistency/context-audit.ts 的 ContextQualityReport 同形（前端只消费，不引入服务端依赖） */
+interface ContextQualityData {
+  score: number;
+  counts: { cleanup: number; summaryIssues: number; missing: number };
+  cleanup: Array<{ kind: string; severity: "info" | "warn" | "error"; label: string; detail: string; savedTokens: number; autoApplied: boolean }>;
+  summaryIssues: Array<{ kind: string; severity: "info" | "warn" | "error"; chapterTitle: string; detail: string; action: string }>;
+  missing: Array<{ reason: string; severity: "info" | "warn" | "error"; label: string; why: string; action: string }>;
+  actions: string[];
 }
 
 export function ContextPreview({
@@ -321,6 +333,84 @@ export function ContextPreview({
           />
         </div>
       </div>
+
+      {/* 阶段2-② 上下文质量维护：默认收起，不抢主视觉；有问题才显计数徽标 */}
+      {data.quality && (() => {
+        const q = data.quality!;
+        const problems = [...q.cleanup, ...q.summaryIssues, ...q.missing]
+          .filter((x) => x.severity !== "info");
+        const tone = (s: "info" | "warn" | "error") =>
+          s === "error" ? "text-danger" : s === "warn" ? "text-warning" : "text-[var(--nv-text-muted)]";
+        return (
+          <details className="group rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-3)]/30">
+            <summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-xs text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-secondary)]">
+              <span className="flex items-center gap-1.5">
+                <Icon name="shield" size={13} className="shrink-0" /> 上下文体检
+                {problems.length > 0 ? (
+                  <span className="rounded px-1.5 py-0.5 text-[10px] text-warning">{problems.length} 项待处理</span>
+                ) : (
+                  <span className="text-[10px] text-[var(--nv-text-muted)]">正常</span>
+                )}
+              </span>
+              <span className="font-mono text-[10px] text-[var(--nv-text-muted)]">{q.score} 分 · 展开 ▾</span>
+            </summary>
+            <div className="space-y-3 border-t border-[var(--nv-border-2)] px-3 py-2.5 text-xs">
+              <p className="text-[var(--nv-text-tertiary)]">{q.actions.join("；")}</p>
+
+              {q.cleanup.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium text-[var(--nv-text-secondary)]">清理冗余（{q.cleanup.length}）</div>
+                  <ul className="space-y-1.5">
+                    {q.cleanup.map((c, i) => (
+                      <li key={i} className="border-l border-[var(--nv-border-2)] pl-2">
+                        <span className={tone(c.severity)}>{c.label}</span>
+                        <span className="ml-1 text-[10px] text-[var(--nv-text-muted)]">
+                          {c.autoApplied ? "已自动清理" : "建议人工处理"}
+                          {c.savedTokens > 0 ? ` · 约省 ${c.savedTokens} token` : ""}
+                        </span>
+                        <div className="text-[10px] leading-relaxed text-[var(--nv-text-muted)]">{c.detail}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {q.summaryIssues.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium text-[var(--nv-text-secondary)]">总结质量（{q.summaryIssues.length}）</div>
+                  <ul className="space-y-1.5">
+                    {q.summaryIssues.map((s, i) => (
+                      <li key={i} className="border-l border-[var(--nv-border-2)] pl-2">
+                        <span className={tone(s.severity)}>《{s.chapterTitle}》 {s.detail}</span>
+                        <div className="text-[10px] leading-relaxed text-[var(--nv-text-muted)]">→ {s.action}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {q.missing.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium text-[var(--nv-text-secondary)]">缺失与归因（{q.missing.length}）</div>
+                  <ul className="space-y-2">
+                    {q.missing.map((m, i) => (
+                      <li key={i} className="border-l border-[var(--nv-border-2)] pl-2">
+                        <div className={tone(m.severity)}>{m.label}</div>
+                        <div className="text-[10px] leading-relaxed text-[var(--nv-text-muted)]">为什么：{m.why}</div>
+                        <div className="text-[10px] leading-relaxed text-[var(--nv-text-tertiary)]">→ {m.action}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {problems.length === 0 && (
+                <p className="text-[10px] text-[var(--nv-text-muted)]">未发现冗余、错误或缺失。写后几章可随时展开复查。</p>
+              )}
+            </div>
+          </details>
+        );
+      })()}
 
       {/* P1-3：合并后的记忆透出（F3 召回） */}
       {recallSection}

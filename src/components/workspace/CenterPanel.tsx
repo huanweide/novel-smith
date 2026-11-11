@@ -178,7 +178,7 @@ export function CenterPanel({
   authorNote, onAuthorNoteChange, targetWordCount, onTargetWordCountChange,
   onWrite, onStop, onEditOutline, onGenerateChapterOutline, onDrawChapterOutline,
   projectId,
-  refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine, onSelectionRefine,
+  refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine, onSelectionRefine, onRoll,
   chapterOutlinePrompt, onChapterOutlinePromptChange,
   genStep, genStepLabels, chapterOutlineStatus,
   onOpenGame,
@@ -204,6 +204,8 @@ export function CenterPanel({
   refineMode: boolean; onToggleRefineMode: () => void;
   refineInstruction: string; onRefineInstructionChange: (v: string) => void;
   onRefine: () => void;
+  /** 阶段3 整章重掷：按「重写需求」提示词从头重写全章（与微调共用指令输入框） */
+  onRoll?: () => void;
   onSelectionRefine?: (text: string, action: "polish" | "expand" | "continue" | "custom") => void;
   onOpenGame: () => void;
   onBatchWrite: () => void;
@@ -949,7 +951,15 @@ export function CenterPanel({
                       <Button size="sm" onClick={onWrite} className="btn-primary h-8 text-xs rounded-lg"><Icon name="pencil" size={11} /> 生成/重写</Button>
                     )}
                     {refineMode && (
-                      <Button size="sm" onClick={onRefine} className="btn-ghost h-8 text-xs flex items-center gap-1 rounded-lg text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调</Button>
+                      <Button size="sm" onClick={onRefine} className="btn-ghost h-8 text-xs flex items-center gap-1 rounded-lg text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调/润色</Button>
+                    )}
+                    {/* 阶段3：整章重掷（roll）——与微调同组，共用下方指令输入框（即「重写需求」） */}
+                    {onRoll && (
+                      <button onClick={onRoll}
+                        className="flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)] transition-colors"
+                        title="整章重掷：在下方输入框写「重写需求」，让 AI 从头重写本章（可推翻现有正文，版本快照可恢复）">
+                        <Icon name="refresh" size={11} /> 整章重掷
+                      </button>
                     )}
                     <button onClick={onToggleRefineMode}
                       className={`flex items-center gap-1 h-8 px-2.5 text-xs rounded-lg border transition-colors ${refineMode ? "border-[var(--nv-accent)]/50 text-[var(--nv-accent)] bg-[var(--nv-accent-soft)] hover:bg-[var(--nv-accent)]/20" : "border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:border-[var(--nv-border-3)] hover:bg-[var(--nv-surface-1)]"}`}
@@ -1012,12 +1022,12 @@ export function CenterPanel({
                   <span className="text-xs text-[var(--nv-text-tertiary)]">字</span>
                 </div>
               </div>
-              <input placeholder={refineMode ? "微调指令（改对话/加描写/续写500字）…" : "作者指令（高优先级）…"}
+              <input placeholder={refineMode ? "微调指令 / 整章重掷的重写需求（改对话 / 加描写 / 换一种叙事节奏重写全章）…" : "作者指令（高优先级）…"}
                 value={refineMode ? refineInstruction : authorNote}
                 onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
-                className="input-glass w-full rounded-lg px-3 py-2 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />
+                className="input-glass w-full rounded-lg px-3 py-2 text-xs" aria-label={refineMode ? "微调指令或重写需求" : "作者指令"} />
               {refineMode && !isGenerating && (
-                <p className="text-[10px] text-accent-label">微调模式：不重写正文，按指令修改现有内容或续写补长。字数不够会自动补，中途打断可续写。</p>
+                <p className="text-[10px] text-accent-label">指令模式：微调/润色按指令局部修改；整章重掷按同一份需求从头重写全章（可推翻旧版，版本快照可恢复）。</p>
               )}
             </div>
             </>) : (
@@ -1038,10 +1048,17 @@ export function CenterPanel({
               {refineMode && (
                 <Button size="sm" onClick={onRefine} className="btn-ghost h-7 text-xs rounded-lg shrink-0 text-[var(--nv-accent)] border-[var(--nv-accent)]/40"><Icon name="wrench" size={11} /> 微调</Button>
               )}
+              {onRoll && (
+                <button onClick={onRoll}
+                  className="flex items-center gap-1 h-7 px-2 text-xs rounded-lg border border-[var(--nv-border-2)] text-[var(--nv-text-secondary)] hover:text-[var(--nv-text-primary)] hover:bg-[var(--nv-surface-2)] transition-colors shrink-0"
+                  title="整章重掷：按「重写需求」从头重写本章">
+                  <Icon name="refresh" size={11} /> 重掷
+                </button>
+              )}
               <input type="number" value={targetWordCount} onChange={(e) => onTargetWordCountChange(parseInt(e.target.value) || 3000)}
                 className="input-glass w-14 h-7 rounded-lg px-1.5 text-xs text-center shrink-0" title="目标字数" aria-label="目标字数" />
               <span className="text-xs text-[var(--nv-text-tertiary)] shrink-0">字</span>
-              <input placeholder={refineMode ? "微调指令…" : "作者指令（高优先级）…"}
+              <input placeholder={refineMode ? "微调指令 / 重写需求…" : "作者指令（高优先级）…"}
                 value={refineMode ? refineInstruction : authorNote}
                 onChange={(e) => refineMode ? onRefineInstructionChange(e.target.value) : onAuthorNoteChange(e.target.value)}
                 className="input-glass flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs" aria-label={refineMode ? "微调指令" : "作者指令"} />

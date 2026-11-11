@@ -229,40 +229,59 @@ export async function getConsistencyFacts(projectId: string) {
   });
 }
 
+export interface BaselineReport {
+  /** 可注入 systemPrompt 的文本块（与 getConsistencyBaselineText 返回值逐字一致） */
+  text: string;
+  /** 全部事实（含被剔除的），供上下文质量审计检测空值/乱码 */
+  facts: Awaited<ReturnType<typeof getConsistencyFacts>>;
+  /** 因「来源命中摘要标题」被剔除的条数——阶段2-① 的真实清理结果 */
+  droppedFactCount: number;
+  /** 已归档章节摘要标题（小写），供审计归因 */
+  summaryTitles: string[];
+}
+
 /**
- * 生成可注入提示词的一致性基线文本块（供 prompt 注入层调用）。
+ * 生成基线文本 + 清理诊断（阶段2-②）。
  *
- * 阶段2（上下文质量维护）：「被总结的内容就不放进去」——来源命中某章摘要标题的事实，
- * 已随章节摘要注入上下文，此处剔除，避免同一信息在摘要与基线间重复占用 token。
+ * 「被总结的内容就不放进去」——来源命中某章摘要标题的事实，已随章节摘要注入上下文，
+ * 此处剔除，避免同一信息在摘要与基线间重复占用 token。
  * 作者手填（source=manual）与无来源事实保守保留，永不误删。
+ *
+ * 抽成 report 版是为了让预览/审计层拿到「剔除了几条」与「全部事实」，
+ * 不重复实现剔除逻辑（避免两处判定漂移）。getConsistencyBaselineText 复用本函数。
  */
-export async function getConsistencyBaselineText(projectId: string): Promise<string> {
+export async function getConsistencyBaselineReport(projectId: string): Promise<BaselineReport> {
   const [facts, summaries] = await Promise.all([
     getConsistencyFacts(projectId),
     prisma.chapterSummary.findMany({ where: { projectId } }).catch(() => [] as any[]),
   ]);
-  if (facts.length === 0) return "";
+  const summaryTitles = (summaries as any[])
+    .map((s) => String((s as any).chapterTitle ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  const titleSet = new Set(summaryTitles);
 
-  // 摘要标题集合：来源命中即视为「已随摘要注入」，从基线剔除。
-  const summaryTitles = new Set(
-    (summaries as any[])
-      .map((s) => String((s as any).chapterTitle ?? "").trim().toLowerCase())
-      .filter(Boolean),
-  );
+  if (facts.length === 0) return { text: "", facts, droppedFactCount: 0, summaryTitles };
+
   const kept = facts.filter((f) => {
     if (f.source === "manual") return true; // 作者手填事实始终保留
-    if (!f.source) return true; // 无来源信息， conservative 保留
-    return !summaryTitles.has(String(f.source).trim().toLowerCase());
+    if (!f.source) return true; // 无来源信息，conservative 保留
+    return !titleSet.has(String(f.source).trim().toLowerCase());
   });
 
-  if (kept.length === 0) return "";
+  const dropped = facts.length - kept.length;
+  if (kept.length === 0) return { text: "", facts, droppedFactCount: dropped, summaryTitles };
+
   const lines = kept.map(
     (f) => `- [${f.category}] ${f.subject} 的${f.attribute} = ${f.value}${f.source ? `（来源：${f.source}）` : ""}`,
   );
-  const dropped = facts.length - kept.length;
   const header =
     dropped > 0
       ? `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】（已剔除 ${dropped} 条摘要内已含的重复事实）`
       : `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】`;
-  return `${header}\n${lines.join("\n")}`;
+  return { text: `${header}\n${lines.join("\n")}`, facts, droppedFactCount: dropped, summaryTitles };
+}
+
+/** 生成可注入提示词的一致性基线文本块（供 prompt 注入层调用）。 */
+export async function getConsistencyBaselineText(projectId: string): Promise<string> {
+  return (await getConsistencyBaselineReport(projectId)).text;
 }

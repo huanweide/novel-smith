@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveRefineIntent } from "@/lib/refine-intent";
+import { resolveRefineIntent, resolveRefineMode } from "@/lib/refine-intent";
 
 const SEL = "配送费九十九，收件人：林砚。";
 const base = { hasContent: true, instruction: "润色这段文字" };
@@ -75,5 +75,35 @@ describe("resolveRefineIntent · 选中即改优先于增量续写", () => {
       instruction: "请在现有正文基础上自然续写，保持文风一致，推进剧情。",
     });
     expect(r.isContinuationIntent).toBe(true);
+  });
+});
+
+describe("resolveRefineMode · 阶段3 整章重掷（显式 mode，不靠关键词猜）", () => {
+  it("只有 mode === 'roll' 才进入整章重掷", () => {
+    const on = resolveRefineMode("roll");
+    expect(on.isFullRewrite).toBe(true);
+    expect(on.ignoreSelectedText).toBe(true);
+    expect(on.forceNotContinuation).toBe(true);
+    expect(on.allowShorterOutput).toBe(true);
+
+    for (const m of [undefined, null, "", "refine", "write", "ROLL"]) {
+      expect(resolveRefineMode(m).isFullRewrite, String(m)).toBe(false);
+    }
+  });
+
+  it("非 roll 时四项开关全关，既有微调/续写行为一字不变", () => {
+    expect(resolveRefineMode()).toEqual({
+      isFullRewrite: false,
+      ignoreSelectedText: false,
+      forceNotContinuation: false,
+      allowShorterOutput: false,
+    });
+  });
+
+  it("关键词绝不误判：「重写这段对话」仍是普通微调", () => {
+    // 真实指令文本（不是 mode 参数）里含「重写」，但 mode 未指定 → 不允许整章推翻
+    const r = resolveRefineIntent({ hasContent: true, instruction: "重写这段对话，让两人更有火药味", selectedText: "A：走吧。" });
+    expect(r.hasSelectedText).toBe(true);
+    expect(resolveRefineMode(undefined).isFullRewrite).toBe(false);
   });
 });

@@ -17,7 +17,7 @@ import { applyRegexRules } from "@/core/post-process/regex";
 import { countTokens } from "@/core/assembly/tokenizer";
 import { collectForbiddenPatterns } from "@/lib/forbidden-checker";
 import { applyTargetedFixReplacement } from "@/lib/targeted-fix";
-import { resolveRefineIntent } from "@/lib/refine-intent";
+import { resolveRefineIntent, resolveRefineMode } from "@/lib/refine-intent";
 import {
   loadGenerationContext,
   handleNewCharacters,
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       projectId, nodeId, instruction, targetWords = 500,
       confirmedCardIds, cardNotes, newCharacterRequests, authorNote,
       selectedText, storylineId, diffuseCompleted,
+      mode, // 阶段3：mode==="roll" 整章重掷（按重写需求从头重写全章）
     } = await request.json();
     const reqCheck = requireFields({ projectId, nodeId }, ["projectId", "nodeId"]);
     if (!reqCheck.ok) return reqCheck.response;
@@ -88,23 +89,34 @@ export async function POST(request: Request) {
     const existingContent = data.currentNode.content || "";
     const hasContent = existingContent.trim().length > 0;
 
+    // 阶段3：整章重掷（roll）。显式 mode 判定，不靠关键词猜（「重写这段对话」是常见微调指令，猜错=不可逆正文损失）。
+    const modeDecision = resolveRefineMode(mode);
+    const isFullRewrite = modeDecision.isFullRewrite;
+
     // #124：输出预算上限（cap）。已有正文 + 目标续写字数 超过上限时，模型无法完整重输出前文，
     // 会触发 L5-06 静默丢内容或 L5-02 截断。此处显式检测，向前端发 notice + done 标记，杜绝「静默截断」。
+    // roll 不重输出原文，故不套用该 cap（预算只给新正文）。
     const BUDGET_CEILING = 5000;
     const requestedBudget = existingContent.length + targetWords;
-    const budgetCapped = requestedBudget > BUDGET_CEILING;
+    const budgetCapped = !isFullRewrite && requestedBudget > BUDGET_CEILING;
     const refineInstruction = instruction && instruction.trim().length > 0
       ? instruction.trim()
-      : "请在现有正文基础上自然续写，保持文风一致，推进剧情。";
+      : isFullRewrite
+        ? "重新写一版本章：保持人物设定与已定稿剧情走向一致，但在叙事节奏、场景调度与文字表达上给出全新版本。"
+        : "请在现有正文基础上自然续写，保持文风一致，推进剧情。";
     // 意图判定抽到纯函数（refine-intent.ts），核心不变量：选中即改优先于增量续写。
     // 旧版把 isContinuationIntent 排在 hasSelectedText 之前，工具条「续写」预设指令含「续写」
     // → 增量追加把模型输出整段拼到章末；模型又在输出里复述了选中段 → 落库出现重复段。
     // v1.6.47 增量续写、v1.6.51 局部替换两种模式的原有行为在不选中时完全不变。
-    const { isTargetedFix, isContinuationIntent, hasSelectedText } = resolveRefineIntent({
+    const intent = resolveRefineIntent({
       hasContent,
       instruction: refineInstruction,
-      selectedText,
+      selectedText: modeDecision.ignoreSelectedText ? undefined : selectedText,
     });
+    // roll 覆盖：整章重掷忽略选区、不走增量续写（不是接着写，是重新写）。
+    const isTargetedFix = !isFullRewrite && intent.isTargetedFix;
+    const hasSelectedText = modeDecision.ignoreSelectedText ? false : intent.hasSelectedText;
+    const isContinuationIntent = modeDecision.forceNotContinuation ? false : intent.isContinuationIntent;
 
     const cardNotesText = cardNotes
       ? Object.entries(cardNotes as Record<string, string>)
@@ -114,7 +126,23 @@ export async function POST(request: Request) {
       : "";
 
     let writingInstruction: string;
-    if (isContinuationIntent) {
+    if (isFullRewrite) {
+      // 阶段3 整章重掷：与「微调」最本质的区别是——微调铁律要求「输出必须完整包含已有正文」，
+      // roll 则允许从头重写、推翻旧版。旧正文只作为「上一版参考」注入，让模型知道要避开什么，
+      // 但不要求复述任何句子。目标字数即本章目标，预算不叠加旧正文长度。
+      const oldVersion = existingContent.trim()
+        ? `\n【上一版正文（仅供参考，可完全推翻，禁止复述）】\n---\n${existingContent.slice(-2500)}${existingContent.length > 2500 ? "\n…(前文省略)…" : ""}\n---\n`
+        : "";
+      writingInstruction = `${cardNotesText ? "\n【用户角色备注——最高优先级】\n" + cardNotesText : ""}【整章重掷——按重写需求从头重写本章，输出完整新正文】
+${oldVersion}
+【重写需求（最高优先级）】${refineInstruction}
+
+【铁律】
+1. 输出一版**全新的完整章节正文**，不要复述、续写或拼接上一版，不要输出任何说明性文字或「以下是重写」开场白。
+2. 人物设定、已定稿的剧情走向、一致性事实基线必须遵守；叙事节奏、场景调度、文字表达按重写需求重新组织。
+3. 篇幅严格贴近目标字数约 ${targetWords} 字，完整起承转合，章末留悬念。
+4. 只输出正文本身。`;
+    } else if (isContinuationIntent) {
       // 增量续写模式：只生成续写增量，不重输出已有正文（从根上消除「重输出全文撞 max_tokens 截断」）
       writingInstruction = `${cardNotesText ? "\n【用户角色备注——最高优先级】\n" + cardNotesText : ""}【续写任务——只生成续写增量，不要复述已有正文】
 已有正文末尾（仅作衔接参考，严禁重复输出）：
@@ -155,7 +183,7 @@ ${isTargetedFix ? `【精准修复铁律——违反即不合格】
     // v1.6.51（#124 长章修改类防截断真实修复）：当存在选中原文片段时，覆盖为「局部替换」prompt，
     // 只让模型生成该片段的改写版（路由层精确匹配替换回原正文），从根上消除长章全文重输出撞 max_tokens 截断。
     // 放在 if/else 链之后、以「最后赋值胜出」覆盖 hasContent 分支已生成的「全文重输出」prompt，不动原多行模板。
-    if (hasContent && hasSelectedText) {
+    if (hasContent && hasSelectedText && !isFullRewrite) {
       writingInstruction = `${cardNotesText ? "\n【用户角色备注——最高优先级】\n" + cardNotesText : ""}【局部精准修改任务——只输出「被选中片段」按指令改写后的完整片段，严禁重输出全文】
 用户选中的原文片段（必须严格基于它改写，保持与前后文衔接）：
 ---
@@ -248,7 +276,7 @@ ${selectedText.trim()}
           }
           // v1.6.47：增量续写模式预算只给续写字数（targetWords），不再叠加已有正文长，
           // 从根上消除「重输出全文撞 max_tokens 截断」；全文重输出模式保持原预算逻辑。
-          const targetForModel = isContinuationIntent
+          const targetForModel = isFullRewrite || isContinuationIntent
             ? targetWords
             : (hasContent ? Math.min(existingContent.length + targetWords, BUDGET_CEILING) : targetWords);
           for await (const chunk of orchestrator.writeSection(
@@ -349,7 +377,8 @@ ${selectedText.trim()}
             // 模型偶发把「续写/修改」误解为「重写精简版」，输出显著短于原正文，导致静默丢内容。
             // 当新输出 < 原正文 90% 且指令非主动缩写时，判定为未完成重输出，降级保留原正文 + 告警，
             // 类比 L5-02，避免线上节点被缩短版覆盖。
-            if (hasContent && !isShrinkIntent && newContent.length < existingContent.length * 0.9) {
+            // roll 允许新正文比旧版短（重写可能更精炼），不受 L5-06「完整性保护」约束。
+            if (hasContent && !isShrinkIntent && !modeDecision.allowShorterOutput && newContent.length < existingContent.length * 0.9) {
               send({
                 type: "done", content: "", nodeId,
                 status: data.currentNode.status, mode: "refine",

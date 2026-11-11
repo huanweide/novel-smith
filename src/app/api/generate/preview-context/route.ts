@@ -4,7 +4,9 @@ import { getApprovedCharacters, getApprovedLore } from "@/lib/approved-cards";
 import { classifyEvents } from "@/lib/memory-classifier";
 import { NextResponse } from "next/server";
 import { buildPromptContext } from "@/core/agents";
-import { getConsistencyBaselineText } from "@/core/consistency/extractFacts";
+import { getConsistencyBaselineReport } from "@/core/consistency/extractFacts";
+import { auditContextQuality } from "@/core/consistency/context-audit";
+import { analyzeMemoryInjection, DEFAULT_BUDGET } from "@/lib/memory-injector";
 import { assemblePrompt, countTokens } from "@/core/assembly";
 import { getTemplate } from "@/core/templates";
 import { toAppStoryNode } from "@/core/story-node-bridge";
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [project, currentNode, allNodes, characters, loreEntries, summaries, loreTables, storyBeats, pendingCommitments] =
+    const [project, currentNode, allNodes, characters, loreEntries, summaries, loreTables, storyBeats, pendingCommitments, allSummariesAudit] =
       await Promise.all([
         prisma.project.findUnique({ where: { id: projectId } }),
         prisma.storyNode.findUnique({ where: { id: nodeId, deletedAt: null } }),
@@ -59,6 +61,9 @@ export async function POST(request: Request) {
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
+        // 阶段2-②：审计用「全量摘要」，与上下文窗口的 take 5 分开，
+        // 否则「有正文却缺摘要」的覆盖率判断会被窗口截断误报。
+        prisma.chapterSummary.findMany({ where: { projectId } }).catch(() => [] as any[]),
       ]);
 
     if (!project || !currentNode) {
@@ -80,7 +85,9 @@ export async function POST(request: Request) {
     );
 
     // 构建上下文（v1.6.51.1：同步注入一致性事实基线，预览与真实生成口径一致）
-    const consistencyBaseline = await getConsistencyBaselineText(project.id).catch(() => "");
+    // 阶段2-②：改用 report 版，顺带拿到「剔除了几条重复事实」与全部事实供质量审计。
+    const baselineReport = await getConsistencyBaselineReport(project.id).catch(() => null);
+    const consistencyBaseline = baselineReport?.text ?? "";
 
     // v3.1.29：与生产写作路径口径对齐——用 classifyEvents 算出 S/A/B 三级分层记忆并注入，
     // 否则预览的 systemPrompt 会比真实生成少一块记忆，误导上下文排查。
@@ -236,7 +243,35 @@ export async function POST(request: Request) {
         role: c.role,
       }));
 
+    // ── 阶段2-② 上下文质量维护（只读诊断）──
+    // 与生产路径 buildGenerationContext 同口径重建 dedupContext：当前大纲 + 最近3章摘要 + 最近2章正文，
+    // 使「为什么某条记忆没被注入」的归因与真实生成一致，不另起一套判定。
+    // 审计本身失败时降级为 null，绝不影响上下文预览主流程。
+    let quality = null;
+    try {
+      const dedupContext = [
+        currentNode.outline || "",
+        ...(summaries as any[]).slice(0, 3).map((s: any) => s.summary || ""),
+        ...(previousNodes as any[]).slice(-2).map((n: any) => n.content || n.outline || ""),
+      ].join(" ");
+      const memory = tieredMemory
+        ? analyzeMemoryInjection(tieredMemory, dedupContext, DEFAULT_BUDGET, countTokens)
+        : null;
+      quality = auditContextQuality({
+        summaries: (allSummariesAudit as any[]) || [],
+        facts: (baselineReport?.facts ?? []) as any,
+        droppedFactCount: baselineReport?.droppedFactCount ?? 0,
+        memory,
+        chaptersWithContent: (allNodes as any[]).filter((n: any) => (n.content || "").trim().length > 0).length,
+        triggeredLoreCount: promptContext.triggeredLore.length,
+        totalLoreCount: (loreEntries as any[]).length,
+      });
+    } catch (e) {
+      console.error("[preview-context] 上下文质量审计失败（已降级）:", e instanceof Error ? e.message : e);
+    }
+
     return NextResponse.json({
+      quality,
       budget,
       breakdown,
       activeCharacters,

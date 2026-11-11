@@ -36,3 +36,33 @@ export function resolveRefineIntent(params: {
 
   return { isTargetedFix, hasSelectedText, isContinuationIntent };
 }
+
+// ─── 阶段3：整章重掷（roll）───
+
+export interface RefineModeDecision {
+  /** 整章重掷：按「重写需求」提示词从头重写全章，允许推翻已有正文 */
+  isFullRewrite: boolean;
+  /** roll 忽略选区（整章操作，不做局部替换） */
+  ignoreSelectedText: boolean;
+  /** roll 不走增量续写（不是接着写，是重新写） */
+  forceNotContinuation: boolean;
+  /** roll 允许新正文比原正文短（不受 L5-06 完整性保护约束） */
+  allowShorterOutput: boolean;
+}
+
+/**
+ * 解析改写模式（纯函数）。
+ *
+ * 为什么用显式 mode 而不用关键词：「重写 / 重新写 / 换一种写法」在微调指令里很常见
+ * （例如「重写这段对话」），靠正则猜会把正常的局部润色误判成整章推翻，属于不可逆的正文损失。
+ * 前端按钮传 mode:"roll" 才进入整章重掷，语义唯一、可测、可回滚（有版本快照）。
+ */
+export function resolveRefineMode(mode?: string | null): RefineModeDecision {
+  const isFullRewrite = mode === "roll";
+  return {
+    isFullRewrite,
+    ignoreSelectedText: isFullRewrite,
+    forceNotContinuation: isFullRewrite,
+    allowShorterOutput: isFullRewrite,
+  };
+}
