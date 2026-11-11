@@ -176,3 +176,18 @@ describe("评分与汇总", () => {
     expect(r.counts.missing).toBeGreaterThan(0);
   });
 });
+
+describe("阶段 C1 · 同键旧事实合并的可见性", () => {
+  it("supersededFactCount > 0 → 出现 superseded_fact 清理项且标为已自动生效", () => {
+    const r = auditContextQuality(base({ supersededFactCount: 2 }));
+    const item = r.cleanup.find((c) => c.kind === "superseded_fact");
+    expect(item).toBeTruthy();
+    expect(item?.autoApplied).toBe(true);
+    expect(item?.label).toContain("2");
+  });
+
+  it("未传该字段时零行为变化（旧调用方不受影响）", () => {
+    const r = auditContextQuality(base());
+    expect(r.cleanup.some((c) => c.kind === "superseded_fact")).toBe(false);
+  });
+});

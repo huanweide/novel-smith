@@ -17,7 +17,7 @@ vi.mock("@/lib/prisma", () => ({
     storyNode: {
       findMany: vi.fn(async () => [
         { id: "c1", order: 1, title: "第一章", content: CHAPTER },
-        { id: "c2", order: 2, title: "第二章", content: "第二章 少年远行，踏入江湖。" },
+        { id: "c2", order: 2, title: "第二章", content: "第二章 少年远行，踏入江湖，途经新地点、白帝城、真地点、全填地点、落地地点与落地名。" },
       ]),
     },
   },
@@ -77,7 +77,9 @@ function mockFetch(content: string) {
   }));
 }
 
-const CHAPTER = "第一章 青龙镇外，少年踏入江湖。";
+// 夹具正文须包含后续用例里模型写入的名称——真实业务中「名称逐字来自原文」是硬契约。
+// 阶段 A2 加了落库前证据闸门后，这里补齐输入（不改任何断言），使夹具符合真实契约。
+const CHAPTER = "第一章 青龙镇外，少年踏入江湖，途经新地点、白帝城、真地点、全填地点、落地地点与落地名，又见孤立地点。";
 
 beforeEach(() => {
   updateCalls.length = 0;

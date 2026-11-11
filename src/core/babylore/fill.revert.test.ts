@@ -60,7 +60,7 @@ vi.mock("@/lib/prisma", () => ({
     storyNode: {
       findMany: vi.fn(async () => [
         { id: "c1", order: 1, title: "第一章", content: CHAPTER },
-        { id: "c2", order: 2, title: "第二章", content: "第二章 少年远行，踏入江湖。" },
+        { id: "c2", order: 2, title: "第二章", content: "第二章 少年远行，踏入江湖，途经新地点与孤立地点。" },
       ]),
     },
   },
@@ -91,7 +91,8 @@ vi.mock("fs", () => {
 import { prisma } from "@/lib/prisma";
 import { babyloreFill, revertBabyloreFill } from "@/core/babylore/fill";
 
-const CHAPTER = "第一章 青龙镇外，少年踏入江湖。";
+// 夹具正文须包含后续用例里模型写入的名称（阶段 A2 证据闸门的真实契约），断言不变。
+const CHAPTER = "第一章 青龙镇外，少年踏入江湖，途经新地点与孤立地点。";
 
 function mockFetch(content: string) {
   (globalThis as any).fetch = vi.fn(async () => ({

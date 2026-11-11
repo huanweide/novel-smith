@@ -2,6 +2,17 @@
 
 ## v3.1.169 — 2026-11-09
 
+### 填表与上下文优化四轮（2026-11-11，未 bump 版本）
+
+> 外部判据：`PROCESS/research-填表与上下文优化/best-practices.md`（maxloop 阶段零，4 组查询 + `api.github.com` 验真 LightRAG 40,643★ / SillyTavern 35,509★ / Graphiti 32,732★）；执行基线：同目录 `metrics-baseline.md`。
+
+- **A 轮 · 填表效果**：①修掉 `fill.ts` 正文 `slice(0,12000)` 硬截断导致的确定性漏抽——新增 `splitChapterText` 分块+400 字重叠，短章单块、prompt 逐字不变，长章 ops 保序合并后统一落库；②把 `buildWarnings` 的**事后**「疑似错误地名」告警升级为**事前**拦截：`isNameGrounded` 校验新行名称必须逐字命中正文或已在权威名录（用归一前的原始名，不误杀「李大师→李富贵」）；③新增 `validateOps` ops 形状校验，非法 op/未知表/缺 match 被摘出并带理由上报，不再静默吞掉。
+- **B 轮 · 速度**：长章多块抽取改 `Promise.all` 并行（保序返回），落库仍严格串行——`tables.rows` 是逐章累积状态，裸并行会造重复行。短章零额外调用。**未动** `runPostGenerationPipeline`：源码注释写明后处理富化必须同步跑完以保证「前一章摘要落库后下一章才加载上下文」，这是用户硬性要求，不是可优化延迟。
+- **C 轮 · 认知效果**：同 `(subject,attribute)` 跨章累积的多版事实（账房 → 杀人凶手）不再全量注入互相矛盾。`collapseSupersededFacts` 按 `作者手填 > createdAt > confidence > 先到` 只挑一条注入，**旧条留库不删**；`BaselineReport.supersededFactCount` 供上下文体检报告显示「已合并 N 条同键旧事实」。不改 schema、不引图数据库。
+- **D 轮 · 收口**：新增一键判据 `npm run test:fill-quality`（5 文件 / 68 项），落盘执行基线报告，逐项区分「有判据」与「未量化」。
+- **明确不做（R/C/N 必要性闸门）**：①生成主链路前置并行——`runWriteGeneration` 零测试覆盖，盲改风险不成比例；②预算按重要性排序——`classifyEvents` 已实现 `critical>high>medium`，阶段2 已给丢弃归因，不重复造；③`temperature` 0.5 改 0——外部基准与项目实测注释冲突，等真机 A/B 数据，不凭资料调参。SillyTavern 为 AGPL-3.0、本项目为 MIT，只借鉴机制语义，代码零搬运。
+- **测试**：新增 `fill.chunking.test.ts`（10）、`fill.grounding.test.ts`（12）、`extractFacts.superseded.test.ts`（8），`context-audit.test.ts` 追加 2；修正两处过时测试夹具正文（补入模型所填名称，断言一字未改）。Node 24 下全量 vitest **207 文件 / 2299 全绿**、`tsc --noEmit` 零错误。
+
 ### 上下文质量维护 + 统一改写面板（2026-11-11 补，未 bump 版本）
 
 - **阶段2 · 上下文质量维护**：写后几章打开「上下文预览」即可见只读体检报告（默认收起，不抢主视觉），覆盖三件事：①**清理冗余**——一致性基线剔除来源命中章节摘要标题的重复事实（`getConsistencyBaselineReport` 同时返回剔除条数），空值/乱码/提示词残留事实标记建议人工修正；②**优化总结**——确定性检测空/过短/乱码/缺关键事件/混入提示词残留的摘要，动作指向已有的「重新摘要」按钮（LLM 重生成→人工确认→落库），不自动改写；③**补全缺失**——把 `memory-injector` 策略5 的「超预算静默丢弃不提示」暴露为可归因诊断（`analyzeMemoryInjection` 只读旁路，注入文本与原函数逐字一致），逐条区分 `dedup_dropped` / `budget_truncated`，另有「有正文却缺摘要」「基线为空」「世界书全未触发」三类归因，每条给原因与可操作建议。

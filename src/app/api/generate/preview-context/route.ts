@@ -261,6 +261,7 @@ export async function POST(request: Request) {
         summaries: (allSummariesAudit as any[]) || [],
         facts: (baselineReport?.facts ?? []) as any,
         droppedFactCount: baselineReport?.droppedFactCount ?? 0,
+        supersededFactCount: baselineReport?.supersededFactCount ?? 0,
         memory,
         chaptersWithContent: (allNodes as any[]).filter((n: any) => (n.content || "").trim().length > 0).length,
         triggeredLoreCount: promptContext.triggeredLore.length,

@@ -15,6 +15,7 @@
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
     "test": "vitest run",
+    "test:fill-quality": "vitest run src/core/babylore/fill.chunking.test.ts src/core/babylore/fill.grounding.test.ts src/core/babylore/fill.ops.test.ts src/core/consistency/extractFacts.superseded.test.ts src/core/consistency/context-audit.test.ts",
     "import:dry": "tsx scripts/import-dry.ts",
     "import:corpus": "tsx scripts/import-corpus.ts",
     "test:coverage": "vitest run --coverage",

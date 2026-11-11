@@ -59,6 +59,58 @@ export function dedupeFacts(facts: RawFact[]): RawFact[] {
 }
 
 /**
+ * 「旧事实失效不删除」的注入层实现（阶段 C1）。
+ *
+ * dedupeFacts 只管**单次抽取内**的重复；跨章累积后，同一 (subject, attribute) 会有多版
+ * （李富贵：账房 → 杀人凶手）。旧实现全量注入，模型同时看到两版互相矛盾的设定。
+ *
+ * 取「时序语义」而不引图数据库：用已有的 createdAt / confidence / source 三个字段，
+ * 每个键只保留最新最可信的一条**用于注入**；旧条原样留在库里，不删、不改，历史可追溯。
+ * 优先级：作者手填(manual) > createdAt 更新 > confidence 更高 > 先到的（全同保守保留）。
+ */
+type FactLike = {
+  subject: string;
+  attribute: string;
+  confidence?: number | null;
+  source?: string | null;
+  createdAt?: Date | string | null;
+};
+
+/** a 是否应当取代 b（纯比较，不修改入参） */
+function preferFact(a: FactLike, b: FactLike): boolean {
+  const aManual = a.source === "manual";
+  const bManual = b.source === "manual";
+  if (aManual !== bManual) return aManual; // 作者手填永不被自动抽取顶掉
+  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (ta !== tb) return ta > tb;
+  const ca = Number(a.confidence ?? 1);
+  const cb = Number(b.confidence ?? 1);
+  return ca > cb; // 全同返回 false → 保留先到的，行为可预测
+}
+
+export function collapseSupersededFacts<T extends FactLike>(
+  facts: T[],
+): { kept: T[]; supersededCount: number } {
+  const best = new Map<string, T>();
+  let supersededCount = 0;
+  for (const f of facts) {
+    const key = JSON.stringify([
+      String(f.subject ?? "").trim().toLowerCase(),
+      String(f.attribute ?? "").trim().toLowerCase(),
+    ]);
+    const cur = best.get(key);
+    if (!cur) {
+      best.set(key, f);
+      continue;
+    }
+    supersededCount++;
+    if (preferFact(f, cur)) best.set(key, f);
+  }
+  return { kept: Array.from(best.values()), supersededCount };
+}
+
+/**
  * 从 LLM 返回文本中解析事实清单数组。容错策略：
  *  1. 剥掉 ```json ... ``` 代码围栏
  *  2. 截取第一个 [ 到最后一个 ] 之间的内容（容忍前后废话）
@@ -234,8 +286,10 @@ export interface BaselineReport {
   text: string;
   /** 全部事实（含被剔除的），供上下文质量审计检测空值/乱码 */
   facts: Awaited<ReturnType<typeof getConsistencyFacts>>;
-  /** 因「来源命中摘要标题」被剔除的条数——阶段2-① 的真实清理结果 */
+  /** 因「来源命中摘要标题」被剔除的条数——阶段2-① 的真实清理结果（语义不含同键合并） */
   droppedFactCount: number;
+  /** 因同 (subject,attribute) 有更新版本而**未注入**的旧事实条数——阶段 C1（旧条仍在库里） */
+  supersededFactCount: number;
   /** 已归档章节摘要标题（小写），供审计归因 */
   summaryTitles: string[];
 }
@@ -260,16 +314,23 @@ export async function getConsistencyBaselineReport(projectId: string): Promise<B
     .filter(Boolean);
   const titleSet = new Set(summaryTitles);
 
-  if (facts.length === 0) return { text: "", facts, droppedFactCount: 0, summaryTitles };
+  if (facts.length === 0) {
+    return { text: "", facts, droppedFactCount: 0, supersededFactCount: 0, summaryTitles };
+  }
 
-  const kept = facts.filter((f) => {
+  const afterSummary = facts.filter((f) => {
     if (f.source === "manual") return true; // 作者手填事实始终保留
     if (!f.source) return true; // 无来源信息，conservative 保留
     return !titleSet.has(String(f.source).trim().toLowerCase());
   });
+  // droppedFactCount 保持阶段2-① 的原语义：只统计「摘要内已含」的剔除，不混入同键合并数
+  const dropped = facts.length - afterSummary.length;
 
-  const dropped = facts.length - kept.length;
-  if (kept.length === 0) return { text: "", facts, droppedFactCount: dropped, summaryTitles };
+  // 阶段 C1：同键多版只注入最新的一条，旧条留库不删
+  const { kept, supersededCount } = collapseSupersededFacts(afterSummary);
+  if (kept.length === 0) {
+    return { text: "", facts, droppedFactCount: dropped, supersededFactCount: supersededCount, summaryTitles };
+  }
 
   const lines = kept.map(
     (f) => `- [${f.category}] ${f.subject} 的${f.attribute} = ${f.value}${f.source ? `（来源：${f.source}）` : ""}`,
@@ -278,7 +339,14 @@ export async function getConsistencyBaselineReport(projectId: string): Promise<B
     dropped > 0
       ? `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】（已剔除 ${dropped} 条摘要内已含的重复事实）`
       : `【一致性事实基线——写作时务必严格遵守，前后不得矛盾】`;
-  return { text: `${header}\n${lines.join("\n")}`, facts, droppedFactCount: dropped, summaryTitles };
+  // superseded 不写进 text：省 token，且注入格式保持稳定；审计层从 report 字段读取
+  return {
+    text: `${header}\n${lines.join("\n")}`,
+    facts,
+    droppedFactCount: dropped,
+    supersededFactCount: supersededCount,
+    summaryTitles,
+  };
 }
 
 /** 生成可注入提示词的一致性基线文本块（供 prompt 注入层调用）。 */

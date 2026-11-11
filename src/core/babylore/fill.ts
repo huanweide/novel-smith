@@ -143,6 +143,101 @@ function parseOps(raw: string): LoreTableOp[] {
   return [];
 }
 
+/** 单次抽取的正文上限（与旧实现 slice(0,12000) 对齐，短章行为逐字不变） */
+export const FILL_CHUNK_SIZE = 12000;
+/** 相邻块的重叠字数，防止边界处的事实被切成两半 */
+export const FILL_CHUNK_OVERLAP = 400;
+
+/**
+ * 章节分块（阶段 A1）。
+ *
+ * 旧实现是 `chapterText.slice(0, 12000)`：超过 12000 字的章节，后半段连模型都没见到，
+ * 属于确定性漏抽；而 selfCheckFill 只查「表里名称是否在正文里」，方向反了，查不出来。
+ *
+ * 策略：≤chunkSize 的章节返回单块（**零行为变化、零额外 LLM 成本**）；超过才按
+ * step = chunkSize - overlap 滑窗切分，保证原文任意位置至少被一个块完整覆盖。
+ * 分块后的多块 ops 会按块序合并、统一交给 applyOps，同名 insert 由既有「转 update」逻辑
+ * 自然消解，不需要另造一套合并器。
+ */
+export function splitChapterText(
+  text: string,
+  chunkSize: number = FILL_CHUNK_SIZE,
+  overlap: number = FILL_CHUNK_OVERLAP,
+): string[] {
+  const t = String(text ?? "");
+  if (!t) return [];
+  const size = Math.max(1, Math.floor(chunkSize));
+  if (t.length <= size) return [t];
+  const ov = Math.max(0, Math.min(Math.floor(overlap), size - 1));
+  const step = size - ov;
+  const out: string[] = [];
+  for (let start = 0; start < t.length; start += step) {
+    out.push(t.slice(start, start + size));
+    if (start + size >= t.length) break;
+  }
+  return out;
+}
+
+/**
+ * 名称证据校验（阶段 A2）。
+ *
+ * 旧代码只有 buildWarnings 的**事后**字符串告警：名称已落库之后才说「疑似错误地名」，
+ * 既不拦也不可统计。这里把判定抽成纯函数，供落库**之前**复用。
+ *
+ * 两条合法来源：①逐字出现在章节原文（系统提示第 1/4 条铁律的硬兑现）；
+ * ②已存在于该表权威名录（update 复用已有行、作者手填名，本章没再提及也合法）。
+ * 不做模糊匹配——模糊会把「青龙城」放行进「青龙镇」的正文，等于没校验。
+ */
+export function isNameGrounded(
+  name: string,
+  chapterText: string,
+  knownNames: string[] = [],
+): boolean {
+  const n = String(name ?? "").trim().replace(/\s+/g, "");
+  if (!n) return false;
+  const hay = String(chapterText ?? "").replace(/\s+/g, "");
+  if (hay.includes(n)) return true;
+  return knownNames.some((k) => String(k ?? "").trim().replace(/\s+/g, "") === n);
+}
+
+export interface OpValidationResult {
+  valid: LoreTableOp[];
+  invalid: { op: LoreTableOp; reason: string }[];
+}
+
+const VALID_OP_KINDS = new Set(["insert", "update", "delete"]);
+
+/**
+ * ops 形状校验（阶段 A3）。
+ *
+ * 旧实现里 parseOps 只过滤「有 table/op」，applyOps 对未知表 `continue` 静默吞掉，
+ * 非法 op 更是既不落库也无任何记录。这里在入口收紧：形状不对的 op 被摘出并带理由上报，
+ * 同批合法 op 照常落地（不因一条坏 JSON 报废整章）。保留降级——国模 strict schema
+ * 支持度不一，所以是在本地校验而不是依赖服务端的 response_format。
+ */
+export function validateOps(ops: LoreTableOp[], allowedTables: Set<string>): OpValidationResult {
+  const valid: LoreTableOp[] = [];
+  const invalid: { op: LoreTableOp; reason: string }[] = [];
+  for (const op of ops) {
+    const o = op as any;
+    let reason = "";
+    if (!o || typeof o !== "object") reason = "操作不是对象";
+    else if (!VALID_OP_KINDS.has(String(o.op))) reason = `非法 op「${String(o.op)}」`;
+    else if (!allowedTables.has(String(o.table))) reason = `未知表「${String(o.table)}」`;
+    else if (
+      (o.op === "update" || o.op === "delete") &&
+      (!o.match || typeof o.match.col !== "string" || !o.match.col.trim())
+    ) reason = "缺少有效 match.col";
+    else if (
+      o.op !== "delete" &&
+      (o.values == null || typeof o.values !== "object" || Array.isArray(o.values))
+    ) reason = "values 必须是对象";
+    if (reason) invalid.push({ op, reason });
+    else valid.push(op);
+  }
+  return { valid, invalid };
+}
+
 /** 取表的「身份列」：优先 name/title/place/live/key/building，否则第一列 */
 function getIdentityCol(t: { columns?: any[] }): string {
   const cols = (t.columns as any[]) || [];
@@ -333,95 +428,140 @@ async function runFillForText(
   }
 
   const tablesText = buildTablesText(filteredTables);
-  const userPrompt = `【结构化表格定义】
+  // 阶段 A1：不再 slice(0,12000) 硬截断；短章仍是单块、prompt 与旧实现逐字一致。
+  const chunks = splitChapterText(chapterText);
+  const userPrompts = chunks.map((chunk, i) => {
+    const segmentNote =
+      chunks.length > 1
+        ? `【章节分段】本段为第 ${i + 1}/${chunks.length} 段，前后段有重叠；只抽取本段中明确出现的事实，段首/段末被截断处不要臆测。\n`
+        : "";
+    return `${segmentNote}【结构化表格定义】
 ${tablesText}
 
 【最新章节正文】
-${chapterText.slice(0, 12000)}
+${chunk}
 
 请提取本章事实，输出 operations 的严格 JSON。`;
+  });
+  if (userPrompts.length === 0) {
+    return { ok: false, operations: 0, applied: 0, warnings: [], skippedOps: [], crossTableIssues: [], error: "空正文跳过填表" };
+  }
 
   const url = llm.baseURL.endsWith("/v1")
     ? `${llm.baseURL}/chat/completions`
     : `${llm.baseURL}/v1/chat/completions`;
 
   let lastErr = "";
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const t0 = Date.now();
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${llm.apiKey}`,
-        },
-        signal: AbortSignal.timeout(120000),
-        body: JSON.stringify({
-          model: fillModelOf(llm.model, llm.baseURL),
-          messages: [
-            { role: "system", content: STRICT_SYSTEM_PROMPT },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.5, // 结构化抽取任务：低温稳定（原 1.0 同章两次注入随机波动）；0.3 过保守漏抽新人物，0.5 平衡稳定与覆盖
-          max_tokens: 8000,
-          response_format: { type: "json_object" },
-          ...(llm.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
-        }),
-      });
+  /** 单块抽取（含 3 次重试）。失败或空响应返回空数组而不是抛，其它块照常进行。 */
+  async function fetchOpsOnce(prompt: string): Promise<LoreTableOp[]> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const t0 = Date.now();
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${llm.apiKey}`,
+          },
+          signal: AbortSignal.timeout(120000),
+          body: JSON.stringify({
+            model: fillModelOf(llm.model, llm.baseURL),
+            messages: [
+              { role: "system", content: STRICT_SYSTEM_PROMPT },
+              { role: "user", content: prompt },
+            ],
+            temperature: 0.5, // 结构化抽取任务：低温稳定（原 1.0 同章两次注入随机波动）；0.3 过保守漏抽新人物，0.5 平衡稳定与覆盖
+            max_tokens: 8000,
+            response_format: { type: "json_object" },
+            ...(llm.disableThinking ? { thinking: { type: "disabled" as const } } : {}),
+          }),
+        });
 
-      if (!res.ok) {
-        const e = await res.text().catch(() => "");
-        lastErr = `API ${res.status}: ${e.slice(0, 200)}`;
-        throw new Error(lastErr);
-      }
-      const data = await res.json();
-      const msg0 = data?.choices?.[0]?.message || {};
-      let raw = (msg0.content || "").trim();
-      // 推理模型兜底（v1.2.0 实测）：deepseek-v4-flash 推理过长时会吃光 max_tokens，
-      // content 为空（finish=length）；此时从推理尾部提取最后一个 JSON 块作为最终答案。
-      if (!raw) {
-        const reasoning = String(msg0.reasoning_content || "");
-        const parsed = safeParseAIJson(reasoning);
-        if (parsed) raw = JSON.stringify(parsed);
-      }
-      const ops = parseOps(raw);
-      if (ops.length === 0) {
-        lastErr = "模型未返回任何有效操作";
+        if (!res.ok) {
+          const e = await res.text().catch(() => "");
+          lastErr = `API ${res.status}: ${e.slice(0, 200)}`;
+          throw new Error(lastErr);
+        }
+        const data = await res.json();
+        const msg0 = data?.choices?.[0]?.message || {};
+        let raw = (msg0.content || "").trim();
+        // 推理模型兜底（v1.2.0 实测）：deepseek-v4-flash 推理过长时会吃光 max_tokens，
+        // content 为空（finish=length）；此时从推理尾部提取最后一个 JSON 块作为最终答案。
+        if (!raw) {
+          const reasoning = String(msg0.reasoning_content || "");
+          const parsed = safeParseAIJson(reasoning);
+          if (parsed) raw = JSON.stringify(parsed);
+        }
+        const ops = parseOps(raw);
+        const usage = (data as any)?.usage;
+        recordLlmCall({
+          model: llm.model,
+          role: "assistant",
+          promptTokens: usage?.prompt_tokens ?? usage?.promptTokens ?? 0,
+          completionTokens: usage?.completion_tokens ?? usage?.completionTokens ?? 0,
+          totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
+          baseURL: llm.baseURL,
+          projectId: projectId ?? null,
+        });
+        if (ops.length === 0) {
+          lastErr = "模型未返回任何有效操作";
+          if (attempt < 3) continue;
+          return [];
+        }
+        return ops;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        console.warn(`[fill] LLM attempt=${attempt} FAILED dt=${Date.now() - t0}ms err=${lastErr.slice(0, 120)}`);
         if (attempt < 3) continue;
       }
-      const r = await applyOps(filteredTables, ops, srcLabel || "ch?:batch?", chapterText, nameResolver);
-      const warnings = [...r.warnings, ...buildWarnings(r.appliedNames, chapterText)];
-      // P0-3：以「实际落地数 applied」为完成门槛——空 ops / 全失效 ops 的章节
-      // 须视为失败（ok:false），使其可重试而非被永久标记「已填」（防重复机制反噬）。
-      if (r.applied === 0) {
-        warnings.push(`本章未落地任何事实（ops=${ops.length}）：${lastErr || "空 ops 或全失效"}，将标记为未填以便重试`);
-      }
-      const usage = (data as any)?.usage;
-      recordLlmCall({
-        model: llm.model,
-        role: "assistant",
-        promptTokens: usage?.prompt_tokens ?? usage?.promptTokens ?? 0,
-        completionTokens: usage?.completion_tokens ?? usage?.completionTokens ?? 0,
-        totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
-        baseURL: llm.baseURL,
-        projectId: projectId ?? null,
-      });
-      return {
-        ok: r.applied > 0,
-        operations: ops.length,
-        applied: r.applied,
-        warnings,
-        skippedOps: r.skippedOps,
-        crossTableIssues: r.crossTableIssues,
-        error: r.applied > 0 ? undefined : lastErr || "未落地任何事实",
-      };
-    } catch (e) {
-      lastErr = e instanceof Error ? e.message : String(e);
-      console.warn(`[fill] LLM attempt=${attempt} FAILED dt=${Date.now() - t0}ms err=${lastErr.slice(0, 120)}`);
-      if (attempt < 3) continue;
     }
+    return [];
   }
-  return { ok: false, operations: 0, applied: 0, warnings: [], skippedOps: [], crossTableIssues: [], error: lastErr };
+
+  // 阶段 B：多块抽取并行（各块只读正文、无共享状态），Promise.all 保序返回；
+  // 合并后的 ops 仍按块序交给 applyOps，落库（tables.rows 有状态累积）始终串行。
+  // 这样长章 N 块从 N×单次延迟降到约 1×，且不破坏「同名 insert 转 update」的去重语义。
+  // 注：lastErr 仅用于最终错误文案，多块并发下由最后完成的失败覆盖，不影响落地结果。
+  const chunkOps: LoreTableOp[][] =
+    userPrompts.length > 1
+      ? await Promise.all(userPrompts.map((p) => fetchOpsOnce(p)))
+      : [await fetchOpsOnce(userPrompts[0])];
+  const allOps = chunkOps.flat();
+  const emptyChunks = chunkOps.filter((o) => o.length === 0).length;
+  // 阶段 A3：入口收紧 ops 形状；坏 op 被摘出并上报，不因一条坏 JSON 报废整章。
+  const { valid: checkedOps, invalid: invalidOps } = validateOps(
+    allOps,
+    new Set(filteredTables.map((t) => t.key)),
+  );
+
+  const r = await applyOps(filteredTables, checkedOps, srcLabel || "ch?:batch?", chapterText, nameResolver);
+  const warnings = [...r.warnings, ...buildWarnings(r.appliedNames, chapterText)];
+  if (invalidOps.length > 0) {
+    const reasons = Array.from(new Set(invalidOps.map((i) => i.reason))).slice(0, 3).join("；");
+    warnings.push(`已拦截 ${invalidOps.length} 条非法操作：${reasons}`);
+  }
+  if (chunks.length > 1) {
+    warnings.push(
+      `长章分块抽取：${chunks.length} 段（重叠 ${FILL_CHUNK_OVERLAP} 字），合并 ${allOps.length} 条操作${emptyChunks ? `，其中 ${emptyChunks} 段无事实或失败` : ""}`,
+    );
+  }
+  // P0-3：以「实际落地数 applied」为完成门槛——空 ops / 全失效 ops 的章节
+  // 须视为失败（ok:false），使其可重试而非被永久标记「已填」（防重复机制反噬）。
+  if (r.applied === 0) {
+    warnings.push(`本章未落地任何事实（ops=${allOps.length}）：${lastErr || "空 ops 或全失效"}，将标记为未填以便重试`);
+  }
+  return {
+    ok: r.applied > 0,
+    operations: allOps.length,
+    applied: r.applied,
+    warnings,
+    skippedOps: [
+      ...r.skippedOps,
+      ...invalidOps.map((i) => ({ op: i.op, reason: i.reason, table: String((i.op as any)?.table ?? "") })),
+    ],
+    crossTableIssues: r.crossTableIssues,
+    error: r.applied > 0 ? undefined : lastErr || "未落地任何事实",
+  };
 }
 
 /**
@@ -507,6 +647,17 @@ async function applyOps(
       if (newVal == null || String(newVal).trim() === "") {
         warnings.push(`表「${t.name}」insert 缺少身份列「${idCol}」值，已跳过（空主键行无法被后续章节复用匹配）`);
         skippedOps.push({ op, reason: `insert 缺少身份列「${idCol}」值`, table: t.name });
+        continue;
+      }
+      // 阶段 A2：名称证据闸门——把 buildWarnings 的「事后告警」升级为「事前拦截」。
+      // 只卡新建行；纯 update 复用已有行不受影响。
+      // 必须用归一前的 rawNewVal：「李大师」在正文、正主「李富贵」未必在，用归一名会误杀同人异称。
+      if (
+        chapterText &&
+        !isNameGrounded(String(rawNewVal), chapterText, rows.map((r: any) => r[idCol]))
+      ) {
+        warnings.push(`表「${t.name}」insert 名称「${String(rawNewVal)}」未在正文或已有名录中找到，已跳过（防杜撰）`);
+        skippedOps.push({ op, reason: `名称未逐字命中正文：${String(rawNewVal)}`, table: t.name });
         continue;
       }
       // 代码级去重：同主键名已存在则转 update（杜绝同名重复行）

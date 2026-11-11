@@ -40,6 +40,8 @@ export interface ContextAuditInput {
   facts: AuditFact[];
   /** 基线注入时因「来源命中摘要标题」被剔除的条数（阶段2-① 的真实清理结果） */
   droppedFactCount: number;
+  /** 因同 (subject,attribute) 有更新版本而未注入的旧事实条数（阶段 C1，旧条仍在库里） */
+  supersededFactCount?: number;
   /** 记忆注入归因（analyzeMemoryInjection 的产出） */
   memory: MemoryInjectionDiagnostics | null;
   /** 有正文的章节总数（用于检测「有正文却没有摘要」） */
@@ -54,7 +56,7 @@ export interface ContextAuditInput {
 export type IssueSeverity = "info" | "warn" | "error";
 
 export interface CleanupItem {
-  kind: "summarized_fact" | "duplicate_memory" | "corrupted_fact" | "empty_fact";
+  kind: "summarized_fact" | "superseded_fact" | "duplicate_memory" | "corrupted_fact" | "empty_fact";
   severity: IssueSeverity;
   label: string;
   detail: string;
@@ -139,6 +141,20 @@ export function auditContextQuality(input: ContextAuditInput): ContextQualityRep
       label: `已剔除 ${input.droppedFactCount} 条摘要内已含的重复事实`,
       detail: "这些事实已随章节摘要进入上下文，一致性基线里不再重复注入，避免同一信息占两份 token。",
       savedTokens: input.droppedFactCount * 12,
+      autoApplied: true,
+    });
+  }
+
+  // 1a-2. 阶段 C1 已自动合并：同一 (subject,attribute) 的多版事实只注入最新一条，
+  // 旧条留库不删（历史可追溯）。这里只做可见性报告，不重复执行清理动作。
+  const superseded = input.supersededFactCount ?? 0;
+  if (superseded > 0) {
+    cleanup.push({
+      kind: "superseded_fact",
+      severity: "info",
+      label: `已合并 ${superseded} 条同键旧事实（只注入最新版）`,
+      detail: "同一主体的同一属性积累了多版设定（如身份从「账房」变为「凶手」），基线只注入最新最可信的一条；旧条仍保留在库里，不删历史。",
+      savedTokens: superseded * 12,
       autoApplied: true,
     });
   }
