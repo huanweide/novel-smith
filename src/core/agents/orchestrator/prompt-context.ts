@@ -99,8 +99,10 @@ export function buildPromptContext(params: {
   loreTables?: Array<{ name: string; columns: any[]; rows: any[] }>;
   /** v1.6.51.1：一致性事实基线文本块（来自 ConsistencyFact 表，POST /api/projects/[id]/consistency 触发抽取），注入 systemPrompt 强制前后不矛盾 */
   consistencyBaseline?: string;
+  /** R4'：自优化器给出的记忆注入预算；不传则用 DEFAULT_BUDGET，零行为变化 */
+  memoryBudget?: number;
 }): PromptContext {
-  const { project, currentNode, previousNodes, characters, loreEntries, chapterSummaries, storyBeats = [], storylines = [], pendingCommitments = [], pendingItems = [], tieredMemory, styleCard, authorNote, loreTables, consistencyBaseline } = params;
+  const { project, currentNode, previousNodes, characters, loreEntries, chapterSummaries, storyBeats = [], storylines = [], pendingCommitments = [], pendingItems = [], tieredMemory, styleCard, authorNote, loreTables, consistencyBaseline, memoryBudget } = params;
 
   // 主角极简卡
   const protagonist = characters.find((c) => c.role === "protagonist") || characters[0];
@@ -188,7 +190,10 @@ export function buildPromptContext(params: {
       ...previousNodes.slice(-2).map((n) => n.content || n.outline || ""),
     ].join(" ");
     try {
-      memoryBlock = injectOptimizedMemory(tieredMemory, dedupContext, DEFAULT_BUDGET, countTokens);
+      const budget = typeof memoryBudget === "number" && memoryBudget > 0
+        ? { ...DEFAULT_BUDGET, maxTokens: Math.floor(memoryBudget) }
+        : DEFAULT_BUDGET;
+      memoryBlock = injectOptimizedMemory(tieredMemory, dedupContext, budget, countTokens);
     } catch (_) {
       // 记忆注入异常静默降级——不影响正文生成
     }

@@ -205,6 +205,7 @@ ${finalDirective}${charCountNote}
     const url = baseURL.endsWith("/v1") ? `${baseURL}/chat/completions` : `${baseURL}/v1/chat/completions`;
 
     let structuredContent = "";
+    const llmT0 = Date.now(); // R1-D3
     try {
       const llmRes = await fetch(url, {
         method: "POST",
@@ -242,6 +243,7 @@ ${finalDirective}${charCountNote}
         totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
         baseURL,
         projectId,
+        durationMs: Date.now() - llmT0, // R1-D3
       });
       structuredContent = data.choices?.[0]?.message?.content || "";
     } catch (err) {

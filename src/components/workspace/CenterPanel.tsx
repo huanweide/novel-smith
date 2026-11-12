@@ -180,7 +180,7 @@ export function CenterPanel({
   projectId,
   refineMode, onToggleRefineMode, refineInstruction, onRefineInstructionChange, onRefine, onSelectionRefine, onRoll,
   chapterOutlinePrompt, onChapterOutlinePromptChange,
-  genStep, genStepLabels, chapterOutlineStatus,
+  genStep, genStepLabels, chapterOutlineStatus, liveMetrics,
   onOpenGame,
   onBatchWrite,
   onEditCharacter, onEditLore,   todayWords = 0,
@@ -210,6 +210,8 @@ export function CenterPanel({
   onOpenGame: () => void;
   onBatchWrite: () => void;
   genStep: string; genStepLabels: Record<string, { icon: React.ReactNode; label: string }>;
+  /** R5：流式实时演算指标，低调展示 */
+  liveMetrics?: { wordCount: number; paragraphCount: number; dialogueRatio: number; factHits: number; forbiddenHits: number; pacingHint: string } | null;
   chapterOutlineStatus: string;
   onEditCharacter?: (id: string) => void;
   onEditLore?: (id: string) => void;
@@ -1208,6 +1210,13 @@ export function CenterPanel({
                       </div>
                     )}
                     {isGenerating && !genStep && <span className="animate-pulse">生成中…</span>}
+                    {liveMetrics && genStep === "generating" && (
+                      <p className="text-[10px] leading-4 text-[var(--nv-text-tertiary)] mt-1">
+                        {liveMetrics.wordCount} 字 · {liveMetrics.paragraphCount} 段 · 设定呼应 {liveMetrics.factHits}
+                        {liveMetrics.forbiddenHits > 0 ? ` · 命中词 ${liveMetrics.forbiddenHits}` : ""}
+                        {liveMetrics.pacingHint ? ` · ${liveMetrics.pacingHint}` : ""}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center">

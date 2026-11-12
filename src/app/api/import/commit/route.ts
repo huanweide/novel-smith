@@ -102,6 +102,7 @@ ${pairsText}
 【输出——纯JSON，无markdown】
 {"merged":[{"name":"${isChar ? "角色名" : "词条标题"}","result":{${isChar ? "完整卡面" : "完整词条"}}},...]}`;
 
+  const llmT0 = Date.now(); // R1-D3
   const TIMEOUT_MS = 45000; // 45s 超时保护，防止单批卡死
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -141,6 +142,7 @@ ${pairsText}
       completionTokens,
       totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? (promptTokens + completionTokens),
       baseURL,
+      durationMs: Date.now() - llmT0, // R1-D3
     });
     const raw = data?.choices?.[0]?.message?.content;
     if (!raw) return null;

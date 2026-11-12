@@ -72,3 +72,28 @@ describe("buildPromptContext · 通用体裁去AI味（好看基本盘）", () =
     expect(ctx.systemPrompt).not.toContain("钩子与悬念");
   });
 });
+
+// R4' · 自优化预算必须真实作用于记忆注入（不是只发个 SSE 好看）
+describe("buildPromptContext · R4' 记忆预算自优化", () => {
+  const ev = (content: string, importance: "critical" | "high" | "medium", chapterNumber: number) => ({
+    content, importance, source: "chapter_summary" as const, chapterNumber,
+  });
+  const tieredMemory = {
+    sTier: [ev("主角李富贵在青龙镇账房发现账册被调包，此事成为全书主线伏笔，绝不可遗忘", "critical", 1)],
+    aTier: Array.from({ length: 12 }, (_, i) =>
+      ev(`第${i + 2}章发生的支线事件与人物互动记录，涉及配角的动向与线索推进，需要被后续章节适度记起`.repeat(3), "high", i + 2)),
+    bTier: [],
+  } as any;
+
+  it("传入更小的 memoryBudget 时，注入的记忆文本更短（预算真的生效）", () => {
+    const big = buildPromptContext({ ...baseArgs, tieredMemory, memoryBudget: 800 });
+    const small = buildPromptContext({ ...baseArgs, tieredMemory, memoryBudget: 200 });
+    expect(small.systemPrompt.length).toBeLessThan(big.systemPrompt.length);
+  });
+
+  it("不传 memoryBudget 时与传 800（默认值）逐字一致，零行为变化", () => {
+    const a = buildPromptContext({ ...baseArgs, tieredMemory });
+    const b = buildPromptContext({ ...baseArgs, tieredMemory, memoryBudget: 800 });
+    expect(a.systemPrompt).toBe(b.systemPrompt);
+  });
+});

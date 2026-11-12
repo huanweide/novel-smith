@@ -92,6 +92,7 @@ ${slText}
     ? `${settings.baseUrl}/chat/completions`
     : `${settings.baseUrl}/v1/chat/completions`;
 
+  const llmT0 = Date.now(); // R1-D3
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -121,6 +122,8 @@ ${slText}
       completionTokens: usage?.completion_tokens ?? usage?.completionTokens ?? 0,
       totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
       baseURL: settings.baseUrl,
+      durationMs: Date.now() - llmT0, // R1-D3
+      projectId: input.projectId,
     });
     const raw = data?.choices?.[0]?.message?.content?.trim() || "";
     const plan = parsePlan(raw);

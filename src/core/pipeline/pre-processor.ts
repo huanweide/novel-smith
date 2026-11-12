@@ -154,6 +154,8 @@ export async function buildGenerationContext(params: {
   authorNote: string;
   previousNodes: StoryNode[];
   pendingCommitments?: any[];
+  /** R4'：自优化器给出的记忆注入预算 */
+  memoryBudget?: number;
 }) {
   const { data, activeCharacters, authorNote, previousNodes, pendingCommitments = [] } = params;
   const pendingItems = (data.pendingItems || []) as any[];
@@ -189,5 +191,6 @@ export async function buildGenerationContext(params: {
     tieredMemory,
     loreTables: data.loreTables as any,
     consistencyBaseline,
+    memoryBudget: params.memoryBudget,
   });
 }

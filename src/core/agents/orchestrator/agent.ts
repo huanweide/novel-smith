@@ -74,10 +74,12 @@ export class AgentOrchestrator {
     overrides?: Partial<LLMConfig>,
     /** F5 项目配置中心：项目级 llmConfig 覆盖（Json），非空字段覆盖全局设置 */
     projectLlmConfig?: Record<string, unknown> | null,
+    /** R1-D2：项目归属，透传给 LLM 调用日志（成本/延迟看板按项目分组的真数据源） */
+    projectId?: string | null,
   ): Promise<AgentOrchestrator> {
     const merged: Partial<LLMConfig> = { ...overrides, ...buildProjectOverrides(projectLlmConfig) };
     const config = await getEffectiveConfig(merged);
-    const client = createLLMClient(config);
+    const client = createLLMClient(config, { projectId });
     return new AgentOrchestrator(client, config);
   }
 

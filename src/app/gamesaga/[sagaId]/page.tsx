@@ -1236,11 +1236,17 @@ function SagaDetailInner() {
                           </div>
                         ) : (
                           <>
-                            <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">
-                              {renderHotspots(t.narrative, hotspotNames, (n) => setInteractChar(n))}
-                            </p>
+                            <div
+                              className="rounded-xl border border-[var(--nv-border-2)]/60 bg-[var(--nv-surface-1)]/40 px-4 py-3 shadow-[0_1px_12px_rgba(0,0,0,0.04)] nv-turn-enter"
+                              style={{ animationDelay: `${Math.min(t.round - 1, 6) * 45}ms` }}
+                            >
+                              <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">
+                                {renderHotspots(t.narrative, hotspotNames, (n) => setInteractChar(n))}
+                              </p>
+                            </div>
                             <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover/turn:opacity-100">
-                              <span className="text-[10px] text-[var(--nv-text-muted)]">第 {t.round} 轮 · {t.playerAction}</span>
+                              <span className="rounded-md border border-[var(--nv-border-2)]/60 px-1.5 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">第 {t.round} 轮</span>
+                              <span className="text-[10px] text-[var(--nv-text-muted)]">{t.playerAction}</span>
                               <button
                                 onClick={() => { setEditingRound(t.round); setEditDraft(t.narrative); }}
                                 className="text-[10px] text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-text-primary)]"

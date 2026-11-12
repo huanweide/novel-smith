@@ -29,6 +29,7 @@ import { syncChapterEntities } from "./entity-sync";
 import { fillModelOf } from "./table-model";
 import type { LoreTableOp, TableDef } from "./types";
 import { resolveNameToCanonical, type CanonicalCharacter } from "@/lib/entity-auto-creator";
+import { mergeLoreRows } from "./lore-rows-merge";
 
 export interface FillResult {
   ok: boolean;
@@ -502,6 +503,7 @@ ${chunk}
           totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
           baseURL: llm.baseURL,
           projectId: projectId ?? null,
+          durationMs: Date.now() - t0, // R1-D3：旁路调用也进延迟看板
         });
         if (ops.length === 0) {
           lastErr = "模型未返回任何有效操作";
@@ -605,6 +607,11 @@ async function applyOps(
   const skippedOps: SkippedOp[] = [];
   const crossTableIssues: SelfCheckIssue[] = [];
   const now = new Date().toISOString();
+  // R1-D4：起始快照。rows 是贯穿多章循环的同一引用，写回前必须与数据库最新值做三路合并，
+  // 否则后台 FillTask 与 auto-confirm 并发时，后写者会抹掉先写者新增的行。
+  const baseSnapshot = new Map<string, any[]>(
+    tables.map((t) => [t.key, JSON.parse(JSON.stringify(Array.isArray(t.rows) ? t.rows : []))]),
+  );
 
   for (const rawOp of ops) {
     const t = byKey.get(rawOp.table);
@@ -736,7 +743,23 @@ async function applyOps(
       rows.push(...filtered);
     }
 
-    await prisma.loreTable.update({ where: { id: t.id }, data: { rows } });
+    // R1-D4：写回前重读数据库最新 rows，把「本次相对起始快照的差异」合并进去，而不是整列覆盖。
+    // 读失败（DB 暂不可用 / 部分 prisma mock）时降级为空 fresh，行为等价于旧的整列写回，绝不阻断填表。
+    let freshRows: any[] = [];
+    try {
+      const latest = await (prisma.loreTable as any).findUnique({
+        where: { id: t.id },
+        select: { rows: true },
+      });
+      if (Array.isArray(latest?.rows)) freshRows = latest.rows as any[];
+    } catch {
+      freshRows = [];
+    }
+    const base = baseSnapshot.get(t.key) ?? [];
+    const toWrite = freshRows.length > 0 || base.length === 0
+      ? mergeLoreRows(base, rows, freshRows, idCol)
+      : rows;
+    await prisma.loreTable.update({ where: { id: t.id }, data: { rows: toWrite } });
   }
   return { applied, appliedNames, warnings, skippedOps, crossTableIssues };
 }

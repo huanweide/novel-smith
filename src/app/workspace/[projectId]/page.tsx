@@ -46,6 +46,8 @@ export default function WorkspacePage() {
   // M1：Codex 活注入清单——本章实际注入了哪些设定（角色/世界观/伏笔）+ 略过统计
   const [codexItems, setCodexItems] = useState<any[]>([]);
   const [codexStats, setCodexStats] = useState<any>(null);
+  // R5：流式实时演算指标（低调展示，只在生成中出现）
+  const [liveMetrics, setLiveMetrics] = useState<any>(null);
   const genStepLabels: Record<string, { icon: React.ReactNode; label: string }> = {
     "loading-cards": { icon: <Icon name="search" size={14} className="animate-pulse" />, label: "AI 正在分析角色调度..." },
     "confirming": { icon: <Icon name="clipboard" size={14} />, label: "等待确认角色选择" },
@@ -874,6 +876,20 @@ export default function WorkspacePage() {
           try {
             const event: SSEEvent = JSON.parse(trimmed.slice(6));
             if (event.type === "token") { accumulated += event.content; useWriterStore.getState().appendContent(event.content); }
+            else if (event.type === "live_metrics") {
+              setLiveMetrics({
+                wordCount: event.wordCount ?? 0,
+                paragraphCount: event.paragraphCount ?? 0,
+                dialogueRatio: event.dialogueRatio ?? 0,
+                factHits: event.factHits ?? 0,
+                forbiddenHits: event.forbiddenHits ?? 0,
+                pacingHint: event.pacingHint || "",
+              });
+            }
+            else if (event.type === "writing_tuning") {
+              // R4'：自优化决策可观测（不弹窗、不打断，只在控制台留痕供排查）
+              if (event.applied) console.debug("[writing-tuning]", event.reasons);
+            }
             else if (event.type === "review_start") setGenStep("reviewing");
             else if (event.type === "summarize_start") setGenStep("summarizing");
             else if (event.type === "review_result") setReviewResult({ passed: event.passed ?? false, issues: event.issues || [] });
@@ -1396,6 +1412,7 @@ export default function WorkspacePage() {
             onSelectionRefine={handleSelectionRefine}
             chapterOutlinePrompt={chapterOutlinePrompt} onChapterOutlinePromptChange={handleChapterOutlinePromptChange}
             genStep={genStep} genStepLabels={genStepLabels} chapterOutlineStatus={chapterOutlineStatus}
+            liveMetrics={liveMetrics}
             onOpenGame={() => {
               // F6 跑团化 P0-1a：游戏模式入口升级为「游戏本中枢」（自足创作空间）；
               // 旧章级游戏页路由保留但不再从此进入

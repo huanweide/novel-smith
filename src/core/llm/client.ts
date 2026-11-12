@@ -10,6 +10,7 @@
 
 import { getSettings, mapLLMError, recordLlmCall, assertValidApiKey } from "@/lib/llm";
 import type { LLMConfig, FallbackModel } from "@/core/types";
+import { createRequestId, describeFailure, retryBudget } from "./telemetry";
 
 // ─── LLM 请求超时（BE-8：统一散落的三档为单常量）────────────
 /** 单次 LLM 请求最长等待时间（毫秒）。所有 chat / chatStream 共用此值，避免超时语义不一致、排查慢调用更简单。 */
@@ -45,6 +46,10 @@ export interface LLMRequest {
   thinking?: { type: "enabled" | "disabled" };
   /** 外部 AbortSignal（如用户停止生成）：与超时信号合并，真正中断底层 fetch，灭停止后仍在生成的 token 浪费 */
   signal?: AbortSignal;
+  /** 项目归属：透传给成本/延迟看板。优先于 createLLMClient 的客户端级默认值；不传则记 null，绝不臆造 */
+  projectId?: string | null;
+  /** R2：一次业务生成的关联 ID。同一次生成内全部 LLM 调用共用；不传则客户端自动生成一个 */
+  requestId?: string;
   /** JSON 模式：要求模型以严格 JSON 对象输出（OpenAI 兼容 response_format）。用于选角 / 去重分组等"必须纯 JSON"的场景 */
   json?: boolean;
   /** OpenAI 兼容的工具定义 */
@@ -117,6 +122,11 @@ export function resolveMaxTokens(
 
 /** 单次调用最大尝试次数（含首次）。故障转移链长度由 fallbackModels 决定 */
 const DEFAULT_RETRIES = 3;
+/**
+ * R2：一次逻辑操作的**总**尝试数硬上界（跨全部 fallback target 共用）。
+ * 改前是 3×链长，链一长遇到 429 会反向加压；这里收敛到单一 owner，上界 6 次。
+ */
+const MAX_TOTAL_ATTEMPTS = 6;
 
 /** P2 监控记账：失败/重试的尝试也需记账，用此前缀与成功调用区分，避免成功率失真 */
 const FAIL_ROLE_PREFIX = "fail:";
@@ -235,7 +245,11 @@ async function attemptChat(
         Authorization: `Bearer ${target.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+      // R1-D1：与流式 establishStream 同口径合并超时信号与外部取消信号。
+      // 改前非流式只挂 timeout，用户点「停止」后大纲/审校/摘要/规划仍会跑满 5 分钟、白烧 token。
+      signal: request.signal
+        ? AbortSignal.any([AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS), request.signal])
+        : AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
     // 原始异常必须留痕：TypeError 可能是 fetch failed(带 cause)、JSON 序列化失败、
@@ -473,7 +487,7 @@ async function* readStream(
 /**
  * 创建 LLM 客户端
  */
-export function createLLMClient(config: LLMConfig) {
+export function createLLMClient(config: LLMConfig, options?: { projectId?: string | null }) {
   return {
     /**
      * 同步调用 —— 等全部生成完再返回
@@ -482,11 +496,18 @@ export function createLLMClient(config: LLMConfig) {
       const chain = buildChain(config, request.model);
       let lastError: Error | null = null;
       const start = Date.now(); // 端到端计时起点（含重试/故障转移）
+      // R1-D2：按项目归属记账。request 级优先，其次客户端级默认值，都没有则 null。
+      const projectId = request.projectId ?? options?.projectId ?? null;
+      // R2：一次业务生成的关联 ID + 总尝试数硬上界（单一 owner，避免各层重复重试把 429 打成风暴）
+      const requestId = request.requestId ?? createRequestId();
+      const maxAttempts = retryBudget({ retriesPerTarget: DEFAULT_RETRIES, targets: chain.length, hardCap: MAX_TOTAL_ATTEMPTS });
+      let attemptsUsed = 0;
 
       for (const target of chain) {
         let attempt = 0;
-        while (attempt < DEFAULT_RETRIES) {
+        while (attempt < DEFAULT_RETRIES && attemptsUsed < maxAttempts) {
           attempt++;
+          attemptsUsed++;
           const res = await attemptChat(target, request, config);
           if (res.ok) {
             recordLlmCall({
@@ -497,11 +518,13 @@ export function createLLMClient(config: LLMConfig) {
               totalTokens: res.value.usage.totalTokens,
               baseURL: target.baseURL,
               isFallback: target !== chain[0],
+              projectId,
               durationMs: Date.now() - start, // 生成延迟：端到端总耗时
             });
             return res.value;
           }
           // P2：失败/重试的尝试也要记账（区分于成功调用），否则调用次数与成功率失真
+          // R1-D3：失败调用同样记 durationMs，否则被 generation-metrics 的 durationMs not null 整批过滤
           recordLlmCall({
             model: target.model,
             role: `${FAIL_ROLE_PREFIX}${request.role || "general"}`,
@@ -510,11 +533,22 @@ export function createLLMClient(config: LLMConfig) {
             totalTokens: 0,
             baseURL: target.baseURL,
             isFallback: target !== chain[0],
+            projectId,
+            durationMs: Date.now() - start,
           });
+          // R2：失败上下文必须留痕，且保留主错误原文（不用泛化文案覆盖）
+          console.error("[llm/failure]", JSON.stringify(describeFailure(res.error, {
+            requestId,
+            model: target.model,
+            baseURL: target.baseURL,
+            attempt: attemptsUsed,
+            fallback: target !== chain[0],
+            retryAfterMs: res.retryAfterMs,
+          })));
           // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
           if (res.fatal) throw markFatal(res.error);
           lastError = res.error;
-          if (attempt < DEFAULT_RETRIES) await sleep(res.retryAfterMs ?? backoffDelay(attempt));
+          if (attempt < DEFAULT_RETRIES && attemptsUsed < maxAttempts) await sleep(res.retryAfterMs ?? backoffDelay(attempt));
         }
       }
 
@@ -529,11 +563,16 @@ export function createLLMClient(config: LLMConfig) {
       let lastError: Error | null = null;
       const streamStart = Date.now(); // 流式计时起点
       let firstTokenMs: number | null = null; // 首个正文 token 延迟（闭包共享给 onUsage）
+      const projectId = request.projectId ?? options?.projectId ?? null;
+      const requestId = request.requestId ?? createRequestId();
+      const maxAttempts = retryBudget({ retriesPerTarget: DEFAULT_RETRIES, targets: chain.length, hardCap: MAX_TOTAL_ATTEMPTS });
+      let attemptsUsed = 0;
 
       for (const target of chain) {
         let attempt = 0;
-        while (attempt < DEFAULT_RETRIES) {
+        while (attempt < DEFAULT_RETRIES && attemptsUsed < maxAttempts) {
           attempt++;
+          attemptsUsed++;
           const est = await establishStream(target, request, config);
           if (est.ok) {
             // 一旦进入 token 流就不再重试 / 切换，避免重复输出
@@ -548,6 +587,7 @@ export function createLLMClient(config: LLMConfig) {
                   totalTokens: u.totalTokens,
                   baseURL: target.baseURL,
                   isFallback: target !== chain[0],
+                  projectId,
                   durationMs: Date.now() - streamStart, // 流式总耗时（到 [DONE]）
                   firstTokenMs, // 首 token 延迟（onFirstToken 已设置）
                 }),
@@ -566,11 +606,21 @@ export function createLLMClient(config: LLMConfig) {
             totalTokens: 0,
             baseURL: target.baseURL,
             isFallback: target !== chain[0],
+            projectId,
+            durationMs: Date.now() - streamStart,
           });
+          console.error("[llm/failure]", JSON.stringify(describeFailure(est.error, {
+            requestId,
+            model: target.model,
+            baseURL: target.baseURL,
+            attempt: attemptsUsed,
+            fallback: target !== chain[0],
+            retryAfterMs: est.retryAfterMs,
+          })));
           // 4xx 鉴权/配置错误：直接抛出，不重试也不切备用模型
           if (est.fatal) throw markFatal(est.error);
           lastError = est.error;
-          if (attempt < DEFAULT_RETRIES) await sleep(est.retryAfterMs ?? backoffDelay(attempt));
+          if (attempt < DEFAULT_RETRIES && attemptsUsed < maxAttempts) await sleep(est.retryAfterMs ?? backoffDelay(attempt));
         }
       }
 

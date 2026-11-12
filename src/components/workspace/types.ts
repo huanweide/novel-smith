@@ -139,6 +139,19 @@ export interface SSEEvent {
   fuzzyDensity?: number;
   bySeverity?: Record<string, number>;
   byCategory?: Record<string, number>;
+  // R5 流式实时演算 / R4' 自优化决策（后端 SSE 下发）
+  wordCount?: number;
+  paragraphCount?: number;
+  dialogueRatio?: number;
+  longParagraphRatio?: number;
+  factHits?: number;
+  factMisses?: string[];
+  forbiddenHits?: number;
+  pacingHint?: string;
+  reasons?: string[];
+  temperature?: number;
+  memoryBudget?: number;
+  authorOverride?: boolean;
   // 逻辑自查
   summary?: string;
   // 宝宝流自动填表

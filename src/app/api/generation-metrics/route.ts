@@ -47,12 +47,19 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const projectId = url.searchParams.get("projectId");
+    const model = url.searchParams.get("model");
+    const hours = Math.max(1, Math.min(24 * 30, Number(url.searchParams.get("hours")) || 0));
 
     const where: Record<string, unknown> = {
       role: { not: { startsWith: "fail:" } },
       durationMs: { not: null },
     };
     if (projectId) where.projectId = projectId;
+    if (model) where.model = model;
+    // R2：时间范围过滤（hours 省略 = 不限），让延迟看板可分辨「最近一小时」与「历史累计」
+    if (url.searchParams.has("hours") && Number.isFinite(Number(url.searchParams.get("hours")))) {
+      where.createdAt = { gte: new Date(Date.now() - hours * 3600_000) };
+    }
 
     const logs = await prisma.llmCallLog.findMany({
       where,
@@ -64,6 +71,8 @@ export async function GET(req: Request) {
         completionTokens: true,
         baseURL: true,
         createdAt: true,
+        model: true,
+        projectId: true,
       },
     });
 
@@ -98,6 +107,24 @@ export async function GET(req: Request) {
     const local = summarize(localDurations);
     const cloud = summarize(cloudDurations);
 
+    // R2：按模型 / 按项目分组（原来只有本地 vs 云端一个维度，无法定位「哪个模型慢」「哪个项目贵」）
+    const groupBy = (key: "model" | "projectId") => {
+      const buckets = new Map<string, number[]>();
+      for (const l of logs) {
+        const d = l.durationMs;
+        if (typeof d !== "number" || d <= 0) continue;
+        const k = (l as any)[key] || "(unknown)";
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k)!.push(d);
+      }
+      return Array.from(buckets.entries())
+        .map(([name, arr]) => ({ name, samples: arr.length, ...(summarize(arr) || { median: 0, p95: 0, avg: 0 }) }))
+        .sort((a, b) => b.samples - a.samples)
+        .slice(0, 20);
+    };
+    const byModel = groupBy("model");
+    const byProject = groupBy("projectId");
+
     const timeSpanMs =
       logs.length > 1
         ? new Date(logs[0].createdAt).getTime() - new Date(logs[logs.length - 1].createdAt).getTime()
@@ -111,6 +138,9 @@ export async function GET(req: Request) {
       total, // { median, p95, avg }
       throughput, // 整体输出吞吐 token/s | null
       byProvider: { local, cloud },
+      byModel,
+      byProject,
+      filters: { projectId, model, hours: url.searchParams.has("hours") ? hours : null },
       overThreshold: (total?.p95 ?? 0) > LATENCY_THRESHOLD_MS,
       thresholdMs: LATENCY_THRESHOLD_MS,
       timeSpanMs,

@@ -56,6 +56,7 @@ async function callDS(system: string, prompt: string, model: string, baseUrl: st
 
   const url = baseUrl.endsWith("/v1") ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
 
+  const llmT0 = Date.now(); // R1-D3：旁路调用耗时起点
   try {
     const r = await fetch(url, {
       method: "POST",
@@ -86,6 +87,7 @@ async function callDS(system: string, prompt: string, model: string, baseUrl: st
       completionTokens: usage?.completion_tokens ?? usage?.completionTokens ?? 0,
       totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? 0,
       baseURL: baseUrl,
+      durationMs: Date.now() - llmT0, // R1-D3
     });
     const raw = data?.choices?.[0]?.message?.content;
     if (!raw) return { error: "DeepSeek 返回空内容" };

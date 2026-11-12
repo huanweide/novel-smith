@@ -2143,3 +2143,15 @@ html.theme-paper {
 .light .paper-sheet { box-shadow: 0 8px 28px rgba(43,39,31,0.10), 0 2px 6px rgba(43,39,31,0.06); }
 .light [class*="shadow-[0_0_24px"] { box-shadow: 0 0 18px rgba(154,110,34,0.15); }
 .light .surface-elevated { box-shadow: 0 4px 16px rgba(43,39,31,0.08); }
+
+/* R7 游戏叙事渲染感：轮次卡片入场动效（低调、不抢阅读；尊重减少动效偏好） */
+@keyframes nv-turn-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.nv-turn-enter {
+  animation: nv-turn-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nv-turn-enter { animation: none; }
+}

@@ -13,6 +13,7 @@ import { recallContext, RecallItem } from "./recall";
 import { babyloreFill, markChapterFilled, FillResult } from "./fill";
 import { evaluateIfCell } from "./ifcell";
 import { buildProjectOverrides } from "@/core/llm/client";
+import { rankRecallItemsWithDecay } from "./recall-effectiveness";
 
 export interface RecallBuildInput {
   projectId: string;
@@ -20,6 +21,8 @@ export interface RecallBuildInput {
   recallText: string;
   /** 世界书条目（LorebookEntry 数组） */
   loreEntries: any[];
+  /** R6：当前章号。传入时召回排序按记忆衰减加权；不传则保持原有 score 排序 */
+  currentChapter?: number;
 }
 
 export interface RecallBuildOutput {
@@ -53,7 +56,11 @@ export async function buildRecallBlock(input: RecallBuildInput): Promise<RecallB
 
   // 按特异性（score=命中关键词长度）降序，优先保留高价值长词命中（避免 200+ 词条时截掉关键长词），
   // 再 table 精确命中优先于 lorebook，限制总数避免 prompt 膨胀
-  const sorted = [...recallRaw].sort((a, b) => b.score - a.score);
+  // R6：有章号时按「新鲜度 × 特异性」排序，避免长名字的陈旧琐碎设定挤掉近期关键设定。
+  // 不传 currentChapter 时与旧版逐字一致（refine / continue 等调用方零行为变化）。
+  const sorted = typeof input.currentChapter === "number"
+    ? rankRecallItemsWithDecay(recallRaw as any[], input.currentChapter)
+    : [...recallRaw].sort((a, b) => b.score - a.score);
   const recallItems = [
     ...sorted.filter((i) => i.source === "table"),
     ...sorted.filter((i) => i.source === "lorebook"),

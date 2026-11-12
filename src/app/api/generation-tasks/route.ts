@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-error";
 import { runStorylineGenerationTask } from "@/core/storyline/execute-task";
+import { decideRecovery } from "@/core/pipeline/task-recovery";
 
 export async function POST(request: Request) {
   try {
@@ -44,7 +45,21 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 20,
     });
-    return NextResponse.json({ tasks });
+
+    // R3：进程崩溃后 status=running 的任务会永远悬着。读取列表时顺手把超时任务
+    // 标记为 failed 并给出原因（不自动重跑——重跑会重复生成正文，属不可逆副作用，交给作者决定）。
+    const recovered: string[] = [];
+    for (const d of decideRecovery(tasks)) {
+      const upd = await prisma.generationTask.updateMany({
+        where: { id: d.taskId, status: "running" },
+        data: { status: d.nextStatus, error: d.reason },
+      });
+      if (upd.count > 0) recovered.push(d.taskId);
+    }
+    const view = recovered.length > 0
+      ? tasks.map((t) => recovered.includes(t.id) ? { ...t, status: "failed" as string } : t)
+      : tasks;
+    return NextResponse.json({ tasks: view, recovered });
   } catch (err) {
     return jsonError(err);
   }

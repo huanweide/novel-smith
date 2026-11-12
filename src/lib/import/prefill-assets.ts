@@ -57,6 +57,7 @@ async function callLLM(
     return { error: "API Key 未配置" };
   }
   const url = baseUrl.endsWith("/v1") ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+  const llmT0 = Date.now(); // R1-D3
   try {
     const r = await fetch(url, {
       method: "POST",
@@ -86,6 +87,7 @@ async function callLLM(
       totalTokens: usage?.total_tokens ?? 0,
       baseURL: baseUrl,
       projectId,
+      durationMs: Date.now() - llmT0, // R1-D3
     });
     const raw = data?.choices?.[0]?.message?.content;
     if (!raw) return { error: "LLM 返回空内容" };

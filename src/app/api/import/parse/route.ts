@@ -152,10 +152,12 @@ async function callFlash(cfg: CallConfig, systemPrompt: string, userPrompt: stri
 
   const url = cfg.baseURL.endsWith("/v1") ? `${cfg.baseURL}/chat/completions` : `${cfg.baseURL}/v1/chat/completions`;
   let lastErr = "";
+  const callT0 = Date.now(); // R1-D3：本次 callFlash 累计耗时起点
 
   // P1-2：失败调用也记账（与 client.ts FAIL_ROLE_PREFIX 口径一致），避免成本看板盲区/成功率失真
   const recordFail = () => {
-    recordLlmCall({ model: cfg.model, role: "fail:import_parse", promptTokens: 0, completionTokens: 0, totalTokens: 0, baseURL: cfg.baseURL });
+    // R1-D3：失败调用也记耗时，避免被 generation-metrics 的 durationMs not null 过滤
+    recordLlmCall({ model: cfg.model, role: "fail:import_parse", promptTokens: 0, completionTokens: 0, totalTokens: 0, baseURL: cfg.baseURL, durationMs: Date.now() - callT0 });
   };
 
   for (let attempt = 0; attempt <= CALLFLASH_MAX_RETRIES; attempt++) {
@@ -190,7 +192,7 @@ async function callFlash(cfg: CallConfig, systemPrompt: string, userPrompt: stri
       const usage = (data as any)?.usage;
       const promptTokens = usage?.prompt_tokens ?? usage?.promptTokens ?? countTokens(systemPrompt + "\n" + userPrompt);
       const completionTokens = usage?.completion_tokens ?? usage?.completionTokens ?? countTokens(raw);
-      recordLlmCall({ model: cfg.model, role: "import_parse", promptTokens, completionTokens, totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? (promptTokens + completionTokens), baseURL: cfg.baseURL });
+      recordLlmCall({ model: cfg.model, role: "import_parse", promptTokens, completionTokens, totalTokens: usage?.total_tokens ?? usage?.totalTokens ?? (promptTokens + completionTokens), baseURL: cfg.baseURL, durationMs: Date.now() - t0 });
       if (!raw || raw.trim().length < 20) return { raw: "", error: `${cfg.label} 返回空内容`, sec: parseFloat(sec) };
       return { raw, sec: parseFloat(sec) };
     } catch (e) {

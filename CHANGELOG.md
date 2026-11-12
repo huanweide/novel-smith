@@ -2,6 +2,20 @@
 
 ## v3.1.169 — 2026-11-09
 
+### 后端可靠性 + 写作效果闭环七轮（2026-11-12，未 bump 版本）
+
+> 外部判据：`PROCESS/research-后端可靠性与评估/best-practices.md`（阶段零：4 组查询 + `api.github.com` 验真 mem0 68,841★ / DSPy 39,011★ / langfuse 37,339★ / promptfoo 27,077★ / inngest 6,033★ / ink 5,015★；F1–F10 融合决策 + M1–M7 去矛盾）。公示计划：`计划追踪/对话计划-2026-11-12.md` 的 novel-smith 任务分区。
+
+- **R1 修尺子 + 堵真丢数据**：①`client.ts:238` 非流式 fetch 合并外部 `request.signal`（与流式 `:342` 同口径），点「停止」不再白跑满 5 分钟；②`projectId` 从 `createLLMClient`/`AgentOrchestrator.fromSettings` 全链路注入 `recordLlmCall`，按项目成本看板不再失真；③7 处裸 fetch 补记点与失败记账补 `durationMs`，不再被 `generation-metrics` 的 `durationMs not null` 整批过滤；④新增 `mergeLoreRows` 三路合并（起始快照 / 本地结果 / DB 最新），修 `LoreTable.rows` 整列覆盖导致的并发丢行——**按身份列归并**，避免两个写者 `row_id` 撞号仍互相覆盖。
+- **R2 可追溯 + 抗压**：新增 `core/llm/telemetry.ts`（requestId / 结构化失败上下文保留主错误原文 / 幂等键 / token 滑动窗口限流 / 重试单一 owner 硬上界 6 次）；`generation-metrics` 补时间范围、按模型、按项目三维聚合。
+- **R3 任务恢复 + 主链路契约锁**：`decideRecovery` 在读任务列表时把超时 `running` 标为 failed 并给原因（**不自动重跑**，避免重复生成正文）；新增源码级契约测试锁死「富化后处理必须 await」「速度不能以信息缺失为代价」「流式每 ~200 字 hook 仍在」。
+- **R4' 后端自优化写作逻辑**（按用户「顶多做到此」）：新增 `core/quality/writing-optimizer.ts`——读 `allNodes` 里**已落库**的 `qualityScore`/`humanizeScore` 历史序列，确定性微调温度与记忆注入预算。**零 LLM 调用、零额外 DB 查询、硬上下限（温度 ±0.15 / 预算 0.85~1.15）、作者手填参数恒优先且不被边界夹住、同输入同输出可回滚**。不做 DSPy 式编译优化（四份资料同指创意写作无可优化标量）；决策经 `writing_tuning` SSE 下发可审计，预算**真实作用于** `injectOptimizedMemory`（有判别测试证明注入文本变短）。
+- **R5 写作效果 + 实时演算**：复用 `write-generation.ts` 已有的「每 ~200 字扫描」hook，扩展 `live-metrics.ts` 增量计算字数/段落/对话密度/长段占比/设定呼应/违禁命中/节奏提示，经 `live_metrics` SSE 下发；前端仅在生成中显示一行 10px 小字。**零新增 LLM、不动章末富化同步**。
+- **R6 填表与长期记忆效果**：`recall-effectiveness.ts` 首次给出「注入 12 条记忆，本章正文呼应了几条」的命中率与按召回路径归因（`recall_effectiveness` SSE）；召回排序改为「新鲜度 × 特异性」衰减加权（S 级永久不降权），写章时生效而非只靠 cron；不传章号的调用方零行为变化。
+- **R7 游戏自由度与渲染感**：`state-proposal.ts` 落实「模型只提案、应用层校验后落地」——非法 operation / 负数量 / 超长名 / 未知实体类型被拒并记日志，开场与回合两条落库路径都接入；叙事段落卡片化 + 入场动效（尊重 `prefers-reduced-motion`）+ 轮次徽标，不动存档语义。
+- **明确不做**：富化管线改异步（下一章会丢前章摘要）、向量库/图数据库/常驻队列（守本地零配置）、`temperature 0.5→0`（等真机 A/B）、破坏性 schema 迁移、DSPy 式提示词编译、AGPL/NOASSERTION 仓库代码搬运。
+- **测试**：新增 8 个测试文件 70 项；Node 24 下全量 vitest **215 文件 / 2369 全绿**、`tsc --noEmit` 零错误。README 测试数与路由数（146→156）已订正。
+
 ### 填表与上下文优化四轮（2026-11-11，未 bump 版本）
 
 > 外部判据：`PROCESS/research-填表与上下文优化/best-practices.md`（maxloop 阶段零，4 组查询 + `api.github.com` 验真 LightRAG 40,643★ / SillyTavern 35,509★ / Graphiti 32,732★）；执行基线：同目录 `metrics-baseline.md`。

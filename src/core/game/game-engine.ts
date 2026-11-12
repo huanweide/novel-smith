@@ -19,6 +19,7 @@ import { STATUS_COMPLETED, STATUS_CONFIRMED, STATUS_DRAFTING } from "@/core/stor
 import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersonaContract, buildPersonaRoundAnchor, buildDirectorContract, buildDirectorRoundAnchor, isConfrontationalAction } from "./game-prompts";
 import { arbitrateRoll, computeAdjustments, nextRollStats, judgeRoll, rateLabel, type RollStats } from "./roll-arbiter";
 import type { GameActionInput, GameTurnOutput, GameSessionContext, GameEntity, GameItem, GameOption, GameSessionSummary } from "./types";
+import { validateStateProposal } from "./state-proposal";
 
 // 物品变动输入（含可选 owner，用于背包按 name+owner 隔离，阿游 P1）。
 interface ItemChangeRequest {
@@ -685,17 +686,23 @@ async function* runLockedTurn(
     ];
   }
 
-  // 6. 更新背包和实体（按 name+owner 隔离，阿游 P1）
+  // 6. R7：模型只提案，应用层校验后才落库（防幻觉状态污染世界）
+  const proposal = validateStateProposal({
+    itemChanges: parsed.itemChanges as any,
+    newEntities: parsed.newEntities as any,
+  });
+  if (proposal.rejected.length > 0) {
+    console.warn("[game/state-proposal] 已拒绝异常状态提案:", proposal.rejected);
+  }
+  const acceptedItemChanges = proposal.accepted.itemChanges as ItemChangeRequest[];
+  const acceptedNewEntities = proposal.accepted.newEntities;
+
   const newRound = session.currentRound + 1;
-  const updatedItems = applyItemChanges(
-    ctx.items,
-    parsed.itemChanges as ItemChangeRequest[],
-    newRound
-  );
+  const updatedItems = applyItemChanges(ctx.items, acceptedItemChanges, newRound);
 
   // 合并实体
   const existingEntities = ctx.entities;
-  const newEntities = parsed.newEntities.filter(
+  const newEntities = acceptedNewEntities.filter(
     (ne) => !existingEntities.find((e) => e.name === ne.name)
   );
   const allEntities = [
@@ -715,7 +722,7 @@ async function* runLockedTurn(
 
   // 6.5 世界卡物品联动：游戏新获得的物品，若无对应 item 类世界书词条则自动补充（保留已有物品词条）
   // 批量查询去重（FIX-10 低风险项）：把循环内 N 次 findMany 合并为 1 次。
-  const gainItems = parsed.itemChanges
+  const gainItems = acceptedItemChanges
     .filter((c) => c.operation === "gain")
     .map((c) => ({ name: c.name, owner: (c as any).owner || "主角" }));
   if (gainItems.length > 0) {
@@ -1139,13 +1146,21 @@ export async function* processGameStart(
     ];
   }
 
-  const entities = parsed.newEntities.map((ne) => ({
+  // R7：开场同样走状态提案校验，模型不得直接改世界
+  const openingProposal = validateStateProposal({
+    itemChanges: parsed.itemChanges as any,
+    newEntities: parsed.newEntities as any,
+  });
+  if (openingProposal.rejected.length > 0) {
+    console.warn("[game/state-proposal] 开场已拒绝异常状态提案:", openingProposal.rejected);
+  }
+  const entities = openingProposal.accepted.newEntities.map((ne) => ({
     ...ne,
     firstSeenRound: 1,
   }));
 
   const initialItems: any[] = [];
-  for (const change of parsed.itemChanges) {
+  for (const change of openingProposal.accepted.itemChanges) {
     if (change.operation === "gain") {
       initialItems.push({
         name: change.name,

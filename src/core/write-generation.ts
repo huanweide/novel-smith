@@ -37,6 +37,10 @@ import { stripProtocolLeak } from "@/core/post-process/sanitize";
 import { STATUS_COMPLETED, STATUS_DRAFTING, STATUS_OUTLINE_ONLY } from "@/core/story-status";
 import { classifyTruncation } from "@/core/finish-reason";
 import { sseError } from "@/lib/sse-error";
+import { resolveWritingParams } from "@/core/quality/writing-optimizer";
+import { computeLiveMetrics } from "@/core/quality/live-metrics";
+import { computeRecallEffectiveness } from "@/core/babylore/recall-effectiveness";
+import { DEFAULT_BUDGET } from "@/lib/memory-injector";
 
 export type WriteSend = (obj: object) => void;
 
@@ -104,7 +108,33 @@ export async function runWriteGeneration(
   const finalAuthorNote = await prepareAuthorNote(authorNote, cardNotes, allChars as any, projectId);
 
   // ── 4. LLM 配置 ──
-  const { template, customForbidden, effectiveTemperature, effectiveTopP } = extractLLMConfig(data);
+  const { template, customForbidden, effectiveTemperature: baseTemperature, effectiveTopP } = extractLLMConfig(data);
+
+  // ── 4.5 R4' 后端自优化：用「已落库的历史质量序列」确定性微调写作参数 ──
+  // 零 LLM 调用、零额外 DB 查询（allNodes 已含 qualityScore/humanizeScore）、硬上下限、
+  // 作者手填温度恒优先、同输入同输出。决策随 SSE 下发，作者能看到「为什么这章参数变了」。
+  const llmConfigRaw = (data.project.llmConfig || {}) as Record<string, unknown>;
+  const authorTemperature = typeof llmConfigRaw.temperature === "number" ? llmConfigRaw.temperature as number : null;
+  const tuning = resolveWritingParams({
+    allNodes: data.allNodes as any[],
+    baseTemperature,
+    baseMemoryBudget: DEFAULT_BUDGET.maxTokens,
+    authorTemperature,
+    currentOrder: data.currentNode?.order ?? null,
+  });
+  const effectiveTemperature = tuning.applied.temperature;
+  const effectiveMemoryBudget = tuning.applied.memoryBudget;
+  send({
+    type: "writing_tuning",
+    applied: tuning.adjustment.applied && !tuning.applied.authorOverride,
+    authorOverride: tuning.applied.authorOverride,
+    sampleSize: tuning.adjustment.sampleSize,
+    temperature: effectiveTemperature,
+    temperatureDelta: tuning.applied.temperatureDeltaApplied,
+    memoryBudget: effectiveMemoryBudget,
+    humanizeEmphasis: tuning.applied.humanizeEmphasis,
+    reasons: tuning.applied.reasons,
+  });
 
   // ── 5. 上下文窗口 ──
   const currentNodeIndex = data.allNodes.findIndex((n: StoryNode) => n.id === nodeId);
@@ -151,6 +181,7 @@ export async function runWriteGeneration(
     previousNodes,
     // M1：注入筛选后的伏笔（原为全量 pendingCommitments）
     pendingCommitments: codex.commitments as any,
+    memoryBudget: effectiveMemoryBudget, // R4'：真实作用于记忆注入，不只是 SSE 里好看
   });
 
   // ── 7. 撰写指令（rules 已通过 systemPrompt 注入，这里只用原始 authorNote）──
@@ -207,6 +238,7 @@ export async function runWriteGeneration(
     // M1：与 Codex 检索同源，保证「召回的设定」与「重点设定清单」判断一致
     recallText: codexQueryText,
     loreEntries: data.loreEntries,
+    currentChapter: (data.currentNode?.order ?? 0) + 1, // R6：让召回排序吃到记忆衰减
   });
   if (recallBlock) writingInstruction += recallBlock;
 
@@ -244,6 +276,7 @@ export async function runWriteGeneration(
   const orchestrator = await AgentOrchestrator.fromSettings(
     { defaultTemperature: effectiveTemperature, defaultTopP: effectiveTopP },
     projLlm as unknown as Record<string, unknown> | null,
+    projectId, // R1-D2：写章主链路的 LLM 调用按项目归属记账
   );
 
   // ── 9. 流式生成（原 SSE start 回调体，去掉 controller 依赖）──
@@ -285,6 +318,11 @@ export async function runWriteGeneration(
     let scanBuffer = ""; // 累积待扫描的新字符
     let lastScanLength = 0; // 上次扫描时的总字符数
     const rtPatterns = collectForbiddenPatterns(template?.forbiddenPatterns || [], customForbidden);
+    // R5：事实主体取自已装载的角色卡与世界书（零额外 DB 查询），用于算「本章呼应了哪些设定」
+    const factSubjects = Array.from(new Set([
+      ...(activeChars as any[]).map((c: any) => String(c.name || "").trim()),
+      ...(data.loreEntries as any[]).map((l: any) => String(l.title || "").trim()),
+    ].filter(Boolean))).slice(0, 60);
     for await (const chunk of orchestrator.writeSection(
       promptContext,
       partialDraft
@@ -304,12 +342,15 @@ export async function runWriteGeneration(
         // ── 实时规则检测：每积累 ~200 字符扫描一次 ──
         scanBuffer += chunk.content;
         if (scanBuffer.length >= 200) {
+          // 提到 try 外，供下方 R5 实时演算复用同一次扫描结果（避免重复扫描）
+          let rtMatches: Array<{ pattern?: string }> = [];
           try {
             const rtResult = scanForbiddenWordsEnhanced(scanBuffer, {
               customExactWords: rtPatterns.filter((p: any) =>
                 typeof p === "string" ? !p.startsWith("/") : !p.pattern?.startsWith("/"),
               ),
             });
+            rtMatches = rtResult.matches as any;
             if (rtResult.matches.length > 0) {
               // 调整位置偏移（加上之前已扫描的部分）
               const adjusted = rtResult.matches
@@ -331,6 +372,26 @@ export async function runWriteGeneration(
           }
           lastScanLength += scanBuffer.length;
           scanBuffer = "";
+
+          // R5 实时演算：纯本地增量指标，零 LLM、不碰章末富化。
+          // 与上面违禁词扫描共用同一次 ~200 字触发，不新增计时器/循环。
+          try {
+            const live = computeLiveMetrics(newContent, { factSubjects, forbiddenMatches: rtMatches });
+            send({
+              type: "live_metrics",
+              content: "",
+              wordCount: live.wordCount,
+              paragraphCount: live.paragraphCount,
+              dialogueRatio: live.dialogueRatio,
+              longParagraphRatio: live.longParagraphRatio,
+              factHits: live.factHits,
+              factMisses: live.factMisses.slice(0, 5),
+              forbiddenHits: live.forbiddenHits,
+              pacingHint: live.pacingHint,
+            });
+          } catch (_) {
+            // 实时演算异常静默降级——绝不打断生成流
+          }
         }
 
         // 每 ~300 字保存草稿（F3 修复：改 await 同步落库，杜绝 fire-and-forget 与后处理落库竞态导致
@@ -433,6 +494,26 @@ export async function runWriteGeneration(
         warning: truncation.warning,
       });
       return;
+    }
+
+    // ── R6 召回效果量化：注入的 12 条记忆，本章正文到底呼应了几条 ──
+    // 纯本地计算、零 LLM、不改正文；这是「填表与长期记忆效果」第一个可复跑的数字。
+    if (recallItems.length > 0) {
+      try {
+        const eff = computeRecallEffectiveness(recallItems as any[], fullContent);
+        send({
+          type: "recall_effectiveness",
+          content: "",
+          total: eff.total,
+          hits: eff.hits,
+          hitRate: eff.hitRate,
+          hitsTitles: eff.hitsTitles.slice(0, 8),
+          misses: eff.misses.slice(0, 5),
+          byPath: eff.byPath,
+        });
+      } catch (_) {
+        // 命中率计算失败不影响生成
+      }
     }
 
     // ── 后置富化（审校/摘要/伏笔/逻辑自查）前置准备 ──
