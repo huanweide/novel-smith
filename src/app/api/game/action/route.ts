@@ -19,7 +19,7 @@ import { sseError } from "@/lib/sse-error";
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { sessionId, actionType, actionText, selectedOption, targetItem, target, preRolled, declareText, scene } = body;
+  const { sessionId, actionType, actionText, selectedOption, targetItem, target, preRolled, declareText, scene, inspectChannel } = body;
 
   if (!sessionId) {
     return NextResponse.json({ error: "缺少 sessionId" }, { status: 400 });
@@ -106,6 +106,7 @@ export async function POST(req: Request) {
             target,
             preRolled,
             light,
+            inspectChannel,
           },
           req.signal
         );

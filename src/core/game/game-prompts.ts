@@ -13,6 +13,7 @@ import { ACTION_LABELS } from "./types";
 import { buildCausalityContext } from "./causality-ledger";
 import { buildDeclaredFactsContext } from "./declare-fact";
 import { buildGoalsContext } from "./goals";
+import { resolveAttempt, type AttemptResult } from "./attempt";
 
 // ─── 操作归一化（阿游 P0：唯一归一化点）────────────────────────────
 // AI 产出中文操作（CI|获得|…/CI|消耗|/CI|装备|/CI|丢弃|），而引擎(game-engine.ts)、
@@ -265,9 +266,9 @@ export function rollTier(d100: number): { key: string; label: string; directive:
   return { key: "critical_success", label: "大成功", directive: "超预期达成，并有意外之喜" };
 }
 
-/** 骰定结果的 prompt 约束块（AI 只演不判） */
+/** 本步检定的 prompt 约束块（AI 只演不判；骰子管这一步顺不顺，不管整件事成没成） */
 export function buildRollDirective(d100: number, tier: ReturnType<typeof rollTier>): string {
-  return `\n\n【骰子判定（既定结果，必须如实演绎，不得更改）】本次行动检定 d100 = ${d100} → ${tier.label}。要求：${tier.directive}。把结果演成有趣的故事，不要生硬宣布成败。`;
+  return `\n\n【本步检定】这次尝试的即时处境 d100 = ${d100} → ${tier.label}。要求：${tier.directive}。注意：这只是**这一步**顺不顺，不是整件事的结局——把它写成过程里的一个转折，照尝试律把后面的余地留出来，不要生硬宣布成败。`;
 }
 
 // ─── 系统提示词模板 ─────────────────────────────────────────────
@@ -290,7 +291,7 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 
 ## 互动规则
 1. {actorRule}
-2. 叙事必须严格遵循章纲规划，不偏离主线情节方向。**节奏是「大世界探索」，不是地下城闯关**：不必每轮都发生大事件——多数轮次只是持续推进（修炼、赶路、打探消息、与人寒暄、整理行装、观察环境、做准备）；事件按章纲节点与剧情因果自然到来，不要为了戏剧性硬造冲突或反转。
+2. 叙事必须严格遵循章纲规划，不偏离主线情节方向。**节奏是「大世界探索」，不是地下城闯关**：不必每轮都发生大事件——多数轮次只是持续推进（修炼、赶路、打探消息、与人寒暄、整理行装、观察环境、做准备）；事件按章纲节点与剧情因果自然到来，不要为了戏剧性硬造冲突——反转只能从事情本身的阻力里长出来。
 3. 叙事结束后单独一行给出 3-4 个编号选项，格式：
    1. 选项一
    2. 选项二
@@ -322,7 +323,13 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 8. 每轮更新情节进度（选项之前输出）：
    【情节进度：X%】
 9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
-10. 玩家的行动（尤其是自定义输入）只是「意图声明」，不是既定结果：你必须按剧情合理性、角色能力与当前处境裁决成败——可以失败、被阻止、被反制。明显违背常理或实力悬殊的意图（如凡人妄图一击灭敌、凭空杀人夺宝）不可直接兑现：让剧情给出合理的阻力或反制（如被对方轻松化解、反被制服），也可用幽默化解（如对方一个侧身躲开，把你当成玩笑）。不要生硬拒绝、不要中断叙事，让裁决本身成为有趣的故事。
+10. **尝试律（最高优先，不许跳过）**：玩家选择或写下的动作只是「他打算试试」，**不是已经发生的事实**。你必须先把**尝试的过程**写出来——手怎么伸出去、对方有什么反应、中途遇到什么阻碍或转机、局势往哪儿偏了——再决定这件事本轮落不落定。
+    - 严禁一句话宣布结果：不许写「你偷到了」「他死了」「你失败了」「探查完毕，你全知道了」。结果只能从过程的最后一小段自然长出来。
+    - **默认不落定**：多数尝试本轮停在半路上（指尖刚碰到袖口，他忽然转身；话到嘴边被岔开；刀锋只擦过衣角），把结果留给后续回合。没落定就不写 RESULT| 行，系统也不会替你结算任何东西。
+    - **失败绝不是终局**：被识破可以解释、赔笑、抽身再试；被抓住不等于死；受了伤也还有下一招。永远给玩家留下可以挽回、可以反转、可以换条路走的余地。
+    - **不许把伤害写成既成事实**：除非正文里明明白白写了对方断气、且你落了 RESULT|丧命，否则不写任何人死。玩家输入里有「杀」字不构成死亡。
+    - 明显违背常理或实力悬殊的意图不必生硬拒绝：让它变成波折（被轻松化解、扑了个空、惹出新麻烦），裁决本身就是好看的戏。
+    - 例外只有两个：「declare」（作者声明事实）与上帝视角档——那是导演编排，仍按既成事实演。
 11. {narrativeRule}
 12. 世界不是只回应你的回声（R9·世界脉动）：即便玩家此轮只是观察或休息，世界也在自行运转——NPC 各有其事、时间持续流动、远方可能有消息传来。你可以在叙事里自然带出"世界也在继续"的旁支：其他人的动向、某个被遗忘的约定开始发酵、季节推移、一处未被探索之地的变化。让故事像活的世界，而非只对玩家按键反应的机器。
 13. 因果账（结构行，引擎记账用）：本轮若结了仇、许了诺、欠下人情、救过人、动过不该动的东西，就在【情节进度：X%】那一行的**下一行**直接写：
@@ -330,11 +337,20 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
    类型只能取：善缘、仇怨、羁绊、因果、誓言（例：CAUSE|仇怨|赌坊打手|当众打翻了他，这笔账他记下了）。
    若之前种下的因在本轮兑现了，再加一行 CAUSE_DONE|相关实体|类型。
    没有未了的后果就不写这行；不要向玩家解释它，也不要加 ===因果=== 之类的标题。
+14. **结果行（每轮必须写一行，引擎只认这一行）**：在【情节进度：X%】那一行的紧接下一行写：
+   RESULT|未定|一句「此刻到了哪一步」的人话
+   档位只能取：未定 / 得手 / 有代价 / 受阻 / 丧命。
+   - **默认就是「未定」**：多数尝试本轮停在半路上，写未定即可，系统不会结算任何东西、下一轮接着演；
+   - 只有正文里真的演到东西到手、事情办成，才写「得手」；带了伤、露了形、结了怨写「有代价」；被拦下写「受阻」；
+   - 「受阻」只表示这一步没顺，**不许**同时写 CI|获得 或把人写死；
+   - 「丧命」只在正文确实写了人断气时才允许，写了才会标记退场；
+   - 这行是记账凭据，不是给玩家看的判词——正文里不要出现「系统判定」「检定成功」这类腔调；
+   - **不写也按未定处理**，但每轮都要写，好让玩家在回执里看见「这一轮到哪儿了」。
 
 ## 输出顺序（照这个结构写，结构行有则写、无则整段省略）
-1) 叙事正文
+1) 叙事正文（**尝试的过程写在这儿**）
 2) 【情节进度：X%】
-   （紧接下一行写 CAUSE|… ，若本轮埋了因）
+   紧接下一行**必写** RESULT|… 一行；若本轮埋了因，再各占一行写 CAUSE|… / CAUSE_DONE|…
 3) 3-4 个编号选项
 4) 其余结构行：===新实体=== / ===角色物品变动=== / ===暗线===
 
@@ -631,8 +647,12 @@ export function buildActionPrompt(input: GameActionInput): string {
   // 否则节奏拖沓——玩家挪个位置要看四段描写，体感就是"卡"。
   if (input.light) {
     prompt +=
-      "\n（轻回合：只写 1-2 句——这个动作的直接结果 + 一处感官细节。不展开对话、不引入新人物、不写心理长段。）";
+      "\n（轻回合：只写 1-2 句——这次尝试的动作 + 眼下停在哪个处境 + 一处感官细节；不要直接给结果。不展开对话、不引入新人物、不写心理长段。）";
   }
+
+  // 尝试律：实测模型会整块忽略长系统提示里的尾随结构段（RESULT|/CI| 一起丢），
+  // 于用户消息末尾再钉一句最短提醒。防的是「机制看起来在、其实永远不结算」的静默失效。
+  prompt += "\n\n（收尾记得写【情节进度：X%】与紧接的一行 RESULT|未定|…；多数时候写「未定」就好。）";
 
   return prompt;
 }
@@ -654,6 +674,8 @@ export function parseGameOutput(rawOutput: string): {
   causality: Array<{ type: string; subject: string; description: string }>;
   /** R9 因果兑现：CAUSE_DONE|相关实体|类型——AI 明确让某因果回响，引擎标记种子已触发 */
   causalityDone: Array<{ subject: string; type?: string }>;
+  /** 尝试律：本轮结果档位（默认「未定」= 什么都不结算）。引擎只认这个，不认玩家输入 */
+  attempt: AttemptResult;
 } {
   let narrative = rawOutput;
   const options: Array<{ index: number; text: string }> = [];
@@ -803,11 +825,11 @@ export function parseGameOutput(rawOutput: string): {
       }
     }
   }
-  // 结构行与段头一律不进正文
+  // 结构行与段头一律不进正文（RESULT| 是记账凭据，不是给玩家看的判词）
   narrative = narrative
     .replace(/===因果(兑现)?===\s*\n?/g, "")
     .split("\n")
-    .filter((l) => !/^CAUSE(_DONE)?\|/.test(l.trim()))
+    .filter((l) => !/^(CAUSE(_DONE)?|RESULT)\s*\|/.test(l.trim()))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -822,7 +844,10 @@ export function parseGameOutput(rawOutput: string): {
   // 清理多余空行
   narrative = narrative.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals, causality, causalityDone };
+  // 尝试律：结算证据只从正文里取。上帝档由引擎再覆盖（作者权例外）。
+  const attempt = resolveAttempt(rawOutput, itemChanges, false);
+
+  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals, causality, causalityDone, attempt };
 }
 
 /**

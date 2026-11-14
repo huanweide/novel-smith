@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { clamp, inspectPower, inspectVerdict, tierLabel } from "./inspect";
+import {
+  clamp, inspectPower, inspectVerdict, tierLabel,
+  INSPECT_CHANNELS, isInspectChannel, isCultivationWorld, compareCultivation,
+  deepBackgroundPossible, buildInspectDirective, inspectBrief,
+} from "./inspect";
 
 describe("探查力：来源透明，全部确定性", () => {
   it("毫无底子的人基础眼力 35", () => {
@@ -33,14 +37,15 @@ describe("探查力：来源透明，全部确定性", () => {
   });
 });
 
-describe("探查判定：四档骰面", () => {
+describe("探查判定：四档骰面（只裁这一眼清不清，不裁知道多少）", () => {
   const rate = 60;
 
-  it("成功（roll ≤ rate）→ 看清底细与随身，没被察觉", () => {
+  it("成功 → 只看清表象，绝不解锁底细/随身，没被察觉", () => {
     const v = inspectVerdict(60, rate);
     expect(v.tier).toBe("success");
-    expect(v.reveals).toEqual({ background: true, inventory: true });
+    expect(v.reveals).toEqual({ surface: true, clarity: "normal" });
     expect(v.alertDelta).toBe(0);
+    expect(v.note).toContain("不知道");
   });
 
   it("大成功（roll ≤ rate/5）→ 看穿", () => {
@@ -48,11 +53,11 @@ describe("探查判定：四档骰面", () => {
     expect(inspectVerdict(1, 5).tier).toBe("critical"); // rate=5 时 ceil(1)=1，roll=1 仍可看穿
   });
 
-  it("失败（rate < roll < 96）→ 白看，对方只是起疑（-3）", () => {
+  it("失败 → 白看、不扣好感（大部分时候只是看一眼，盯久了不必一律露形）", () => {
     const v = inspectVerdict(75, rate);
     expect(v.tier).toBe("fail");
-    expect(v.reveals).toEqual({ background: false, inventory: false });
-    expect(v.alertDelta).toBe(-3);
+    expect(v.reveals).toEqual({ surface: false, clarity: "none" });
+    expect(v.alertDelta).toBe(0);
   });
 
   it("大失败（roll ≥ 96）→ 被当场抓住（-10），即使成功率很高", () => {
@@ -65,10 +70,78 @@ describe("探查判定：四档骰面", () => {
     expect(inspectVerdict(999, 0).rate).toBe(5);
   });
 
-  it("档位有中文", () => {
-    expect(tierLabel("critical")).toBe("看穿");
-    expect(tierLabel("success")).toBe("看清");
-    expect(tierLabel("fail")).toBe("白看");
-    expect(tierLabel("blunder")).toBe("被抓住");
+  it("档位中文不再用「看穿」这种全知口吻", () => {
+    expect(tierLabel("critical")).toBe("看真切");
+    expect(tierLabel("success")).toBe("看个大概");
+    expect(tierLabel("fail")).toBe("没看出名堂");
+    expect(tierLabel("blunder")).toBe("被察觉");
+  });
+});
+
+describe("探查分层 · 看一眼不是全知道（用户口径 2026-11-15）", () => {
+  const power = inspectPower(["神识", "望气术"], 0); // 59
+  const verdict = inspectVerdict(50, power.rate);     // 看个大概
+
+  it("四个通道：默认是观察，且每个通道都写明「绝对不许」", () => {
+    expect(Object.keys(INSPECT_CHANNELS)).toEqual(["observe", "inquire", "sense", "background"]);
+    expect(INSPECT_CHANNELS.observe.label).toBe("打量");
+    expect(INSPECT_CHANNELS.observe.canSee).toContain("主观的评价");
+    expect(INSPECT_CHANNELS.observe.cannotSee).toContain("随身物品");
+    expect(isInspectChannel("observe")).toBe(true);
+    expect(isInspectChannel("omniscience")).toBe(false);
+  });
+
+  it("动作文本是尝试语气，不是既成结果", () => {
+    expect(INSPECT_CHANNELS.observe.action("苏绾")).toContain("想看清楚");
+    expect(INSPECT_CHANNELS.inquire.action("苏绾")).toContain("想知道");
+    expect(INSPECT_CHANNELS.observe.action("苏绾")).not.toMatch(/已经|看透了/);
+  });
+
+  it("修为只有自己更高、且世界有修为体系时才可判——比不出就是看不出", () => {
+    expect(isCultivationWorld("江南市井，绸缎生意")).toBe(false);
+    expect(isCultivationWorld("修士以神识探人，筑基期可御剑")).toBe(true);
+    expect(compareCultivation("金丹期修士", "筑基弟子")).toBe("higher");
+    expect(compareCultivation("炼气三层", "元婴老祖")).toBe("lower");
+    expect(compareCultivation("云锦阁少东家", "铁匠")).toBeNull();
+
+    const blocked = buildInspectDirective({
+      channel: "sense", targetName: "苏绾", power, verdict,
+      cultivationWorld: true, selfRank: null, knownFragments: 0,
+    });
+    expect(blocked).toContain("只知道不知道");
+    expect(blocked).not.toContain("对方气息比你弱");
+
+    const allowed = buildInspectDirective({
+      channel: "sense", targetName: "苏绾", power, verdict,
+      cultivationWorld: true, selfRank: "higher", knownFragments: 0,
+    });
+    expect(allowed).toContain("对方气息比你弱");
+    expect(allowed).toContain("除此之外一概不知");
+  });
+
+  it("深背景极小概率：d100 ≤ 2 且已攒 ≥2 条碎片，否则明写没查到", () => {
+    expect(deepBackgroundPossible(2, 2)).toBe(true);
+    expect(deepBackgroundPossible(3, 9)).toBe(false);
+    expect(deepBackgroundPossible(1, 0)).toBe(false); // 再好的骰子也换不来凭空的身世
+
+    const miss = buildInspectDirective({
+      channel: "background", targetName: "苏绾", power,
+      verdict: inspectVerdict(50, power.rate),
+      cultivationWorld: false, selfRank: null, knownFragments: 0,
+    });
+    expect(miss).toContain("什么也没打听到");
+    expect(miss).toContain("不许硬凑");
+  });
+
+  it("注入指令强制写过程、留余地、不写 RESULT|（探查通常不结算）", () => {
+    const d = buildInspectDirective({
+      channel: "observe", targetName: "苏绾", power, verdict,
+      cultivationWorld: false, selfRank: null, knownFragments: 0,
+    });
+    expect(d).toContain("尝试的过程");
+    expect(d).toContain("不知道就是不知道");
+    expect(d).toContain("RESULT|未定");
+    expect(d).toContain("慢慢攒");
+    expect(inspectBrief({ channel: "observe", power, verdict })).toContain("只看表象，底细要慢慢聊");
   });
 });

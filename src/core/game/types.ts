@@ -109,6 +109,8 @@ export interface GameActionInput {
     successRate: number;
     reasons?: string[];
   };
+  /** 探查通道（人物卡：打量/打听/感知/追底细）——引擎据此注入「这一眼能看见什么」的硬规则 */
+  inspectChannel?: "observe" | "inquire" | "sense" | "background";
 }
 
 // ─── AI 回合输出 ──────────────────────────────────────────────
@@ -206,6 +208,11 @@ export interface GameSessionSummary {
     playerAction: string;
     narrative: string;
     options: GameOption[];
+    /** 尝试律回执（extensions.attempts 按轮次恢复，刷新后仍可见） */
+    attemptLabel?: string;
+    attemptNote?: string;
+    attemptHint?: string;
+    inspectBrief?: string;
   }>;
 }
 

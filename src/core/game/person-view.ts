@@ -94,38 +94,40 @@ export function actionGroupsFor(name: string): ActionGroup[] {
     {
       tone: "soft",
       label: "温和",
+      // 尝试律（2026-11-15）：按钮文本是「打算试试」，不是「已经做成了」。
+      // 旧文案「摸走他身上的一样东西」是既成语气，配合引擎旧结算就成了「点了＝偷到」。
       actions: [
-        { label: "说句话", text: `与${n}交谈`, cost: "一刻", risk: "safe", verb: "talk" },
-        { label: "闲聊", text: `和${n}闲聊几句，问问近况`, cost: "一刻", risk: "safe", verb: "talk" },
-        { label: "问他怎么看", text: `问${n}对眼下这件事怎么看`, cost: "一刻", risk: "safe", verb: "talk" },
+        { label: "说句话", text: `想与${n}说上几句话`, cost: "一刻", risk: "safe", verb: "talk" },
+        { label: "闲聊", text: `想和${n}闲聊几句，问问近况`, cost: "一刻", risk: "safe", verb: "talk" },
+        { label: "问他怎么看", text: `想问${n}对眼下这件事怎么看`, cost: "一刻", risk: "safe", verb: "talk" },
       ],
     },
     {
       tone: "probe",
       label: "试探",
       actions: [
-        { label: "套他的话", text: `绕着弯子套${n}的话，看能不能问出点什么`, cost: "半日", risk: "risky", verb: "talk" },
-        { label: "盯着他看", text: `不动声色地打量${n}，看他身上有没有不对劲的地方`, cost: "一刻", risk: "safe" },
-        { label: "提那件事", text: `向${n}提起那件他一直回避的事`, cost: "半日", risk: "risky", verb: "talk" },
+        { label: "套他的话", text: `想绕着弯子套${n}的话，看能不能问出点什么`, cost: "半日", risk: "risky", verb: "talk" },
+        { label: "盯着他看", text: `想不动声色地打量${n}，看他身上有没有不对劲的地方`, cost: "一刻", risk: "safe" },
+        { label: "提那件事", text: `想向${n}提起那件他一直回避的事`, cost: "半日", risk: "risky", verb: "talk" },
       ],
     },
     {
       tone: "hard",
       label: "强硬",
       actions: [
-        { label: "威胁", text: `压着嗓子威胁${n}，让他知道不配合的后果`, cost: "一刻", risk: "risky" },
-        { label: "辱骂", text: `当众辱骂${n}，一点情面都不留`, cost: "一刻", risk: "deadly" },
-        { label: "偷他东西", text: `趁${n}不注意，摸走他身上的一样东西`, cost: "半日", risk: "risky", verb: "steal" },
-        { label: "动手", text: `对${n}动手`, cost: "半日", risk: "deadly", verb: "kill" },
+        { label: "威胁", text: `想压着嗓子吓住${n}，让他知道不配合会有后果`, cost: "一刻", risk: "risky" },
+        { label: "辱骂", text: `想当众给${n}难堪，一点情面都不留`, cost: "一刻", risk: "deadly" },
+        { label: "偷他东西", text: `想趁${n}不注意，伸手去摸他身上的一样东西`, cost: "半日", risk: "risky", verb: "steal" },
+        { label: "动手", text: `想对${n}动手`, cost: "半日", risk: "deadly", verb: "kill" },
       ],
     },
     {
       tone: "deal",
       label: "事务",
       actions: [
-        { label: "交易", text: `与${n}做一笔交易`, cost: "半日", risk: "safe" },
-        { label: "讨要", text: `向${n}讨要一件东西`, cost: "一刻", risk: "risky" },
-        { label: "请他帮忙", text: `请${n}帮一个忙`, cost: "半日", risk: "risky" },
+        { label: "交易", text: `想同${n}谈一笔交易`, cost: "半日", risk: "safe" },
+        { label: "讨要", text: `想向${n}开口讨一件东西`, cost: "一刻", risk: "risky" },
+        { label: "请他帮忙", text: `想请${n}帮个忙`, cost: "半日", risk: "risky" },
       ],
     },
   ];

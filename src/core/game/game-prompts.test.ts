@@ -402,11 +402,15 @@ describe("isConfrontationalAction / rollTier —— 检定判定", () => {
     expect(rollTier(100).key).toBe("critical_success");
   });
 
-  it("骰定约束块含既定结果与档位指令", () => {
+  it("检定约束块只裁本步、不把结果钉成结局（尝试律 2026-11-15）", () => {
     const d = buildRollDirective(87, rollTier(87));
     expect(d).toContain("d100 = 87");
     expect(d).toContain("成功");
-    expect(d).toContain("必须如实演绎");
+    // 旧文案「既定结果，必须如实演绎」正是黑箱源头：骰子一掷，整件事结局钉死。
+    expect(d).not.toContain("既定结果");
+    expect(d).not.toContain("必须如实演绎");
+    expect(d).toContain("这一步");
+    expect(d).toContain("余地");
   });
 });
 
@@ -496,5 +500,40 @@ describe("关系上下文注入 · 好感与定义关系", () => {
     });
     expect(clean).not.toContain("好感");
     expect(clean).not.toContain("玩家定义关系");
+  });
+});
+
+// 尝试律（2026-11-15）：解析层要能把「结果凭据」读出来，且绝不让它混进玩家看到的正文。
+describe("尝试律 · RESULT| 解析与结算证据", () => {
+  it("RESULT| 行被解析成结果档位，且不留在叙事正文里", () => {
+    const r = parseGameOutput(
+      "你伸手去够他袖口，指尖刚碰到布边，他忽然侧身。\n\n【情节进度：7%】\nRESULT|得手|铜牌落进掌心\n\n1. 收手赔笑\n2. 再试一次\n3. 换个话题"
+    );
+    expect(r.attempt.outcome).toBe("gained");
+    expect(r.attempt.note).toContain("铜牌");
+    expect(r.narrative).not.toContain("RESULT|");
+    expect(r.narrative).toContain("指尖刚碰到布边");
+  });
+
+  it("没写 RESULT| 就是未定——解析器不会替模型宣布结果", () => {
+    const r = parseGameOutput(
+      "你刚要开口，门外传来脚步声。\n\n【情节进度：8%】\n\n1. 先不出声\n2. 迎上去\n3. 退到屏风后"
+    );
+    expect(r.attempt.outcome).toBe("undecided");
+    expect(r.attempt.source).toBe("default");
+  });
+
+  it("提示词明确要求写尝试过程、默认不落定、失败非终局", () => {
+    const prompt = buildGameSystemPrompt({
+      bookName: "测试书", chapterTitle: "第一章", outline: null, existingContent: null,
+      characters: [], worldLore: [], previousTurns: [], entities: [], items: [],
+      currentRound: 1, totalWords: 0, maxWords: 3000, plotProgress: 5,
+    });
+    expect(prompt).toContain("尝试律");
+    expect(prompt).toContain("默认不落定");
+    expect(prompt).toContain("失败绝不是终局");
+    expect(prompt).toContain("RESULT|未定");
+    expect(prompt).toContain("每轮必须写一行");
+    expect(prompt).not.toContain("必须如实演绎，不得更改");
   });
 });

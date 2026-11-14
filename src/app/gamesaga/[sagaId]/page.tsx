@@ -75,7 +75,17 @@ interface GItem {
 }
 /** 场景实体（角色/势力/地点/生物） */
 interface GEntity { name: string; type: string; description: string; }
-interface TurnRec { round: number; playerAction: string; narrative: string; }
+interface TurnRec {
+  round: number;
+  playerAction: string;
+  narrative: string;
+  /** 尝试律回执：本轮结算档位（未定＝好感/物品/生死都没动），贴在正文下给玩家看 */
+  attemptLabel?: string;
+  attemptNote?: string;
+  attemptHint?: string;
+  /** 探查分层回执：探查力明细 + 「只看表象」口径 */
+  inspectBrief?: string;
+}
 /** 两段式骰子浮层状态 */
 interface DiceState {
   rolling: boolean;
@@ -460,14 +470,14 @@ function SagaDetailInner() {
     actionType: string;
     actionText: string;
     selectedOption?: number;
-    extra?: { target?: string; targetItem?: string };
+    extra?: { target?: string; targetItem?: string; inspectChannel?: string };
   } | null>(null);
 
   const act = async (
     actionType: string,
     actionText: string,
     selectedOption?: number,
-    extra?: { target?: string; targetItem?: string }
+    extra?: { target?: string; targetItem?: string; inspectChannel?: string }
   ) => {
     if (!sessionId || status !== "playing") return;
     // 上帝/GM 视角不掷骰：没有"我在冒险"，编排里的成败由 AI 按戏剧性演（也避免上帝给自己作弊）
@@ -530,7 +540,7 @@ function SagaDetailInner() {
     actionText: string,
     selectedOption: number | undefined,
     preRolled: { d100: number; successRate: number; reasons?: string[] } | undefined,
-    extra?: { target?: string; targetItem?: string }
+    extra?: { target?: string; targetItem?: string; inspectChannel?: string }
   ) => {
     if (!sessionId || status !== "playing") return;
     setBlocked(null);
@@ -588,7 +598,15 @@ function SagaDetailInner() {
             if (d?.text) window.setTimeout(() => fireDiscovery(d.text as string, d.kind), i * 120);
           });
         }
-        setTurns((prev) => [...prev, { round: newRound, playerAction: actionText, narrative: done.narrative || "" }]);
+        setTurns((prev) => [...prev, {
+          round: newRound,
+          playerAction: actionText,
+          narrative: done.narrative || "",
+          attemptLabel: done.attemptLabel,
+          attemptNote: done.attemptNote,
+          attemptHint: done.attemptHint,
+          inspectBrief: done.inspectBrief,
+        }]);
         // 生成完毕：只做一件事——把这一轮的开头带到视野顶端。
         // 生成途中一律不跟随，玩家想往上翻就往上翻，读完再说。
         setTimeout(() => {
@@ -646,11 +664,11 @@ function SagaDetailInner() {
     return items.filter((i) => (i.owner || asName) === asName).length;
   }, [items, saga?.playAsName]);
   const [showGive, setShowGive] = useState(false); // 赠予：展开主角物品选择
-  const interactWith = (name: string, actionType: string, text: string) => {
+  const interactWith = (name: string, actionType: string, text: string, extra?: Record<string, unknown>) => {
     setInteractChar(null);
     setShowGive(false);
     // target 显式带上：引擎结算好感时用它，不从正文里猜人名
-    void act(actionType, text, undefined, { target: name });
+    void act(actionType, text, undefined, { target: name, ...(extra || {}) } as any);
   };
   const saveEdit = async () => {
     if (editingRound == null || !sessionId) return;
@@ -698,7 +716,11 @@ function SagaDetailInner() {
       setItems((sm.items || []) as GItem[]);
       setEntities((sm.entities || []) as GEntity[]);
       setOptions((sm.options || []) as GameOption[]);
-      setTurns((sm.turns || []).map((t: any) => ({ round: t.round, playerAction: t.playerAction, narrative: t.narrative || "" })));
+      setTurns((sm.turns || []).map((t: any) => ({
+        round: t.round, playerAction: t.playerAction, narrative: t.narrative || "",
+        attemptLabel: t.attemptLabel, attemptNote: t.attemptNote,
+        attemptHint: t.attemptHint, inspectBrief: t.inspectBrief,
+      })));
       setStatus("playing");
     } catch (e: any) {
       toastError(e.message || "恢复进度失败");
@@ -1375,9 +1397,9 @@ function SagaDetailInner() {
                   {rollInfo && (
                     <span
                       className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
-                      title={`检定：d100=${rollInfo.d100}，成功率=${rollInfo.successRate ?? "?"}%（${(rollInfo.reasons || []).join("；")}）——结果既定，AI 只演不判`}
+                      title={`本步检定：d100=${rollInfo.d100}，成功率=${rollInfo.successRate ?? "?"}%（${(rollInfo.reasons || []).join("；")}）——只裁这一步顺不顺，不裁整件事成没成`}
                     >
-                      🎲 d100={rollInfo.d100} / 成功率{rollInfo.successRate ?? "?"}% · {rollInfo.label}
+                      🎲 本步 d100={rollInfo.d100} / {rollInfo.successRate ?? "?"}% · {rollInfo.label}
                     </span>
                   )}
                   {(status === "playing" || endingChapter) && (
@@ -1533,6 +1555,20 @@ function SagaDetailInner() {
                                 <p key={pi}>{renderHotspots(para, hotspotNames, (n) => setInteractChar(n))}</p>
                               ))}
                             </div>
+                            {/* 尝试律回执：结算透明上屏，不是弹窗宣判。
+                                未定档明说「没结算、还能继续」——杜绝"点完就默认生效"的黑箱。 */}
+                            {t.attemptLabel && (
+                              <div className="mt-2 border-l border-[var(--nv-creative)]/30 pl-2.5 text-[10px] leading-5 text-[var(--nv-text-tertiary)]">
+                                <span className="text-[var(--nv-creative)]/80">· {t.attemptLabel}</span>
+                                {t.attemptNote && <span> · {t.attemptNote}</span>}
+                                {t.attemptHint && <span className="block opacity-80">{t.attemptHint}</span>}
+                                {t.inspectBrief && (
+                                  <span className="mt-0.5 block border-t border-[var(--nv-border-2)]/50 pt-0.5 opacity-80">
+                                    🔍 {t.inspectBrief}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover/turn:opacity-100">
                               <span className="rounded-md border border-[var(--nv-border-2)]/60 px-1.5 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">第 {t.round} 轮</span>
                               <span className="text-[10px] text-[var(--nv-text-muted)]">{t.playerAction}</span>
@@ -1973,7 +2009,7 @@ function SagaDetailInner() {
         disabled={status !== "playing"}
         fallbackBrief={interactChar ? entities.find((e) => e.name === interactChar)?.description : ""}
         isSelf={!!interactChar && interactChar === (saga.playAsName || "")}
-        onAct={(text, type) => { if (interactChar) interactWith(interactChar, type || "custom", text); }}
+        onAct={(text, type, extra) => { if (interactChar) interactWith(interactChar, type || "custom", text, extra); }}
         suggestions={options.map((o) => o.text).filter(Boolean).slice(0, 4)}
         onExtChange={setExtSlots}
         onClose={() => setInteractChar(null)}

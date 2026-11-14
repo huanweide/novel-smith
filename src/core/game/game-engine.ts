@@ -26,14 +26,94 @@ import { addDeclaredFact } from "./declare-fact";
 import { causalityOnly, parseExtensions, serializeExtensions } from "./session-extensions";
 // 自由模式三件套：动词表 / 好感账 / 拾取门槛
 import { inferVerb } from "./verbs";
-import { applyRelations, describeChange, outcomeFromTurn, type RelationChange, type RelationMap } from "./relation-ledger";
+import { applyRelations, describeChange, type RelationChange, type RelationMap } from "./relation-ledger";
 import { gateLoot, lootNotice } from "./item-gate";
 import { markDead } from "./character-admission";
+// 探查分层：看一眼不是全知道；观察为默认，修为/背景都按确定性事实判
+import {
+  isInspectChannel, inspectPower, inspectVerdict, buildInspectDirective,
+  inspectBrief, isCultivationWorld, compareCultivation, type InspectChannel,
+} from "./inspect";
+// 尝试律：结算只认正文证据（RESULT|），不认玩家输入的动作文本
+import {
+  resolveAttempt, toRelationOutcome, itemSettlementAllowed,
+  deathSettlementAllowed, attemptLabel, attemptHint,
+} from "./attempt";
 // 叙事系统移植：账本信封 / 提示词上下文 / 每轮协同推进
 import { readNarrative, writeEnvelope } from "./narrative/ledger";
 import { buildNarrativeContext } from "./narrative/context";
 import { syncRound, capDiscoveries, toRoundSignals, type NarrativeDiscovery } from "./narrative/sync";
 import type { DiscoveryKind } from "./discovery-view";
+
+/**
+ * 探查分层上下文（2026-11-15 用户口径）：把「这一眼能看见什么」写成提示词硬约束。
+ *
+ * 判据：探查不再是卡内一键吐清单的黑箱，而是走**普通正文回合**——过程写在正文里，
+ * 可见范围由确定性规则定，LLM 只负责把「怎么看的」写好看，无权决定信息种类。
+ *  · 观察（默认）：只给主观印象；· 打听：只给公开身份且带来源；
+ *  · 感知：世界有修为体系且自己更高才给一句相对判断；
+ *  · 追底细：极小概率 + 已有碎片才给一条，否则明写没查到。
+ */
+async function buildInspectTurnContext(
+  input: GameActionInput,
+  ctx: GameSessionContext,
+  session: any
+): Promise<{ block: string; brief: string } | null> {
+  if (!isInspectChannel(input.inspectChannel) || !session?.sagaId) return null;
+  const saga = await prisma.gameSaga.findUnique({
+    where: { id: session.sagaId },
+    select: { characterSheets: true, relations: true, playAsName: true, projectId: true },
+  });
+  if (!saga) return null;
+
+  const sheets: Record<string, any> =
+    saga.characterSheets && typeof saga.characterSheets === "object" && !Array.isArray(saga.characterSheets)
+      ? (saga.characterSheets as Record<string, any>)
+      : {};
+  const targetName =
+    (input.target || "").trim() ||
+    ctx.characters.find(
+      (c) => c.name && c.name !== saga.playAsName && (input.actionText || "").includes(c.name)
+    )?.name ||
+    "";
+  if (!targetName) return null;
+
+  const player = (saga.playAsName && sheets[saga.playAsName]) || {};
+  const target = sheets[targetName] || {};
+  const relations = (saga.relations && typeof saga.relations === "object" ? saga.relations : {}) as Record<string, any>;
+  const level = Number(relations[targetName]?.level ?? 0);
+  const abilities: string[] = Array.isArray(player.abilities) ? player.abilities.map(String) : [];
+  const power = inspectPower(abilities, level);
+  const d100 = 1 + Math.floor(Math.random() * 100);
+  const verdict = inspectVerdict(d100, power.rate);
+
+  // 世界有没有修为体系：从世界书 + 项目梗概里找确定性关键词，不靠模型猜
+  let worldText = ctx.worldLore.map((l) => `${l.title} ${l.content}`).join("\n");
+  if (saga.projectId) {
+    const proj = await prisma.project.findUnique({
+      where: { id: saga.projectId },
+      select: { synopsis: true },
+    }).catch(() => null);
+    worldText += "\n" + (proj?.synopsis || "");
+  }
+  const sheetText = (s: any) => [
+    s?.role, s?.title,
+    s?.status ? (typeof s.status === "string" ? s.status : JSON.stringify(s.status)) : "",
+    s?.background, ...(Array.isArray(s?.abilities) ? s.abilities : []),
+  ].filter(Boolean).join(" ");
+  const selfRank = compareCultivation(sheetText(player), sheetText(target));
+  const revealed = target.revealed || {};
+  const knownFragments = Array.isArray(revealed.fragments) ? revealed.fragments.length : 0;
+
+  const opts = {
+    channel: input.inspectChannel as InspectChannel,
+    targetName, power, verdict,
+    cultivationWorld: isCultivationWorld(worldText),
+    selfRank,
+    knownFragments,
+  };
+  return { block: buildInspectDirective(opts), brief: inspectBrief(opts) };
+}
 
 // 物品变动输入（含可选 owner，用于背包按 name+owner 隔离，阿游 P1）。
 interface ItemChangeRequest {
@@ -301,6 +381,12 @@ export async function getSessionSummary(sessionId: string): Promise<GameSessionS
     : [];
   const lastState = session.states[session.states.length - 1];
   const lastOptions = lastState ? (lastState.options as unknown as GameOption[]) : [];
+  // 尝试律回执：从 extensions.attempts 按轮次取回，刷新后照样上屏
+  const rawExt = (session.extensions && typeof session.extensions === "object" && !Array.isArray(session.extensions))
+    ? (session.extensions as Record<string, any>)
+    : {};
+  const attempts: Record<string, any> =
+    rawExt.attempts && typeof rawExt.attempts === "object" ? rawExt.attempts : {};
 
   return {
     id: session.id,
@@ -322,6 +408,7 @@ export async function getSessionSummary(sessionId: string): Promise<GameSessionS
       playerAction: s.playerAction,
       narrative: s.narrative,
       options: (s.options as unknown as GameOption[]) || [],
+      ...(attempts[String(s.round)] || {}),
     })),
   };
 }
@@ -548,6 +635,13 @@ export async function* processGameTurn(input: GameActionInput, signal?: AbortSig
   label?: string;
   successRate?: number;
   reasons?: string[];
+  /** 尝试律回执：本轮结果档位与说明（未定＝没结算，界面须明确显示） */
+  attemptOutcome?: string;
+  attemptLabel?: string;
+  attemptNote?: string;
+  attemptHint?: string;
+  /** 探查分层回执：探查力明细 + 「只看表象」口径 */
+  inspectBrief?: string;
   error?: string;
 }> {
   // 1. 加载会话和上下文
@@ -599,6 +693,13 @@ async function* runLockedTurn(
   label?: string;
   successRate?: number;
   reasons?: string[];
+  /** 尝试律回执：本轮结果档位与说明（未定＝没结算，界面须明确显示） */
+  attemptOutcome?: string;
+  attemptLabel?: string;
+  attemptNote?: string;
+  attemptHint?: string;
+  /** 探查分层回执：探查力明细 + 「只看表象」口径 */
+  inspectBrief?: string;
   error?: string;
 }> {
   // R9 声明事实：玩家行使「作者权」直接确立一条世界事实。
@@ -716,11 +817,13 @@ async function* runLockedTurn(
       }
 
       const judged = judgeRoll(d100, finalRate);
+      // 尝试律：骰子只裁「这一步顺不顺」，不裁「整件事成没成」。
+      // 旧文案写「既定结果，必须如实演绎，不得更改」= 把过程钉成结局，是黑箱的源头之一。
       rollBlock = [
-        `\n\n【骰子判定（既定结果，必须如实演绎，不得更改）】`,
+        `\n\n【本步检定（只是这一步的处境，不是整件事的结局）】`,
         `检定：d100=${d100}，成功率=${finalRate}%（${rateLabel(finalRate)}）→ ${judged.label}。`,
         reasons.length > 0 ? `难度依据：${reasons.join("；")}。` : ``,
-        `要求：${judged.key === "critical_success" ? "超预期达成，并有意外之喜" : judged.key === "success" ? "顺利达成" : judged.key === "partial" ? "达成目的但付出可见代价（受伤/暴露/结怨/损失）" : judged.key === "fail" ? "行动受阻、被阻止或被反制" : "严重受挫且出人意料（如当场被识破/反被制服/弄巧成拙）"}。把结果演成有趣的故事，不要生硬宣布成败。`,
+        `要求：${judged.key === "critical_success" ? "这一步格外顺，还带出一点意外" : judged.key === "success" ? "这一步顺利" : judged.key === "partial" ? "勉强推进，但露出可见代价或破绽" : judged.key === "fail" ? "这一步受阻、被挡了回来" : "这一步弄巧成拙，当场露了形"}。把它写成尝试过程里的一个转折：先写手怎么动、对方怎么应，再让局势往这个方向偏；**照尝试律把后面的余地留出来，不许一句话宣布成败、不许写死任何人**。整件事是否落定，由你在正文里写不写 RESULT| 行决定。`,
       ].join("");
 
       yield {
@@ -740,7 +843,9 @@ async function* runLockedTurn(
       }).catch(() => {});
     }
   }
-  const userPrompt = personaAnchor + userPromptBase + rollBlock;
+  // 探查分层：只有该回合并没有别的事、且玩家明确选了通道时才注入可见性硬规则
+  const inspectTurn = await buildInspectTurnContext(input, ctx, session);
+  const userPrompt = personaAnchor + userPromptBase + rollBlock + (inspectTurn?.block || "");
 
   // 3. 获取 LLM 配置并创建客户端
   const llmConfig = await getEffectiveConfig();
@@ -789,6 +894,13 @@ async function* runLockedTurn(
   const parsed = parseGameOutput(fullResponse);
   const wordCount = parsed.narrative.length;
 
+  // 尝试律：本轮结果档位。上帝档是作者权例外（编排即成事实），但模型明写的
+  // RESULT| 行优先级最高——它自己判了受阻，就不能被档位覆盖成得手。
+  const attempt =
+    narrativeMode === "god" && parsed.attempt.source !== "result_line"
+      ? resolveAttempt(fullResponse, parsed.itemChanges, true)
+      : parsed.attempt;
+
   // 如果没有解析到选项，给兜底选项
   let finalOptions = parsed.options;
   if (finalOptions.length < 2) {
@@ -814,7 +926,13 @@ async function* runLockedTurn(
   // 只拦 gain——消耗/丢弃/损毁必须照常过闸，否则背包里的东西删不掉。
   const lootGate = gateLoot(acceptedItemChanges);
   const keptSet = new Set(lootGate.keep);
-  const storedItemChanges = acceptedItemChanges.filter((c) => keptSet.has(c));
+  // 尝试律：本轮没落定（或这一步被拦下），就不许有东西「已经到手」。
+  // 旧的写法只要模型打了 CI|获得 就入账，哪怕正文写「手刚伸过去就被喝止」——
+  // 玩家选了「偷」就等于偷到，正是要修的黑箱。消耗/丢弃/损坏不受影响（不是获取）。
+  const storedItemChanges = acceptedItemChanges.filter(
+    (c) => keptSet.has(c) &&
+      (itemSettlementAllowed(attempt.outcome) || (c.operation !== "gain" && c.operation !== "transfer"))
+  );
 
   const newRound = session.currentRound + 1;
 
@@ -827,6 +945,23 @@ async function* runLockedTurn(
     ? markSeedTriggered(mergeSeeds(extBefore.causality, plantedSeeds), parsed.causalityDone, newRound)
     : extBefore.causality;
   const extNext = { ...extBefore, causality: settledSeeds };
+
+  // 尝试律：本轮回执必须跨刷新还在。否则前端 load() 用摘要重建 turns 时会把它丢掉，
+  // 玩家一刷新就看不见「本轮未落定」，结算又变回黑箱（真机实测踩到）。
+  // 存进 session.extensions 的 attempts 字典（按轮次），零迁移、不污染正文。
+  const attemptReceipt = {
+    attemptLabel: attemptLabel(attempt.outcome),
+    attemptNote: attempt.note,
+    attemptHint: attemptHint(attempt.outcome),
+    inspectBrief: inspectTurn?.brief,
+  };
+  const rawExt = (session.extensions && typeof session.extensions === "object" && !Array.isArray(session.extensions))
+    ? (session.extensions as Record<string, any>)
+    : {};
+  const extForWrite = {
+    ...serializeExtensions(extNext),
+    attempts: { ...(rawExt.attempts || {}), [String(newRound)]: attemptReceipt },
+  };
   const updatedItems = applyItemChanges(ctx.items, storedItemChanges, newRound);
 
   // 合并实体
@@ -905,8 +1040,8 @@ async function* runLockedTurn(
         currentRound: newRound,
         totalWords: newTotalWords,
         plotProgress: finalProgress,
-        // 只有真的动了因果才写 extensions，避免每回合无谓写库
-        ...(causalityChanged ? { extensions: serializeExtensions(extNext) as any } : {}),
+        // 每轮都写：attempts 回执要跨刷新可见（因果没变也要写）
+        extensions: extForWrite as any,
       },
     }),
   ]);
@@ -989,15 +1124,12 @@ async function* runLockedTurn(
         (ctx.characters || []).find((c) => c.name && c.name !== ctx.playAsName && text.includes(c.name));
       if (hit) target = hit.name;
     }
-    if (target) {
-      const verb = inferVerb(input.actionType, input.actionText || "");
-      const outcome = outcomeFromTurn({
-        actionType: input.actionType,
-        preRolledSuccess:
-          input.preRolled && Number.isFinite(input.preRolled.successRate)
-            ? input.preRolled.d100 <= input.preRolled.successRate
-            : undefined,
-      });
+    // 尝试律：结算只认正文里的证据。旧实现用 inferVerb(玩家输入文本) +
+    // outcomeFromTurn(无骰恒 success) 直接入账——点「偷」就等于偷到、点「杀」人就死，
+    // 与正文写了什么毫无关系，正是「选择即结果」的黑箱。现在未定档一律不结算。
+    const verb = inferVerb(input.actionType, input.actionText || "");
+    const outcome = toRelationOutcome(attempt.outcome);
+    if (target && outcome) {
       const sagaRel = await prisma.gameSaga.findUnique({
         where: { id: session.sagaId },
         select: { relations: true, characterSheets: true },
@@ -1013,10 +1145,10 @@ async function* runLockedTurn(
         relationChanges = applied.changes;
       }
 
-      // 死亡退场（用户口径 2026-11-14）：kill 得手，目标从此是「退场死亡角色」——
-      // 名录排序垫后，但卡永远打得开（死人留下的线索往往比活人多）。
-      // 幂等（markDead 不覆盖原回合）；没有 saga 的会话跳过（人物卡挂在 saga 上）。
-      if (verb === "kill" && outcome === "success") {
+      // 死亡退场：名录排序垫后、卡永远打得开（死人留下的线索往往比活人多）。
+      // 硬闸门（2026-11-15 用户口径「不能判定完我就已经死了」）：只有正文里
+      // 明写 RESULT|丧命 才允许标死，且动词必须是 kill。绝不从「杀」字或骰面推导。
+      if (verb === "kill" && deathSettlementAllowed(attempt.outcome)) {
         const sheetsMap: Record<string, any> =
           sagaRel?.characterSheets && typeof sagaRel.characterSheets === "object"
             ? { ...(sagaRel.characterSheets as Record<string, any>) }
@@ -1033,7 +1165,8 @@ async function* runLockedTurn(
   // P1 世界卡联动（回合路径补齐，与开局路径 ensureItemLorebook 对齐）：
   // 回合内获得/转移的物品同步建/更新世界书词条（归属随剧情流动），长期资产跨模式共享。
   if (session.projectId) {
-    for (const change of parsed.itemChanges) {
+    // 只给真正入账的变动建词条：被尝试律拦下的「还没到手」不该凭空出现在世界书里
+    for (const change of storedItemChanges) {
       if (change.operation === "gain") {
         await ensureItemLorebook(session.projectId, change.name, change.owner || "主角");
       } else if (change.operation === "transfer") {
@@ -1070,6 +1203,13 @@ async function* runLockedTurn(
     ],
     plotProgress: finalProgress,
     wordCount,
+    // 尝试律回执：结算透明上屏（不是弹窗宣判）。未定档明确告诉玩家
+    // 「好感/物品/生死都没结算，事情还能继续」，杜绝静默失效与黑箱。
+    attemptOutcome: attempt.outcome,
+    attemptLabel: attemptLabel(attempt.outcome),
+    attemptNote: attempt.note,
+    attemptHint: attemptHint(attempt.outcome),
+    inspectBrief: inspectTurn?.brief,
   };
 }
 

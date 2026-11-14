@@ -3492,3 +3492,22 @@ main.zm-col > * { flex-shrink: 0; }
 /* 浮体：世界卡独立一色（低饱和赭，与物品朱、线索青拉开） */
 .zm-float.world { --zc: #8A6A3C; border-left-color: #8A6A3C; }
 .zm-float.world .zm-float-cat { color: #8A6A3C; }
+
+/* 探查分层（2026-11-15）：看一眼只是看一眼，四种方式都是「发一个尝试」，
+   过程写在正文里；卡内只放选择，不再放骰面清单与「你全知道了」。 */
+.zp-inspect-ways {
+  margin-top: 12px; padding: 10px 12px;
+  border-left: 1px solid rgba(126, 104, 72, 0.34);
+  background: rgba(246, 239, 225, 0.5);
+}
+.zp-inspect-ways .zp-hint { margin: 0 0 8px; font-size: 10px; line-height: 1.7; }
+.zp-inspect-way-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.zp-way-btn {
+  font-family: var(--zm-song); font-size: 11px; letter-spacing: 0.05em;
+  padding: 4px 10px; color: #4A4237;
+  border: 1px solid rgba(126, 104, 72, 0.34);
+  background: rgba(255, 252, 244, 0.7);
+  transition: color .16s, border-color .16s, background .16s;
+}
+.zp-way-btn:hover:not(:disabled) { color: var(--zm-zhu); border-color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+.zp-way-btn:disabled { opacity: 0.45; cursor: not-allowed; }
