@@ -453,6 +453,10 @@ export function PersonPanel({
                   </button>
                   <button className="zp-rail-btn" disabled={disabled} onClick={() => railGo("carry")} title="送他一件东西（随身页里点物品）">送物</button>
                   <button className="zp-rail-btn risky" disabled={disabled} onClick={() => railGo("carry")} title="摸他一件东西（随身页里点物品）">摸物</button>
+                  {/* 论交三件（鬼谷同源）：正和博弈——成了双方长脸，输了不结死仇（好感走 verbs 查表） */}
+                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`与${name}切磋一番，点到为止`)} title="以武会友 · 成了+4（不打不相识），失手-3">切磋</button>
+                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`与${name}论道一场，各抒己见`)} title="以言会友 · 相谈甚欢+3，不欢而散-1">论道</button>
+                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`向${name}授业解惑一番`)} title="传道之谊 · 他受教+2，不领情-2">教诲</button>
                 </div>
                 <div className="zp-rail-sect">
                   <span className="zp-rail-tag deal">惯用招</span>

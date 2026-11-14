@@ -871,6 +871,16 @@ function SagaDetailInner() {
   // 实体 type 是英文枚举（character/faction/...），不是中文——此前用"角色"过滤永远为空
   const charEntities = entities.filter((e) => e.type === "character");
   const factionEntities = entities.filter((e) => e.type === "faction");
+
+  // 名录唯一化（用户口径：点这个角色，跳出来的就是人物卡）：会话实体（模型吐过 CI 的）
+  // + 已知角色（前传快照/项目角色卡，确定性存在）合并。此前名录只靠实体——模型没吐
+  // 实体标记时名录空（实测踩坑），玩家明明知道有这个人却找不到入口开卡。
+  const rosterChars: Array<{ name: string; description: string }> = [
+    ...charEntities.map((e) => ({ name: e.name, description: e.description || "" })),
+    ...(saga?.playAsCandidates || [])
+      .filter((c) => c.name && c.name !== saga?.playAsName && !charEntities.some((e) => e.name === c.name))
+      .map((c) => ({ name: c.name, description: c.brief || "" })),
+  ];
   const activeChapterOutline = activeChapter?.outline || null;
 
   return (
@@ -911,8 +921,9 @@ function SagaDetailInner() {
             <Icon name="arrowLeft" size={13} /> 退出
           </button>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold text-[var(--nv-text-primary)]">{saga.title}</h1>
-            <p className="text-xs text-[var(--nv-text-tertiary)]">
+            {/* 用户反馈：原 text-lg 粗黑太大太丑——书名收成一行小楷（书脊口径），信息行缩到 10px */}
+            <h1 style={{ fontFamily: "var(--zm-kai)" }} className="truncate text-[13px] font-semibold leading-tight tracking-wide text-[var(--nv-text-primary)]">{saga.title}</h1>
+            <p className="truncate text-[10px] leading-tight text-[var(--nv-text-tertiary)]">
               {saga.sourceBookName ? `前传：《${saga.sourceBookName}》 · ` : ""}{saga.chapters.length} 章
               {saga.narrativeMode === "god"
                 ? " · 上帝视角（不扮演任何人）"
@@ -1184,15 +1195,15 @@ function SagaDetailInner() {
                 )}
 
                 <p className="mb-2 mt-4 font-medium text-[var(--nv-text-primary)]">场景角色</p>
-                {charEntities.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
-                {charEntities.map((e) => (
+                {rosterChars.length === 0 && <p className="italic text-[var(--nv-text-muted)]">剧情推进中遇到的角色会实时出现在这里</p>}
+                {rosterChars.map((e) => (
                   <div
                     key={e.name}
                     className="mt-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-1.5 transition-colors hover:border-[var(--nv-creative-soft)]"
                   >
                     <button
-                      onClick={() => { setSheetName(e.name); setSheetOpen(true); }}
-                      title={`查看${e.name}的角色卡（状态/背包/能力，可编辑）`}
+                      onClick={() => setInteractChar(e.name)}
+                      title={`打开${e.name}的人物卡（交谈/探查/赠送/偷窃，档案一页页看）`}
                       className="block w-full text-left"
                     >
                       <p className="flex items-center gap-1.5 text-[var(--nv-text-primary)]">
@@ -1204,11 +1215,11 @@ function SagaDetailInner() {
                     </button>
                     <div className="mt-1 flex justify-end">
                       <button
-                        onClick={() => setInteractChar(e.name)}
+                        onClick={() => { setSheetName(e.name); setSheetOpen(true); }}
                         className="rounded-md border border-[var(--nv-border-2)] px-1.5 py-0.5 text-[9px] text-[var(--nv-text-tertiary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-creative)]"
-                        title={`与${e.name}交互（观察/对话/交易/赠予/偷窃/抢夺）`}
+                        title={`编辑${e.name}的档案（表格形式，字段逐项改）`}
                       >
-                        交互
+                        编辑
                       </button>
                     </div>
                   </div>

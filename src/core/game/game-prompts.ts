@@ -450,13 +450,28 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
           .join("\n")}`
       : "";
 
+  // 人物段：在简介之外补「好感账本现值」与「玩家定义关系」。
+  // 此前 AI 对好感一无所知——玩家把好感刷到 +40，AI 依旧按陌生人演。
+  // relationNote 是玩家亲口定下的关系（人物卡「定义关系」），必须按此演，不许自行揣测。
+  const relLine = (c: { name: string; relationLevel?: number; relationReason?: string; relationNote?: string }) => {
+    const parts: string[] = [];
+    if (Number.isFinite(c.relationLevel)) {
+      const lv = c.relationLevel as number;
+      const tone = lv >= 40 ? "交情极深" : lv >= 15 ? "相熟" : lv > 0 ? "略有好感" : lv === 0 ? "素不相识" : lv > -15 ? "有些不快" : lv > -40 ? "结了怨" : "仇深似海";
+      parts.push(`好感 ${lv > 0 ? "+" : ""}${lv}（${tone}${c.relationReason ? `，最近：${c.relationReason}` : ""}）`);
+    }
+    if (c.relationNote) parts.push(`玩家定义关系：「${c.relationNote}」——言辞分寸、亲疏远近都按这个关系来，不得偏离`);
+    return parts.length > 0 ? `　↳ ${parts.join("；")}` : "";
+  };
+
   const characterSection =
     ctx.characters.length > 0
       ? `\n## 本章涉及角色\n${ctx.characters
-          .map(
-            (c) =>
-              `- **${c.name}**（${c.role}）${c.currentStatus !== "alive" ? `[状态：${c.currentStatus}]` : ""}：${c.briefDescription || "暂无简介"}`
-          )
+          .map((c) => {
+            const base = `- **${c.name}**（${c.role}）${c.currentStatus !== "alive" ? `[状态：${c.currentStatus}]` : ""}：${c.briefDescription || "暂无简介"}`;
+            const rel = relLine(c);
+            return rel ? `${base}\n${rel}` : base;
+          })
           .join("\n")}`
       : "";
 

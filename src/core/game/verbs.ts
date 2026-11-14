@@ -15,8 +15,8 @@
 
 import type { GameActionType } from "./types";
 
-/** 四个基础动词 + 一个永远存在的自由描述 */
-export type BaseVerb = "gift" | "talk" | "steal" | "kill" | "describe";
+/** 基础动词 + 论交三件（切磋/论道/教诲）+ 一个永远存在的自由描述 */
+export type BaseVerb = "gift" | "talk" | "steal" | "kill" | "spar" | "discuss" | "teach" | "describe";
 
 export interface VerbSpec {
   key: BaseVerb;
@@ -89,6 +89,44 @@ export const BASE_VERBS: Record<BaseVerb, VerbSpec> = {
     relationCost: -30,
     relationFail: -25,
   },
+  // 论交三件（鬼谷八荒的切磋/论道/参悟同源）：以武会友、以言会友、以教会友。
+  // 共同点：正和博弈——成了双方都长脸，输了也不结死仇（与强硬组「一定翻脸」相对）。
+  spar: {
+    key: "spar",
+    label: "切磋",
+    actionType: "custom",
+    costPeriods: 1,
+    risk: true,
+    difficulty: -5,
+    phrase: (t) => (t ? `与${t}切磋一番，点到为止` : "找人切磋一番，点到为止"),
+    relationSuccess: 4, // 不打不相识
+    relationCost: 1,
+    relationFail: -3, // 下手没轻重，对方挂了彩
+  },
+  discuss: {
+    key: "discuss",
+    label: "论道",
+    actionType: "custom",
+    costPeriods: 1,
+    risk: false,
+    difficulty: 5,
+    phrase: (t) => (t ? `与${t}论道一场，各抒己见` : "与人论道一场"),
+    relationSuccess: 3, // 相谈甚欢
+    relationCost: 1,
+    relationFail: -1, // 话不投机，不欢而散
+  },
+  teach: {
+    key: "teach",
+    label: "教诲",
+    actionType: "custom",
+    costPeriods: 1,
+    risk: false,
+    difficulty: 0,
+    phrase: (t) => (t ? `向${t}授业解惑一番` : "授业解惑一番"),
+    relationSuccess: 2, // 传道之谊
+    relationCost: 0,
+    relationFail: -2, // 对方不领情（嫌你摆架子）
+  },
   describe: {
     key: "describe",
     label: "描述",
@@ -160,6 +198,10 @@ export function inferVerb(actionType: string, actionText: string): BaseVerb {
   const t = actionText || "";
   if (actionType === "combat") return "kill";
   if (actionType === "dialogue") return "talk";
+  if (/(切磋|比试|过招|拆招|比划|讨教几手)/.test(t)) return "spar";
+  if (/(论道|辩道|谈经|论法|参悟)/.test(t)) return "discuss";
+  // 「教」单字太宽（请教/求教是求人不是教人），只认施教侧的明确词
+  if (/(指点|传授|教导|教诲|授业|指点他|开课)/.test(t)) return "teach";
   if (/(送|赠|给|递|塞给|交给|献给|献上)/.test(t)) return "gift";
   if (/(偷|盗|摸走|顺走|扒|窃)/.test(t)) return "steal";
   if (/(杀|砍|捅|刺|勒|掐死)/.test(t)) return "kill";

@@ -134,6 +134,12 @@ export interface GameSessionContext {
     role: string;
     currentStatus: string;
     briefDescription: string;
+    /** 好感账本现值（saga.relations；undefined=从没打过交道） */
+    relationLevel?: number;
+    /** 最近一次好感变化的原因（回执口径，让 AI 知道关系是怎么走到今天的） */
+    relationReason?: string;
+    /** 玩家自定义关系（人物卡「定义关系」，如"我的同门师妹"）——AI 必须按此演 */
+    relationNote?: string;
   }>;
   worldLore: Array<{
     title: string;

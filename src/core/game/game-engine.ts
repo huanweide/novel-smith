@@ -328,6 +328,40 @@ export async function getSessionSummary(sessionId: string): Promise<GameSessionS
 
 // ─── 上下文加载 ────────────────────────────────────────────────
 
+/**
+ * 关系上下文：把「好感账本现值」与「玩家定义关系」挂到角色上下文上。
+ *
+ * 此前 relations 只写不读——AI 根本不知道自己跟玩家演到什么交情了，
+ * 好感 +40 之后 AI 依旧按陌生人演，玩家会觉得「我白处了」。
+ * relationNote（人物卡「定义关系」）同理：玩家亲口定下「这是我师妹」，
+ * AI 必须按师妹的分寸演，而不是自己猜。
+ */
+function attachRelations<T extends { name: string }>(
+  list: T[],
+  relations: unknown,
+  sheets: unknown,
+): Array<T & { relationLevel?: number; relationReason?: string; relationNote?: string }> {
+  const rel = (relations && typeof relations === "object" && !Array.isArray(relations)
+    ? relations
+    : {}) as Record<string, { level?: number; reason?: string }>;
+  const sh = (sheets && typeof sheets === "object" && !Array.isArray(sheets)
+    ? sheets
+    : {}) as Record<string, { relationNote?: string }>;
+  return list.map((c) => {
+    const r = rel[c.name];
+    const rawNote = sh[c.name]?.relationNote;
+    const note = typeof rawNote === "string" ? rawNote.trim() : "";
+    if (!r && !note) return c;
+    return {
+      ...c,
+      ...(r && Number.isFinite(r.level)
+        ? { relationLevel: r.level, ...(typeof r.reason === "string" && r.reason ? { relationReason: r.reason } : {}) }
+        : {}),
+      ...(note ? { relationNote: note } : {}),
+    };
+  });
+}
+
 async function loadGameContext(session: any): Promise<GameSessionContext> {
   // ── 游戏本（Saga）路径：不绑小说章节，章纲/正文来自 GameSagaChapter，
   //    角色/世界书等长期资产在派生本下实时取项目现值（跨模式共享），从零新建用前传快照。──
@@ -383,12 +417,16 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
       chapterTitle: chapter.title,
       outline: chapter.outline ?? null,
       existingContent: (chapter.content || "").trim() || null,
-      characters: characters.map((c: any) => ({
-        name: c.name,
-        role: c.role,
-        currentStatus: c.currentStatus,
-        briefDescription: c.background?.slice(0, 100) || "",
-      })),
+      characters: attachRelations(
+        characters.map((c: any) => ({
+          name: c.name,
+          role: c.role,
+          currentStatus: c.currentStatus,
+          briefDescription: c.background?.slice(0, 100) || "",
+        })),
+        saga.relations,
+        saga.characterSheets,
+      ),
       worldLore: loreEntries.map((l: { title: string; content: string }) => ({ title: l.title, content: l.content })),
       previousTurns: states.map((s: { round: number; playerAction: string; narrative: string }) => ({
         round: s.round,
@@ -937,13 +975,18 @@ async function* runLockedTurn(
   // 规则全确定性（见 relation-ledger.ts）：四动词 × 三结果查表，目击者按 0.3 折算，上下限 ±100。
   let relationChanges: RelationChange[] = [];
   if (session.sagaId) {
-    // 目标：优先用显式 target；否则从行动文本里认一个在场人名（认不出就不记，不瞎猜）
+    // 目标：优先用显式 target；否则从行动文本里认一个在场人名（认不出就不记，不瞎猜）。
+    // 实体层认不出时兜底到人物卡名录（ctx.characters）——实测踩坑：模型没吐 CI 实体标记时
+    // entities 全空，玩家在人物卡点「切磋」却静默不入账，好感账本成了摆设。
+    // 名录是确定性事实（前传快照/项目角色卡），不依赖模型行为。
     let target = (input.target || "").trim();
     if (!target) {
       const text = input.actionText || "";
-      const hit = (ctx.entities || []).find(
-        (e) => e.type === "character" && e.name && e.name !== ctx.playAsName && text.includes(e.name)
-      );
+      const hit =
+        (ctx.entities || []).find(
+          (e) => e.type === "character" && e.name && e.name !== ctx.playAsName && text.includes(e.name)
+        ) ||
+        (ctx.characters || []).find((c) => c.name && c.name !== ctx.playAsName && text.includes(c.name));
       if (hit) target = hit.name;
     }
     if (target) {
@@ -1161,6 +1204,9 @@ export async function* processGameStart(
   let loreEntries: Array<{ title: string; content: string }>;
   let sagaPlayAs: { playAsCharacterId: string | null; playAsName: string | null } | null = null;
   let sagaNarrativeMode: "first" | "third" | "god" = "first";
+  // 关系上下文来源（isSaga 分支填充；项目路径无 saga，恒为空 = 不注入关系行）
+  let sagaRelSrc: unknown = null;
+  let sagaSheetsSrc: unknown = null;
   let personaBlock = "";
   let sagaSynopsis = "";
 
@@ -1175,6 +1221,8 @@ export async function* processGameStart(
     }
     sagaPlayAs = { playAsCharacterId: saga.playAsCharacterId, playAsName: saga.playAsName };
     sagaNarrativeMode = ((saga as any).narrativeMode || "first") as "first" | "third" | "god";
+    sagaRelSrc = saga.relations;
+    sagaSheetsSrc = saga.characterSheets;
     let snap: any = {};
     try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
     sagaSynopsis = typeof snap.synopsis === "string" ? snap.synopsis : "";
@@ -1225,12 +1273,16 @@ export async function* processGameStart(
     chapterTitle,
     outline: chapterOutline,
     existingContent: existingContent || null,
-    characters: characters.map((c: { name: string; role: string; currentStatus: string; background?: string }) => ({
-      name: c.name,
-      role: c.role,
-      currentStatus: c.currentStatus,
-      briefDescription: c.background?.slice(0, 100) || "",
-    })),
+    characters: attachRelations(
+      characters.map((c: { name: string; role: string; currentStatus: string; background?: string }) => ({
+        name: c.name,
+        role: c.role,
+        currentStatus: c.currentStatus,
+        briefDescription: c.background?.slice(0, 100) || "",
+      })),
+      sagaRelSrc,
+      sagaSheetsSrc,
+    ),
     worldLore: loreEntries.map((l: { title: string; content: string }) => ({ title: l.title, content: l.content })),
     previousTurns: [] as any[],
     entities: [] as any[],

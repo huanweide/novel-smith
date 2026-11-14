@@ -453,3 +453,48 @@ describe("叙事账本注入提示词 · 协同闭环", () => {
     expect(readNarrative(env).version).toBe(1);
   });
 });
+
+// 关系上下文注入（2026-11-14 用户需求）：好感账本与「定义关系」要真的进提示词——
+// 此前 relations 只写不读，玩家把好感刷到 +40，AI 依旧按陌生人演。
+describe("关系上下文注入 · 好感与定义关系", () => {
+  const base: GameSessionContext = {
+    bookName: "测试书", chapterTitle: "第一章", outline: null, existingContent: null,
+    characters: [], worldLore: [], previousTurns: [], entities: [], items: [],
+    currentRound: 1, totalWords: 0, maxWords: 3000, plotProgress: 5,
+  };
+
+  it("好感现值与人话口径一起注入", () => {
+    const prompt = buildGameSystemPrompt({
+      ...base,
+      characters: [{ name: "苏绾", role: "少东家", currentStatus: "alive", briefDescription: "", relationLevel: 40, relationReason: "不打不相识，他收了架势冲你一点头" }],
+    });
+    expect(prompt).toContain("好感 +40");
+    expect(prompt).toContain("交情极深");
+    expect(prompt).toContain("不打不相识");
+  });
+
+  it("玩家定义关系强制注入，且写明「不得偏离」", () => {
+    const prompt = buildGameSystemPrompt({
+      ...base,
+      characters: [{ name: "苏绾", role: "少东家", currentStatus: "alive", briefDescription: "", relationNote: "我的同门师妹" }],
+    });
+    expect(prompt).toContain("玩家定义关系：「我的同门师妹」");
+    expect(prompt).toContain("不得偏离");
+  });
+
+  it("负好感也有口径（结怨），没打过交道的角色不注入任何关系行", () => {
+    const withEnemy = buildGameSystemPrompt({
+      ...base,
+      characters: [{ name: "黑衣人", role: "杀手", currentStatus: "alive", briefDescription: "", relationLevel: -45 }],
+    });
+    expect(withEnemy).toContain("好感 -45");
+    expect(withEnemy).toContain("仇深似海");
+
+    const clean = buildGameSystemPrompt({
+      ...base,
+      characters: [{ name: "路人", role: "平民", currentStatus: "alive", briefDescription: "" }],
+    });
+    expect(clean).not.toContain("好感");
+    expect(clean).not.toContain("玩家定义关系");
+  });
+});
