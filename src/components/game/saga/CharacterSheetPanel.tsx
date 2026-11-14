@@ -31,6 +31,14 @@ export interface CharacterSheet {
   relations?: Array<{ name: string; relation: string; level?: number }>;
   notes?: string;
   isPlayer?: boolean;
+  /** 退场死亡：名录垫后，卡仍可打开（character-admission.ts） */
+  dead?: boolean;
+  exitRound?: number;
+  /** 探查所得（inspect 路由写入）：看清过的东西永久知情 */
+  revealed?: {
+    insight?: string;
+    inventory?: Array<{ name: string; desc?: string; round?: number }>;
+  };
   updatedAt?: string;
 }
 
@@ -215,7 +223,7 @@ export function CharacterSheetPanel({
                 onClick={() => { setName(n); setEditing(false); }}
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] transition-colors ${n === name ? "bg-[var(--nv-creative)]/15 font-medium text-[var(--nv-creative)]" : "text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-3)] hover:text-[var(--nv-text-primary)]"}`}
               >
-                {n}{n === playAsName ? " ★" : ""}
+                {n}{n === playAsName ? " ★" : ""}{sheets[n]?.dead ? " 殁" : ""}
               </button>
             ))}
           </div>

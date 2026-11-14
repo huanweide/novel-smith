@@ -16,6 +16,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getApprovedCharacters } from "@/lib/approved-cards";
+import { admissionReason, shouldAdmitCard, sortRoster } from "@/core/game/character-admission";
 
 type Params = { params: Promise<{ sagaId: string }> };
 
@@ -38,6 +39,12 @@ export interface CharacterSheet {
   relations?: Array<{ name: string; relation: string; level?: number }>;
   notes?: string;         // 自由备注（玩家自己记）
   isPlayer?: boolean;     // 是否玩家当前扮演
+  dead?: boolean;         // 退场死亡：排序垫后，卡仍可打开（character-admission.ts）
+  exitRound?: number;     // 死在第几回合（kill 成功由引擎写，或玩家手动标）
+  revealed?: {            // 探查所得（inspect 路由写入）：看清了什么就永久知道什么
+    insight?: string;     // 底细洞察（探查成功后生成的一条「他没说但你看出来了」）
+    inventory?: Array<{ name: string; desc?: string; round: number }>;
+  };
   updatedAt?: string;
 }
 
@@ -75,22 +82,36 @@ export async function GET(_req: Request, { params }: Params) {
   }
 
   // 初始壳：未编辑过的角色也能展示（档案字段留空，等玩家填）
+  // 2026-11-14 准入机制：泛称无名者（店小二这类）不建卡——他们进 minor 名单，
+  // 理由一并返回（名录悬浮提示用）。已建档的永远保留（准入只挡新的，不倒删）。
   const sheets: Record<string, CharacterSheet> = { ...saved };
+  const minor: Array<{ name: string; reason: string }> = [];
   for (const c of candidates) {
-    if (!sheets[c.name]) {
-      sheets[c.name] = { name: c.name, role: c.role || undefined, background: c.brief || undefined };
+    if (sheets[c.name]) continue;
+    const admit = shouldAdmitCard(c.name, { hasBrief: !!(c.brief || "").trim() });
+    if (!admit) {
+      minor.push({ name: c.name, reason: admissionReason(c.name, { hasBrief: !!(c.brief || "").trim() }) });
+      continue;
     }
+    sheets[c.name] = { name: c.name, role: c.role || undefined, background: c.brief || undefined };
   }
   if (saga.playAsName) {
     if (!sheets[saga.playAsName]) sheets[saga.playAsName] = { name: saga.playAsName };
     sheets[saga.playAsName].isPlayer = true;
   }
 
+  // 名录排序：活人在前、退场死亡垫后（死人可开卡，只是不排前面）
+  const ordered: Record<string, CharacterSheet> = {};
+  for (const s of sortRoster(Object.values(sheets).map((s) => s))) {
+    ordered[s.name] = s;
+  }
+
   return NextResponse.json({
     ok: true,
     playAsName: saga.playAsName,
-    sheets,
+    sheets: ordered,
     candidates,
+    minor,
   });
 }
 
@@ -118,7 +139,8 @@ export async function PATCH(req: Request, { params }: Params) {
     }
     // 只允许白名单字段，避免前端误传覆盖内部字段
     const allowed = ["role", "title", "age", "appearance", "personality", "background",
-      "abilities", "status", "relations", "notes", "isPlayer"];
+      "abilities", "status", "relations", "notes", "isPlayer",
+      "dead", "exitRound", "revealed"];
     const cleaned: any = { name, updatedAt: new Date().toISOString() };
     for (const k of allowed) if (next[k] !== undefined) cleaned[k] = next[k];
     all[name] = cleaned;

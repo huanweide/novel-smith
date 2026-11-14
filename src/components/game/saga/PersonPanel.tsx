@@ -35,8 +35,25 @@ import {
   type PersonAction,
 } from "@/core/game/person-view";
 import { relationTier } from "@/core/game/relation-ledger";
+import { deadSeal, isGenericName } from "@/core/game/character-admission";
+import { tierLabel } from "@/core/game/inspect";
 import type { ExtendedAction } from "@/core/game/verbs";
 import type { CharacterSheet } from "./CharacterSheetPanel";
+
+/** 探查回执（与 inspect 路由的响应对齐）：判定过程透明，让玩家看见这一把为什么是这个数 */
+interface InspectResult {
+  verdict: {
+    tier: "critical" | "success" | "fail" | "blunder";
+    d100: number;
+    rate: number;
+    parts: Array<{ label: string; value: number }>;
+    reveals: { background: boolean; inventory: boolean };
+    alertDelta: number;
+    note: string;
+  };
+  inventory?: Array<{ name: string; desc?: string }>;
+  insight?: string;
+}
 
 interface SheetItem {
   name: string;
@@ -98,6 +115,11 @@ export function PersonPanel({
   const [custom, setCustom] = useState("");
   const [filling, setFilling] = useState(false);
   const [fillMsg, setFillMsg] = useState<string | null>(null);
+  // 探查与偷窃（2026-11-14 四条需求里的 ③探查 ④判定）
+  const [inspecting, setInspecting] = useState(false);
+  const [inspectRes, setInspectRes] = useState<InspectResult | null>(null);
+  const [inspectErr, setInspectErr] = useState<string | null>(null);
+  const [showSteal, setShowSteal] = useState(false);
 
   // 人物卡正文：只在打开且换人时拉一次
   useEffect(() => {
@@ -122,7 +144,7 @@ export function PersonPanel({
   }, [open, name, sagaId]);
 
   useEffect(() => {
-    if (!open) { setShowGive(false); setCustom(""); setFillMsg(null); }
+    if (!open) { setShowGive(false); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setShowSteal(false); }
   }, [open]);
 
   // 换人时清掉上一轮填充反馈
@@ -133,6 +155,53 @@ export function PersonPanel({
   // 「点开的是不是我自己」：saga.playAsName 可能为 null（实测某些存档进游戏时没写），
   // 所以以人物卡里的 isPlayer 为准，prop 只作兜底。
   const self = !!isSelf || !!sheet?.isPlayer;
+
+  // ── 泛称占位卡：店小二这类无名之辈不立卡（准入铁律），但话仍可以对他说 ──
+  if (!self && isGenericName(name)) {
+    return (
+      <>
+        <div className="zp-mask" onClick={onClose} />
+        <aside className="zp-panel" role="dialog" aria-label={name}>
+          <header className="zp-head">
+            <div className="zp-portrait" aria-hidden><span>{(name || "").slice(0, 1)}</span></div>
+            <div className="zp-head-main">
+              <h2 className="zp-name">{name}</h2>
+              <p className="zp-title">无名之辈 · 不立卡</p>
+            </div>
+            <button className="zp-close" onClick={onClose} aria-label="关闭">✕</button>
+          </header>
+          <p className="zp-empty">他连个名字都没有，谈不上什么恩怨。要对他说什么，写在下面就行。</p>
+          <div className="zp-write">
+            <input
+              className="zp-input"
+              value={custom}
+              placeholder={`对${name}做什么，直接写`}
+              disabled={disabled}
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && custom.trim()) {
+                  onAct(personify(custom.trim(), name));
+                  setCustom("");
+                }
+              }}
+            />
+            <button
+              className="zp-send"
+              disabled={disabled || !custom.trim()}
+              onClick={() => {
+                if (!custom.trim()) return;
+                onAct(personify(custom.trim(), name));
+                setCustom("");
+              }}
+            >
+              说出口
+            </button>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   // 看自己永远算「知根知底」——给主角打码是荒谬的（本轮实测踩过：
   // 因为 level=0 被判成 stranger，自己的「底细」「牵挂」全变成 ▨▨▨▨）
   const k = self ? "close" : knowledgeOf(level);
@@ -140,7 +209,14 @@ export function PersonPanel({
   // 物品归属口径：主角的东西 owner 是「主角」，不是他的名字。按名字筛会得到空背包（实测）。
   const theirs = items.filter((i) => (i.owner || "主角") === (self ? "主角" : name));
   const mine = items.filter((i) => (i.owner || "主角") === "主角");
+  // 探查所得并入随身清单（看清过的东西永久知情）；会话背包里已有的不重复列
+  const seenInv = Array.isArray(sheet?.revealed?.inventory) ? sheet!.revealed!.inventory! : [];
+  const knownNames = new Set(theirs.map((i) => i.name));
+  const extraSeen = seenInv.filter((i) => i?.name && !knownNames.has(i.name));
   const brief = sheet?.background || fallbackBrief || "";
+  // 探查看清过的人，底细不再打码（看清过的东西不会忘）
+  const hasSeen = !!(sheet?.revealed?.insight || (sheet?.revealed?.inventory || []).length);
+  const seal = deadSeal(sheet);
   const titleLine = [sheet?.role, sheet?.title, sheet?.age].filter(Boolean).join(" · ");
 
   const fire = (a: PersonAction) => onAct(a.text, a.verb);
@@ -171,6 +247,35 @@ export function PersonPanel({
     }
   };
 
+  // 探查：判定来源是你自己（功法神通/情报），成败交给骰子，AI 只补探到的东西。
+  // 回执全透明——探查力明细 + 骰面 + 档位，让玩家看见「这一把为什么是这个数」。
+  const doInspect = async () => {
+    if (inspecting || self) return;
+    setInspecting(true);
+    setInspectErr(null);
+    try {
+      const res = await fetch(`/api/game/saga/${encodeURIComponent(sagaId)}/characters/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data?.error || "探查失败");
+      setInspectRes(data);
+      if (data.verdict?.reveals?.background && data.insight) {
+        // 看清过的东西永久知情：把洞察并进卡面（revealed 由服务端写入，这里同步本地视图）
+        setSheet((prev) => (prev ? { ...prev, revealed: data.verdict ? {
+          insight: data.insight,
+          inventory: data.inventory || prev.revealed?.inventory,
+        } : prev.revealed } : prev));
+      }
+    } catch (e: any) {
+      setInspectErr(`探查失败：${e?.message || "未知错误"}`);
+    } finally {
+      setInspecting(false);
+    }
+  };
+
   return (
     <>
       <div className="zp-mask" onClick={onClose} />
@@ -185,6 +290,8 @@ export function PersonPanel({
             <h2 className="zp-name">{name}</h2>
             {titleLine && <p className="zp-title">{titleLine}</p>}
           </div>
+          {/* 退场死亡印章：垫后不删除，卡永远打得开 */}
+          {seal && <span className="zp-dead-seal">{seal}</span>}
           <button className="zp-close" onClick={onClose} aria-label="关闭">✕</button>
         </header>
 
@@ -246,20 +353,23 @@ export function PersonPanel({
         <div className="zp-fields">
           <Field label="为人" value={sheet?.personality} />
           <Field label="外貌" value={sheet?.appearance} />
-          <Field label="底细" value={brief} masked={shouldMask(brief, k)} />
+          <Field label="底细" value={brief} masked={shouldMask(brief, k) && !hasSeen} />
+          {!self && sheet?.revealed?.insight && (
+            <Field label="洞察" value={sheet.revealed.insight} />
+          )}
               <Field label="牵挂" value={sheet?.notes} masked={shouldMask(sheet?.notes, k)} />
           {sheet?.abilities && sheet.abilities.length > 0 && (
             <Field label="本事" value={sheet.abilities.join(" · ")} />
           )}
-          {k === "stranger" && (brief || sheet?.notes) && (
+          {k === "stranger" && (brief || sheet?.notes) && !hasSeen && (
             <p className="zp-hint">再打几次交道，才看得清他的底。</p>
           )}
         </div>
 
         {/* ── 身上 ── */}
         <div className="zp-sect">
-          <p className="zp-sect-h">身上<span>{theirs.length > 0 ? `　${theirs.length} 件` : self ? "　空" : "　看不出来"}</span></p>
-          {theirs.length === 0 ? (
+          <p className="zp-sect-h">身上<span>{theirs.length + extraSeen.length > 0 ? `　${theirs.length + extraSeen.length} 件` : self ? "　空" : "　看不出来"}</span></p>
+          {theirs.length + extraSeen.length === 0 ? (
             <p className="zp-empty">
               {self ? "身上没带什么。" : "两手空空——也可能只是没让你看见。"}
             </p>
@@ -271,6 +381,12 @@ export function PersonPanel({
                   {i.quantity > 1 && <em>×{i.quantity}</em>}
                   {i.damaged && <s>损</s>}
                   {i.equipped && <s className="eq">用</s>}
+                </span>
+              ))}
+              {extraSeen.map((i, idx) => (
+                <span key={`s${idx}`} className="zp-chip seen" title={i.desc || "探查所得"}>
+                  {i.name}
+                  <s className="probe">探</s>
                 </span>
               ))}
             </div>
@@ -289,6 +405,45 @@ export function PersonPanel({
               ))}
             </div>
           </div>
+        )}
+
+        {/* ── 探查（只对别人）——判定来源是你自己的本事：神识/功法/情报，骰子裁成败 ── */}
+        {!self && (
+        <div className="zp-sect">
+          <p className="zp-sect-h">探查<span>　看的是你自己的本事</span></p>
+          <button className="zp-give-btn" disabled={disabled || inspecting} onClick={doInspect}>
+            {inspecting ? "探查中…" : hasSeen ? "再探一次" : "探查此人"}
+          </button>
+          {inspectErr && <p className="zp-fill-msg">{inspectErr}</p>}
+          {inspectRes && (
+            <div className={`zp-inspect t-${inspectRes.verdict.tier}`}>
+              <div className="zp-inspect-dice">
+                <span className="zp-inspect-tier">{tierLabel(inspectRes.verdict.tier)}</span>
+                <span className="zp-inspect-num">骰 {inspectRes.verdict.d100} ／ 率 {inspectRes.verdict.rate}</span>
+              </div>
+              <div className="zp-inspect-parts">
+                {inspectRes.verdict.parts.map((p, i) => (
+                  <span key={i} className="zp-inspect-part">{p.label} +{p.value}</span>
+                ))}
+              </div>
+              <p className="zp-inspect-note">{inspectRes.verdict.note}</p>
+              {inspectRes.verdict.alertDelta !== 0 && (
+                <p className="zp-inspect-alert">被察觉 · 好感 {inspectRes.verdict.alertDelta}</p>
+              )}
+              {inspectRes.insight && <p className="zp-inspect-insight">洞察：{inspectRes.insight}</p>}
+              {inspectRes.inventory && inspectRes.inventory.length > 0 && (
+                <div className="zp-chips">
+                  {inspectRes.inventory.map((i, idx) => (
+                    <span key={idx} className="zp-chip seen" title={i.desc || undefined}>
+                      {i.name}
+                      {i.desc ? <em>{i.desc}</em> : null}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         )}
 
         {/* ── 你能对他做的 ── */}
@@ -342,6 +497,37 @@ export function PersonPanel({
                     className="zp-chip give"
                     disabled={disabled}
                     onClick={() => onAct(`把「${i.name}」赠予${name}`, "gift")}
+                  >
+                    {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
+                  </button>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+        )}
+
+        {/* ── 偷点什么（先探查才知道他身上有什么值得摸的；偷是 risky 动词，好感 -6 起步） ── */}
+        {!self && (
+        <div className="zp-sect">
+          <button
+            className="zp-give-btn"
+            disabled={disabled}
+            onClick={() => setShowSteal((v) => !v)}
+          >
+            {showSteal ? "收起" : `摸 ${name} 一件东西`}
+          </button>
+          {showSteal && (
+            theirs.length + extraSeen.length === 0 ? (
+              <p className="zp-empty">还不知道他身上有什么——先探查，才知道值得摸什么。</p>
+            ) : (
+              <div className="zp-chips">
+                {[...theirs, ...extraSeen.map((i) => ({ name: i.name, quantity: 1 }))].map((i, idx) => (
+                  <button
+                    key={idx}
+                    className="zp-chip give"
+                    disabled={disabled}
+                    onClick={() => onAct(`趁${name}不注意，把「${i.name}」摸走`, "steal")}
                   >
                     {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
                   </button>

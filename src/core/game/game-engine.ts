@@ -28,6 +28,7 @@ import { causalityOnly, parseExtensions, serializeExtensions } from "./session-e
 import { inferVerb } from "./verbs";
 import { applyRelations, describeChange, outcomeFromTurn, type RelationChange, type RelationMap } from "./relation-ledger";
 import { gateLoot, lootNotice } from "./item-gate";
+import { markDead } from "./character-admission";
 // 叙事系统移植：账本信封 / 提示词上下文 / 每轮协同推进
 import { readNarrative, writeEnvelope } from "./narrative/ledger";
 import { buildNarrativeContext } from "./narrative/context";
@@ -956,7 +957,7 @@ async function* runLockedTurn(
       });
       const sagaRel = await prisma.gameSaga.findUnique({
         where: { id: session.sagaId },
-        select: { relations: true },
+        select: { relations: true, characterSheets: true },
       });
       const applied = applyRelations((sagaRel?.relations || null) as RelationMap | null, [
         { verb, outcome, target },
@@ -967,6 +968,21 @@ async function* runLockedTurn(
           data: { relations: applied.next as any },
         });
         relationChanges = applied.changes;
+      }
+
+      // 死亡退场（用户口径 2026-11-14）：kill 得手，目标从此是「退场死亡角色」——
+      // 名录排序垫后，但卡永远打得开（死人留下的线索往往比活人多）。
+      // 幂等（markDead 不覆盖原回合）；没有 saga 的会话跳过（人物卡挂在 saga 上）。
+      if (verb === "kill" && outcome === "success") {
+        const sheetsMap: Record<string, any> =
+          sagaRel?.characterSheets && typeof sagaRel.characterSheets === "object"
+            ? { ...(sagaRel.characterSheets as Record<string, any>) }
+            : {};
+        sheetsMap[target] = markDead(sheetsMap[target], newRound);
+        await prisma.gameSaga.update({
+          where: { id: session.sagaId },
+          data: { characterSheets: sheetsMap as any },
+        });
       }
     }
   }

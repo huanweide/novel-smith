@@ -3023,6 +3023,49 @@ main.zm-col > * { flex-shrink: 0; }
   padding: 0 24px 18px; letter-spacing: 0.06em;
 }
 
+/* ── 人物卡 · 退场死亡印章（垫后不删除，卡永远打得开） ── */
+.zp-dead-seal {
+  flex-shrink: 0; align-self: center;
+  padding: 4px 7px; border: 1.5px solid var(--zm-zhu);
+  font-family: var(--zm-kai); font-size: 11px; color: var(--zm-zhu);
+  letter-spacing: 0.14em; writing-mode: vertical-rl;
+  background: rgba(155, 58, 44, 0.04);
+}
+
+/* ── 人物卡 · 探查所得的物品（看清过的东西永久知情） ── */
+.zp-chip.seen { border-style: dashed; }
+.zp-chip.seen s.probe { color: #6B7C5E; border-left-color: #6B7C5E; } /* 探字用墨绿，与「损」的朱色分开 */
+
+/* ── 人物卡 · 探查回执（骰面卡：判定过程全透明） ──
+   四档用左边框一色分辨，不整块染色——与浮体同一套克制。 */
+.zp-inspect {
+  border: 1px solid var(--zm-rule); border-left-width: 2px;
+  padding: 9px 11px; margin-bottom: 8px;
+  background: rgba(246, 239, 225, 0.55);
+}
+.zp-inspect.t-critical { border-left-color: var(--zm-zhu); }
+.zp-inspect.t-success { border-left-color: var(--zm-green); }
+.zp-inspect.t-fail { border-left-color: #A4967D; }
+.zp-inspect.t-blunder { border-left-color: var(--zm-zhu); background: rgba(155, 58, 44, 0.06); }
+.zp-inspect-dice { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+.zp-inspect-tier { font-family: var(--zm-song); font-size: 15px; letter-spacing: 0.2em; color: #211E19; }
+.zp-inspect.t-blunder .zp-inspect-tier,
+.zp-inspect.t-critical .zp-inspect-tier { color: var(--zm-zhu); }
+.zp-inspect-num { font-family: var(--zm-mono); font-size: 10px; color: #A4967D; }
+.zp-inspect-parts { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.zp-inspect-part {
+  font-family: var(--zm-mono); font-size: 9.5px; color: #7A6A50;
+  border: 1px solid var(--zm-rule); padding: 1px 6px;
+  background: rgba(246, 239, 225, 0.6);
+}
+.zp-inspect-note { font-family: var(--zm-kai); font-size: 11.5px; color: #3B342A; line-height: 1.7; margin-bottom: 4px; }
+.zp-inspect-alert { font-family: var(--zm-mono); font-size: 10px; color: var(--zm-zhu); margin-bottom: 4px; }
+.zp-inspect-insight {
+  font-family: var(--zm-kai); font-size: 11.5px; color: #1F3833; line-height: 1.7;
+  margin-bottom: 6px; padding-left: 8px; border-left: 2px solid var(--zm-green);
+}
+.zp-inspect .zp-chips { margin-bottom: 0; }
+
 /* ════════════════════════════════════════════════════════════════════════════
    渲染填表 · 右侧浮体（2026-11-14）
    玩家原话：「不能是黑框，最好有一种略微的立体效果。不要浮夸得炫眼睛，
