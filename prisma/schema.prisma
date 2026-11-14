@@ -678,6 +678,11 @@ model AppSettings {
   reviewerModel   String   @default("") // 分工模型：审稿/审校（留空=跟随 llmModel）
   summarizeModel  String   @default("") // 分工模型：摘要/抽取等轻任务（留空=跟随 llmModel）
   streaming       Boolean  @default(true) // 写作输出流式开关：开=逐字上屏；关=一次性出文（生成中不推 token，done 携带全文）
+  // ── 生图（角色卡头像 AI 生成，2026-11-14）──
+  // 铁律：与文本 LLM 分开配置——生图服务与写作服务常不是同一家；Key 留空=跟随 llmApiKey（方便单 Key 用户）
+  imageBaseUrl    String   @default("") // 生图 API Base URL（留空=https://api.siliconflow.cn/v1）
+  imageApiKey     String   @default("") // 生图 API Key（留空=跟随 llmApiKey）
+  imageModel      String   @default("") // 生图模型（留空=Kwai-Kolors/Kolors）
   updatedAt       DateTime @updatedAt
 }
 

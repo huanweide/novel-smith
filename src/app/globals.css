@@ -2798,7 +2798,7 @@ main.zm-col > * { flex-shrink: 0; }
 }
 .zp-panel {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 62;
-  width: 442px; max-width: 94vw;
+  width: 500px; max-width: 96vw;
   display: flex; flex-direction: column;
   overflow-y: auto;
   background: color-mix(in srgb, var(--zm-paper) 96%, #fff);
@@ -3151,23 +3151,54 @@ main.zm-col > * { flex-shrink: 0; }
 .zp-sect-h { display: flex; align-items: baseline; }
 
 /* 头像位：现在只放一个字，接立绘时换 background-image 即可，版式不动 */
+/* 头像列（2026-11-14 鬼谷八荒式：大立绘在左 + 导入/AI生成 两小钮在柱下） */
+.zp-portrait-col {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
 .zp-portrait {
-  flex: 0 0 auto; width: 54px; height: 68px;
+  flex: 0 0 auto; width: 96px; height: 124px;
   border: 1px solid rgba(126, 104, 72, 0.34);
   background: rgba(246, 239, 225, 0.7);
   display: flex; align-items: center; justify-content: center;
   position: relative;
+  overflow: hidden;
 }
 .zp-portrait::before {
   content: ""; position: absolute; inset: 3px;
   border: 1px solid rgba(126, 104, 72, 0.14);
+  z-index: 1;
 }
 .zp-portrait span {
-  font-family: var(--zm-kai); font-size: 26px; color: #B7A98B;
+  font-family: var(--zm-kai); font-size: 40px; color: #B7A98B;
   line-height: 1;
 }
 .zp-portrait.self span { color: var(--zm-zhu); opacity: 0.5; }
+.zp-portrait img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+.zp-portrait-ops { display: flex; gap: 4px; }
+.zp-avatar-btn {
+  padding: 3px 8px; border: 1px solid rgba(126, 104, 72, 0.4);
+  font-family: var(--zm-kai); font-size: 10.5px; color: #7A6A50;
+  background: rgba(246, 239, 225, 0.6); cursor: pointer;
+  transition: border-color 0.18s, color 0.18s;
+  white-space: nowrap;
+}
+.zp-avatar-btn:hover:not(:disabled) { border-color: var(--zm-zhu); color: var(--zm-zhu); }
+.zp-avatar-btn:disabled { opacity: 0.5; cursor: wait; }
+.zp-avatar-btn.gen:hover:not(:disabled) { color: var(--zm-green); border-color: var(--zm-green); }
+.zp-avatar-msg {
+  font-family: var(--zm-kai); font-size: 10px; color: #A4967D;
+  max-width: 96px; text-align: center; line-height: 1.5;
+}
 .zp-head-main { padding-top: 2px; }
+/* 死亡印章横排版（嵌入名字右侧时用竖排会挤爆行高） */
+.zp-dead-seal.inline {
+  writing-mode: horizontal-tb;
+  display: inline-block; align-self: flex-start;
+  margin-top: 6px; padding: 2px 8px;
+}
 
 /* 状态条（只有自己的卡有） */
 .zp-status { padding: 12px 24px 4px; }

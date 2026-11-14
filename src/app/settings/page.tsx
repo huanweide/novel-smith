@@ -58,6 +58,10 @@ export default function SettingsPage() {
   const [writerModel, setWriterModel] = useState("");
   const [reviewerModel, setReviewerModel] = useState("");
   const [summarizeModel, setSummarizeModel] = useState("");
+  // 生图（角色卡头像 AI 生成，2026-11-14）：服务与文本 LLM 分开配置；Key 留空=跟随文本 Key
+  const [imageBaseUrl, setImageBaseUrl] = useState("");
+  const [imageApiKey, setImageApiKey] = useState("");
+  const [imageModel, setImageModel] = useState("");
   // FE-N7 违禁词自定义词库
   const [bannedWords, setBannedWords] = useState("");
   const [bannedSaved, setBannedSaved] = useState(false);
@@ -124,6 +128,10 @@ export default function SettingsPage() {
         setWriterModel(s.writerModel || "");
         setReviewerModel(s.reviewerModel || "");
         setSummarizeModel(s.summarizeModel || "");
+        setImageBaseUrl(s.imageBaseUrl || "");
+        setImageModel(s.imageModel || "");
+        // 生图 Key 不回显（后端只给掩码）；已有就提示一句
+        setImageApiKey("");
         setHasExistingKey(!!s.hasKey);
         if (s.hasKey) setApiKey("");
         // 已有配置时自动检索一次模型列表（后端用库中 Key）
@@ -255,6 +263,9 @@ export default function SettingsPage() {
           writerModel,
           reviewerModel,
           summarizeModel,
+          imageBaseUrl,
+          imageApiKey: imageApiKey.trim() || undefined, // 留空不覆盖已存 Key
+          imageModel,
         }),
       });
       if (res.ok) {
@@ -626,6 +637,55 @@ export default function SettingsPage() {
             </p>
           </section>
         ) : null}
+
+        {/* ── 生图设置（角色卡头像 AI 生成）：服务与文本 LLM 分开，Key 留空=跟随文本 Key ── */}
+        <section>
+          <SectionHeader icon="sparkles">
+            生图（角色卡头像 AI 生成）
+          </SectionHeader>
+          <div className="p-4 rounded-2xl surface-elevated space-y-2.5">
+            <p className="text-xs text-[var(--nv-text-tertiary)] leading-relaxed">
+              人物卡头像位的「AI 生成」走这套配置。生图服务和写作服务常不是同一家——Key 留空则跟随上面的文本 Key（同一家服务商时最省事）。
+              <span className="text-[var(--nv-text-muted)]"> 兼容 SiliconFlow（Kolors/Flux）与 OpenAI 风格的 /images/generations 接口。</span>
+            </p>
+            <div className="flex items-center gap-2.5">
+              <span className="w-28 shrink-0 text-xs text-[var(--nv-text-secondary)]">Base URL</span>
+              <input
+                type="text"
+                value={imageBaseUrl}
+                onChange={(e) => setImageBaseUrl(e.target.value)}
+                placeholder="留空 = https://api.siliconflow.cn/v1"
+                aria-label="生图 Base URL"
+                className="input-glass flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-28 shrink-0 text-xs text-[var(--nv-text-secondary)]">API Key</span>
+              <input
+                type="password"
+                value={imageApiKey}
+                onChange={(e) => setImageApiKey(e.target.value)}
+                placeholder={hasExistingKey ? "已保存 · 留空则跟随文本 Key" : "留空 = 跟随文本 Key"}
+                aria-label="生图 API Key"
+                className="input-glass flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-28 shrink-0 text-xs text-[var(--nv-text-secondary)]">生图模型</span>
+              <input
+                type="text"
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+                placeholder="留空 = Kwai-Kolors/Kolors"
+                aria-label="生图模型"
+                className="input-glass flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs font-mono"
+              />
+            </div>
+            <p className="text-[10px] text-[var(--nv-text-muted)] mt-1">
+              硅基流动的 Kolors 免费额度就够用；写稿用别家时只想用一家的 Key，把两个 Key 填成同一个即可。改完记得点下方「保存设置」。
+            </p>
+          </div>
+        </section>
 
         {/* FE-N7 违禁词预检词库 */}
         <section>

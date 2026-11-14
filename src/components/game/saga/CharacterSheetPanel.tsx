@@ -31,6 +31,8 @@ export interface CharacterSheet {
   relations?: Array<{ name: string; relation: string; level?: number }>;
   notes?: string;
   isPlayer?: boolean;
+  /** 头像版本号（导入或 AI 生成后 +1，前端用它做图片缓存失效；图片本体在 data/avatars/） */
+  avatarVersion?: number;
   /** 退场死亡：名录垫后，卡仍可打开（character-admission.ts） */
   dead?: boolean;
   exitRound?: number;

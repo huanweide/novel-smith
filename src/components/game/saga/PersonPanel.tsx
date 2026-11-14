@@ -22,7 +22,7 @@
  *       好感来自 saga.relations（父级传入 level）；背包来自会话 items（按 owner 过滤）。
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MASK_TEXT,
   actionGroupsFor,
@@ -120,6 +120,10 @@ export function PersonPanel({
   const [inspectRes, setInspectRes] = useState<InspectResult | null>(null);
   const [inspectErr, setInspectErr] = useState<string | null>(null);
   const [showSteal, setShowSteal] = useState(false);
+  // 头像（导入 / AI 生成，2026-11-14）：busy 标明在干哪件事，消息给卡内回执
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState<null | "import" | "gen">(null);
+  const [avatarMsg, setAvatarMsg] = useState<string | null>(null);
 
   // 人物卡正文：只在打开且换人时拉一次
   useEffect(() => {
@@ -144,7 +148,7 @@ export function PersonPanel({
   }, [open, name, sagaId]);
 
   useEffect(() => {
-    if (!open) { setShowGive(false); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setShowSteal(false); }
+    if (!open) { setShowGive(false); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setShowSteal(false); setAvatarMsg(null); setAvatarBusy(null); }
   }, [open]);
 
   // 换人时清掉上一轮填充反馈
@@ -276,22 +280,87 @@ export function PersonPanel({
     }
   };
 
+  // ── 头像：导入本地图片 / AI 生成（设置里可配置生图服务） ──
+  const avatarUrl = sheet?.avatarVersion
+    ? `/api/game/saga/${encodeURIComponent(sagaId)}/characters/avatar?name=${encodeURIComponent(name)}&v=${sheet.avatarVersion}`
+    : null;
+
+  const postAvatar = async (payload: { generate?: boolean; image?: string }, busy: "import" | "gen") => {
+    if (avatarBusy) return;
+    setAvatarBusy(busy);
+    setAvatarMsg(null);
+    try {
+      const res = await fetch(`/api/game/saga/${encodeURIComponent(sagaId)}/characters/avatar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ...payload }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data?.error || "头像保存失败");
+      setSheet((prev) => (prev ? { ...prev, avatarVersion: data.avatarVersion } : prev));
+      setAvatarMsg(busy === "gen" ? "立绘已成" : "头像已导入");
+    } catch (e: any) {
+      setAvatarMsg(`${busy === "gen" ? "生成失败" : "导入失败"}：${e?.message || "未知错误"}`);
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
+  const onPickAvatar = (f: File | undefined | null) => {
+    if (!f) return;
+    if (f.size > 4 * 1024 * 1024) { setAvatarMsg("导入失败：图片超过 4MB"); return; }
+    const reader = new FileReader();
+    reader.onload = () => void postAvatar({ image: String(reader.result || "") }, "import");
+    reader.readAsDataURL(f);
+  };
+
   return (
     <>
       <div className="zp-mask" onClick={onClose} />
       <aside className="zp-panel" role="dialog" aria-label={`${name} 的人物卡`}>
-        {/* ── 头 ── */}
+        {/* ── 头 ──（鬼谷八荒式：大立绘在左，名字/身份/好感在右） ── */}
         <header className="zp-head">
-          {/* 头像位：现在留空框，以后接人物立绘。尺寸/边框已定，接图时不用改版 */}
-          <div className={`zp-portrait${self ? " self" : ""}`} aria-hidden>
-            <span>{self ? "我" : (name || "").slice(0, 1)}</span>
+          <div className="zp-portrait-col">
+            <div className={`zp-portrait${self ? " self" : ""}${avatarUrl ? " has-img" : ""}`}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={name} onError={(e) => { (e.target as HTMLElement).style.display = "none"; }} />
+              ) : (
+                <span>{self ? "我" : (name || "").slice(0, 1)}</span>
+              )}
+            </div>
+            <div className="zp-portrait-ops">
+              <button
+                className="zp-avatar-btn"
+                disabled={!!avatarBusy}
+                onClick={() => fileRef.current?.click()}
+                title="导入本地图片（PNG/JPG/WEBP，≤4MB）"
+              >
+                {avatarBusy === "import" ? "导入中…" : "导入"}
+              </button>
+              <button
+                className="zp-avatar-btn gen"
+                disabled={!!avatarBusy}
+                onClick={() => void postAvatar({ generate: true }, "gen")}
+                title="按档案生成立绘（生图服务在设置里配置）"
+              >
+                {avatarBusy === "gen" ? "生成中…" : "AI 生成"}
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={(e) => { onPickAvatar(e.target.files?.[0]); e.target.value = ""; }}
+            />
+            {avatarMsg && <span className="zp-avatar-msg">{avatarMsg}</span>}
           </div>
           <div className="zp-head-main">
             <h2 className="zp-name">{name}</h2>
             {titleLine && <p className="zp-title">{titleLine}</p>}
+            {/* 退场死亡印章：垫后不删除，卡永远打得开 */}
+            {seal && <span className="zp-dead-seal inline">{seal}</span>}
           </div>
-          {/* 退场死亡印章：垫后不删除，卡永远打得开 */}
-          {seal && <span className="zp-dead-seal">{seal}</span>}
           <button className="zp-close" onClick={onClose} aria-label="关闭">✕</button>
         </header>
 
@@ -316,8 +385,8 @@ export function PersonPanel({
           {fillMsg && <span className="zp-fill-msg">{fillMsg}</span>}
         </div>
 
-        {/* ── 状态：只有自己才有「体力/精神」这种东西 ── */}
-        {self && sheet?.status && (
+        {/* ── 状态（查看状态，2026-11-14）：自己的体力/精神 + 对方的伤势/情绪/所在——档案里写了就看得见 ── */}
+        {sheet?.status && (
           <div className="zp-status">
             {typeof sheet.status.hp === "number" && (
               <div className="zp-stat">
