@@ -1,5 +1,14 @@
 ﻿# Novel Smith 更新公告
 
+## v3.1.170 — 2026-11-15
+
+### 云数据库驱动（路线③地基）：Vercel + Turso 免费托管可用
+
+- **存储层协议分流**：`DATABASE_URL` 为 `libsql://` / `https://` 时自动走 `@prisma/adapter-libsql` 纯 JS 云驱动（Turso 免费档或任意 libsql 服务）；`file:` 继续走本地 better-sqlite3——**本地用户零感知、零迁移、行为完全不变**。Token 读 `DATABASE_AUTH_TOKEN`（`TURSO_AUTH_TOKEN` 等价别名）。
+- **意义**：这是「每人 fork → Vercel 免费托管 → 一人一库在线版」的地基——纯 JS 驱动才能上 Serverless，better-sqlite3 原生模块不行。
+- **README**：新增「免费云端部署」章节（三步上线：Turso 建库 → Vercel 导入 + 三个环境变量 → Deploy）；`.env.example` 补 Turso 配置注释。
+- **门禁**：tsc 0；新增 4 项测试（协议分流判定 + libsql 适配器真连烟测——用 libsql 本地文件模式走同一客户端代码路径，无需 Turso 账号即可验证「适配器 + PrismaClient」栈成立）；全量 **229 文件 / 2639 项全过**。
+
 ## v3.1.169 — 2026-11-09
 
 ### 左栏「细写」开关：动作可选输入 + 剧情选项一键填入（2026-11-15 凌晨，未 bump 版本）

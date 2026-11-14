@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -7,10 +8,32 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+/**
+ * 按 DATABASE_URL 协议选驱动（路线③，2026-11-15）：
+ *   · libsql:// / https://  → 云库（Turso 免费档或任意 libsql 服务），纯 JS 驱动，
+ *     Serverless（Vercel 免费托管）可用——这是「每人 fork 部署、一人一库」的地基；
+ *   · 其余（file:./data/novelforge.db）→ 本地 better-sqlite3，行为与此前完全一致，
+ *     本地用户零感知、零迁移。
+ * Token 从 DATABASE_AUTH_TOKEN 或 TURSO_AUTH_TOKEN 读（Turso 官方命名），没有就不带。
+ */
+export function selectDriver(url: string): "libsql" | "local" {
+  return /^(libsql|https):/i.test(url.trim()) ? "libsql" : "local";
+}
+
 function createPrismaClient() {
+  const url = process.env.DATABASE_URL || "file:./data/novelforge.db";
+
+  if (selectDriver(url) === "libsql") {
+    const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || "";
+    const adapter = new PrismaLibSql({
+      url,
+      ...(authToken ? { authToken } : {}),
+    });
+    return new PrismaClient({ adapter });
+  }
+
   // DATABASE_URL 形如 file:./data/novelforge.db；适配器会按 url 打开本地 SQLite 文件
   //（自动剥离 file: 前缀），无需 Docker / 外部 Postgres。
-  const url = process.env.DATABASE_URL || "file:./data/novelforge.db";
   const dbPath = url.replace(/^file:/, "");
   const absPath = path.isAbsolute(dbPath)
     ? dbPath

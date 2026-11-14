@@ -1,6 +1,6 @@
 {
   "name": "novel-smith",
-  "version": "3.1.169",
+  "version": "3.1.170",
   "private": true,
   "main": "src-electron/main.js",
   "scripts": {
@@ -29,7 +29,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
+    "@libsql/client": "^0.18.0",
     "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/adapter-libsql": "^7.10.1",
     "@prisma/client": "^7.10.0",
     "@types/three": "^0.186.0",
     "better-sqlite3": "^12.11.1",

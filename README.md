@@ -743,6 +743,51 @@ export const PARAGRAPH_RULES = [/* ...既有规则, */ detectNegativeParallel] a
 ---
 
 
+## 免费云端部署（Vercel + Turso：一键获得你自己的在线版）
+
+不想装 Node、想要一个**永久在线、数据完全属于你自己**的网页版？三条免费额度（GitHub + Vercel Hobby + Turso Free）就够了，一分钱不花，**一人一库**——你部署的实例、数据库里只有你的数据。
+
+**前提**：一个 GitHub 账号（fork 本仓库用）+ 注册 [Vercel](https://vercel.com)（可直接用 GitHub 登录）+ 注册 [Turso](https://turso.tech)（免费档 500 库，用不完）。
+
+### 三步上线
+
+```bash
+
+# ① 创建免费云数据库（turso.tech 注册后）
+
+turso db create novel-smith          # 建库
+
+turso db show novel-smith --url      # 拿到 libsql://... 地址
+
+turso db tokens create novel-smith   # 拿到访问 token
+
+```
+
+
+**② fork 本仓库 → Vercel「Add New Project → Import」选你 fork 的仓库**，环境变量填三项：
+
+| 变量 | 值 |
+
+| --- | --- |
+
+| `DATABASE_URL` | `libsql://你刚拿到的地址` |
+
+| `DATABASE_AUTH_TOKEN` | 你刚拿到的 token |
+
+| `ALLOW_PUBLIC` | `true`（放行公网访问，这是应用内置网段门禁的开关） |
+
+
+**③ 点 Deploy**——两分钟后你会得到 `https://你的项目名.vercel.app`，打开就是完全属于你的 Novel Smith。首次打开后进网页 ⚙️ 设置 填你自己的 LLM Key 即可写作。
+
+> **数据在哪**：不在服务器本地，在你的 Turso 云库里——所以 Vercel 怎么重启都不会丢，换机器连上同一个 Turso 地址数据还在。想搬家：`turso db export` 一条命令导出。
+
+> **没有 Turso CLI？** 网页版 turso.tech 控制台同样能建库拿地址和 token，流程一致。
+
+> **为什么是 libsql**：v3.1.170 起，存储层按 `DATABASE_URL` 协议自动分流——`file:` 走本地 better-sqlite3（零配置本地版不变），`libsql://` / `https://` 走纯 JS 云驱动（Serverless 可用）。本地用户零感知、零迁移。
+
+---
+
+
 ## 生产部署
 
 
