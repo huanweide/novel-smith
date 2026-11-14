@@ -3248,6 +3248,53 @@ main.zm-col > * { flex-shrink: 0; }
 .zp-rail-btn.deadly:hover:not(:disabled) { background: rgba(155, 58, 44, 0.08); }
 .zp-rail-btn.edit { border-style: dashed; color: #7A6A50; }
 .zp-rail-btn.marked { background: rgba(155, 58, 44, 0.08); color: var(--zm-zhu); border-color: var(--zm-zhu); }
+.zp-rail-btn.open { background: rgba(155, 58, 44, 0.06); border-color: var(--zm-zhu); }
+
+/* 细写开关（默认一键出手；开了点动作先展开可选输入） */
+.zp-rail-fine {
+  margin: 2px 0 4px; padding: 3px 6px;
+  border: 1px dashed rgba(126, 104, 72, 0.4);
+  font-family: var(--zm-hei); font-size: 10px; color: #7A6A50;
+  background: transparent; cursor: pointer; letter-spacing: 0.08em;
+}
+.zp-rail-fine.on {
+  border-style: solid; border-color: var(--zm-zhu);
+  color: var(--zm-zhu); background: rgba(155, 58, 44, 0.07);
+}
+
+/* 细写编辑器：挂在被点的动作下面，可选输入 + 剧情 chips + 出手 */
+.zp-rail-wrap { display: flex; flex-direction: column; }
+.zp-detail { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 6px; }
+.zp-detail-input {
+  width: 100%; padding: 5px 7px;
+  border: 1px solid rgba(126, 104, 72, 0.4);
+  background: rgba(255, 252, 245, 0.9);
+  font-family: var(--zm-kai); font-size: 12px; color: #211E19;
+}
+.zp-detail-input:focus { outline: none; border-color: var(--zm-zhu); }
+.zp-detail-input::placeholder { color: #B7A98B; }
+.zp-detail-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.zp-detail-chip {
+  max-width: 100%; padding: 3px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid rgba(31, 56, 51, 0.35);
+  font-family: var(--zm-kai); font-size: 11px; color: #1F3833;
+  background: rgba(31, 56, 51, 0.05); cursor: pointer; text-align: left;
+}
+.zp-detail-chip:hover { border-color: #1F3833; background: rgba(31, 56, 51, 0.1); }
+.zp-detail-ops { display: flex; gap: 6px; }
+.zp-detail-go {
+  flex: 1; padding: 4px 6px;
+  border: 1px solid var(--zm-zhu); background: rgba(155, 58, 44, 0.1);
+  font-family: var(--zm-song); font-size: 12px; color: var(--zm-zhu); cursor: pointer;
+}
+.zp-detail-go:hover { background: rgba(155, 58, 44, 0.18); }
+.zp-detail-no {
+  padding: 4px 8px;
+  border: 1px solid rgba(126, 104, 72, 0.3); background: transparent;
+  font-family: var(--zm-song); font-size: 12px; color: #7A6A50; cursor: pointer;
+}
+.zp-detail-no:hover { border-color: #7A6A50; }
+.zp-detail-hint { font-family: var(--zm-hei); font-size: 9px; color: #B7A98B; letter-spacing: 0.04em; }
 
 /* 右栏：档案页签。页签头一排直角小牌，选中态朱线压顶 */
 .zp-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }

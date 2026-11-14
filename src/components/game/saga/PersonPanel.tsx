@@ -93,6 +93,8 @@ interface Props {
   /** 点开的是主角自己：不给「辱骂/偷他东西」这套 */
   isSelf?: boolean;
   onAct: (text: string, type?: string) => void;
+  /** 剧情选项文本（本轮叙事给出的三个选择）：细写编辑器里作建议 chips */
+  suggestions?: string[];
   /** 改六格（编辑器在左栏，正文区不再放这套 UI） */
   onExtChange?: (slots: ExtendedAction[]) => void;
   onClose: () => void;
@@ -122,7 +124,7 @@ function Field({ label, value, masked }: { label: string; value?: string; masked
 }
 
 export function PersonPanel({
-  open, name, sagaId, level, items, extSlots, disabled, fallbackBrief, isSelf, onAct, onExtChange, onClose,
+  open, name, sagaId, level, items, extSlots, disabled, fallbackBrief, isSelf, onAct, suggestions, onExtChange, onClose,
 }: Props) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -142,6 +144,13 @@ export function PersonPanel({
   const [relNote, setRelNote] = useState("");
   const [relSaved, setRelSaved] = useState(false);
   const [savingMark, setSavingMark] = useState(false);
+  // 细写（用户口径 2026-11-15）：固定动作默认一键出手不繁琐；开了之后点动作先展开
+  // 可选输入——空=默认句直接出，写了带细节出，剧情选项 chips 一键填。
+  // 必须放在早退 return 之前：放后面会在 open=false 的首渲里被 useEffect 闭包
+  // 捕获成 TDZ 死区，一打开卡就炸「Cannot access before initialization」（实测踩过）。
+  const [fineWrite, setFineWrite] = useState(false);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [detailText, setDetailText] = useState("");
 
   // 人物卡正文：只在打开且换人时拉一次
   useEffect(() => {
@@ -166,7 +175,7 @@ export function PersonPanel({
   }, [open, name, sagaId]);
 
   useEffect(() => {
-    if (!open) { setTab("overview"); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setAvatarMsg(null); setAvatarBusy(null); setRelNote(""); setRelSaved(false); }
+    if (!open) { setTab("overview"); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setAvatarMsg(null); setAvatarBusy(null); setRelNote(""); setRelSaved(false); setFineWrite(false); setDetailKey(null); setDetailText(""); }
   }, [open]);
 
   // 换人时清掉上一轮反馈，回到概览
@@ -243,6 +252,52 @@ export function PersonPanel({
   const marked = !!sheet?.marked;
 
   const fire = (a: PersonAction) => onAct(a.text, a.verb);
+
+  const fireDetail = (defaultText: string, verb?: string) => {
+    onAct(detailText.trim() || defaultText, verb);
+    setDetailKey(null);
+    setDetailText("");
+  };
+  /** 群组动作的统一入口：细写开 → 展开编辑器；关 → 直接出手 */
+  const actOn = (a: PersonAction) => {
+    if (fineWrite && !self) { setDetailText(""); setDetailKey(`g:${a.label}`); return; }
+    fire(a);
+  };
+  /** 论交三件同口径（默认句带人名） */
+  const actOnPhrase = (key: string, defaultText: string) => {
+    if (fineWrite) { setDetailText(""); setDetailKey(`x:${key}`); return; }
+    onAct(defaultText);
+  };
+  /** 细写编辑器：可选输入 + 剧情选项 chips + 出手/算了。空输入 = 默认句直接出。 */
+  const detailRow = (key: string, defaultText: string, verb?: string) => (
+    <div className="zp-detail">
+      <input
+        className="zp-detail-input"
+        autoFocus
+        placeholder={`默认：${defaultText}`}
+        value={detailText}
+        onChange={(e) => setDetailText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") fireDetail(defaultText, verb);
+          if (e.key === "Escape") { setDetailKey(null); setDetailText(""); }
+        }}
+      />
+      {(suggestions || []).length > 0 && (
+        <div className="zp-detail-chips">
+          {(suggestions || []).slice(0, 3).map((s, si) => (
+            <button key={si} className="zp-detail-chip" title={`${s}（点填入，可改后出手）`} onClick={() => setDetailText(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="zp-detail-ops">
+        <button className="zp-detail-go" onClick={() => fireDetail(defaultText, verb)}>就这么办</button>
+        <button className="zp-detail-no" onClick={() => { setDetailKey(null); setDetailText(""); }}>算了</button>
+      </div>
+      <p className="zp-detail-hint">空着不动 = 默认句直接出；写了就带着细节出手。</p>
+    </div>
+  );
   // 交谈：全卡主交互——点一下就与这个人聊起来（走 talk 动词，引擎按对话处理）
   const converse = () => onAct(personify(`与${name}交谈`, name), "talk");
 
@@ -430,19 +485,30 @@ export function PersonPanel({
             {!self && (
               <>
                 <button className="zp-rail-talk" disabled={disabled} onClick={converse}>交谈</button>
+                {/* 细写开关（用户口径 2026-11-15）：固定动作默认一键出手不繁琐；开了之后
+                    点动作先展开可选输入——空=默认句直接出，写了带细节出，剧情选项 chips 一键填 */}
+                <button
+                  className={`zp-rail-fine${fineWrite ? " on" : ""}`}
+                  onClick={() => { setFineWrite((v) => !v); setDetailKey(null); }}
+                  title="细写：点动作先展开可选输入（空=默认句直接出；可把本轮剧情选项一键填进来，也可自己写）"
+                >
+                  {fineWrite ? "细写 · 开" : "细写"}
+                </button>
                 {groups.map((g) => (
                   <div className="zp-rail-sect" key={g.tone}>
                     <span className={`zp-rail-tag ${g.tone}`}>{g.label}</span>
                     {g.actions.map((a) => (
-                      <button
-                        key={a.label}
-                        className={`zp-rail-btn${a.risk === "deadly" ? " deadly" : a.risk === "risky" ? " risky" : ""}`}
-                        disabled={disabled}
-                        onClick={() => fire(a)}
-                        title={`${a.text}${a.cost ? `（${a.cost}）` : ""}`}
-                      >
-                        {a.label}
-                      </button>
+                      <div key={a.label} className="zp-rail-wrap">
+                        <button
+                          className={`zp-rail-btn${a.risk === "deadly" ? " deadly" : a.risk === "risky" ? " risky" : ""}${detailKey === `g:${a.label}` ? " open" : ""}`}
+                          disabled={disabled}
+                          onClick={() => actOn(a)}
+                          title={`${a.text}${a.cost ? `（${a.cost}）` : ""}`}
+                        >
+                          {a.label}
+                        </button>
+                        {detailKey === `g:${a.label}` && detailRow(`g:${a.label}`, a.text, a.verb)}
+                      </div>
                     ))}
                   </div>
                 ))}
@@ -454,9 +520,18 @@ export function PersonPanel({
                   <button className="zp-rail-btn" disabled={disabled} onClick={() => railGo("carry")} title="送他一件东西（随身页里点物品）">送物</button>
                   <button className="zp-rail-btn risky" disabled={disabled} onClick={() => railGo("carry")} title="摸他一件东西（随身页里点物品）">摸物</button>
                   {/* 论交三件（鬼谷同源）：正和博弈——成了双方长脸，输了不结死仇（好感走 verbs 查表） */}
-                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`与${name}切磋一番，点到为止`)} title="以武会友 · 成了+4（不打不相识），失手-3">切磋</button>
-                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`与${name}论道一场，各抒己见`)} title="以言会友 · 相谈甚欢+3，不欢而散-1">论道</button>
-                  <button className="zp-rail-btn" disabled={disabled} onClick={() => onAct(`向${name}授业解惑一番`)} title="传道之谊 · 他受教+2，不领情-2">教诲</button>
+                  <div className="zp-rail-wrap">
+                    <button className={`zp-rail-btn${detailKey === "x:切磋" ? " open" : ""}`} disabled={disabled} onClick={() => actOnPhrase("切磋", `与${name}切磋一番，点到为止`)} title="以武会友 · 成了+4（不打不相识），失手-3">切磋</button>
+                    {detailKey === "x:切磋" && detailRow("x:切磋", `与${name}切磋一番，点到为止`)}
+                  </div>
+                  <div className="zp-rail-wrap">
+                    <button className={`zp-rail-btn${detailKey === "x:论道" ? " open" : ""}`} disabled={disabled} onClick={() => actOnPhrase("论道", `与${name}论道一场，各抒己见`)} title="以言会友 · 相谈甚欢+3，不欢而散-1">论道</button>
+                    {detailKey === "x:论道" && detailRow("x:论道", `与${name}论道一场，各抒己见`)}
+                  </div>
+                  <div className="zp-rail-wrap">
+                    <button className={`zp-rail-btn${detailKey === "x:教诲" ? " open" : ""}`} disabled={disabled} onClick={() => actOnPhrase("教诲", `向${name}授业解惑一番`)} title="传道之谊 · 他受教+2，不领情-2">教诲</button>
+                    {detailKey === "x:教诲" && detailRow("x:教诲", `向${name}授业解惑一番`)}
+                  </div>
                 </div>
                 <div className="zp-rail-sect">
                   <span className="zp-rail-tag deal">惯用招</span>

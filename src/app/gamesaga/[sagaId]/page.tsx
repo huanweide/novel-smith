@@ -1974,6 +1974,7 @@ function SagaDetailInner() {
         fallbackBrief={interactChar ? entities.find((e) => e.name === interactChar)?.description : ""}
         isSelf={!!interactChar && interactChar === (saga.playAsName || "")}
         onAct={(text, type) => { if (interactChar) interactWith(interactChar, type || "custom", text); }}
+        suggestions={options.map((o) => o.text).filter(Boolean).slice(0, 4)}
         onExtChange={setExtSlots}
         onClose={() => setInteractChar(null)}
       />
