@@ -140,7 +140,7 @@ export async function PATCH(req: Request, { params }: Params) {
     // 只允许白名单字段，避免前端误传覆盖内部字段
     const allowed = ["role", "title", "age", "appearance", "personality", "background",
       "abilities", "status", "relations", "notes", "isPlayer",
-      "dead", "exitRound", "revealed"];
+      "dead", "exitRound", "revealed", "avatarVersion", "marked", "relationNote"];
     const cleaned: any = { name, updatedAt: new Date().toISOString() };
     for (const k of allowed) if (next[k] !== undefined) cleaned[k] = next[k];
     all[name] = cleaned;

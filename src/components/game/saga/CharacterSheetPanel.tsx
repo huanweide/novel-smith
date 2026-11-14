@@ -33,6 +33,10 @@ export interface CharacterSheet {
   isPlayer?: boolean;
   /** 头像版本号（导入或 AI 生成后 +1，前端用它做图片缓存失效；图片本体在 data/avatars/） */
   avatarVersion?: number;
+  /** 标记（鬼谷「标记」的等价物）：名录里加星，找人不累 */
+  marked?: boolean;
+  /** 玩家自己定义的关系（「我和他是什么关系」，写进档案 AI 也看见） */
+  relationNote?: string;
   /** 退场死亡：名录垫后，卡仍可打开（character-admission.ts） */
   dead?: boolean;
   exitRound?: number;
@@ -225,7 +229,7 @@ export function CharacterSheetPanel({
                 onClick={() => { setName(n); setEditing(false); }}
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] transition-colors ${n === name ? "bg-[var(--nv-creative)]/15 font-medium text-[var(--nv-creative)]" : "text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-3)] hover:text-[var(--nv-text-primary)]"}`}
               >
-                {n}{n === playAsName ? " ★" : ""}{sheets[n]?.dead ? " 殁" : ""}
+                {n}{n === playAsName ? " ★" : ""}{sheets[n]?.marked ? " ◆" : ""}{sheets[n]?.dead ? " 殁" : ""}
               </button>
             ))}
           </div>

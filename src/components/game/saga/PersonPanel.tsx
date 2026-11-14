@@ -1,25 +1,29 @@
 "use client";
 
 /**
- * PersonPanel —— 人物卡（对某个人能做的一切，都在这一张卡上）
+ * PersonPanel —— 人物卡（鬼谷八荒式：左栏动作 + 右侧档案页签）
  *
- * 为什么要有它（2026-11-14 玩家反馈）：
- *   「辱骂、试探、威胁是针对某一个角色的。但整体上有点太多了，
- *     因为下面有可往之处，加上之前一大堆 UI，正文地方的 UI 太多了。
- *     可以在角色那里点开某一个角色卡，一边查看他的信息，一边也可以去触发这些效果。」
+ * 布局定调（2026-11-14 深夜，用户拿鬼谷八荒人物界面作参考）：
+ *   「本身不该局限于此……看看它左侧 UI 栏能做些什么，自由度有多高；
+ *     想看更详细的情报、具体的设定，可以点击他的档案一个个进入查看；
+ *     你要对它做的事情不止这些，下面的很多选项本身就是针对这个角色来进行的。」
  *
- * 所以：正文区只留「可往之处」+ 输入框。所有**对人**的动作搬进这张卡。
+ *   ┌──────────┬──────────────────────┐
+ *   │ 左栏      │  概览 | 底细 | 随身 | 关系 | 本事 │
+ *   │ 交谈(主)  │──────────────────────│
+ *   │ 试探×3    │   档案页签内容（滚动）  │
+ *   │ 强硬×4    │                      │
+ *   │ 事务×3    │                      │
+ *   │ 往来×3    │                      │
+ *   │ 惯用招×6  │                      │
+ *   │ 标记      │                      │
+ *   └──────────┴──────────────────────┘
+ *   底部：自由输入（永远在，永远不被拒绝）
  *
- * 抄鬼谷八荒的地方（三处）：
- *   1. 信息与动作同屏——查看与下手不分两步；
- *   2. 属性分栏读（身份/为人/外貌/底细/牵挂/身上/关系），不是一大段散文；
- *   3. 看不清就真的看不清（好感不够时「底细/牵挂」打码）——这是鬼谷「念力」的等价物。
- *
- * 不抄的地方：鬼谷用好感**锁**动作（结义/结缘要门槛）。本项目铁律是好感只改难度，
- * 永远不删选项——你可以对陌生人动手，只是你不知道他怀里有什么、背后有谁。
- *
- * 数据：GET /api/game/saga/[sagaId]/characters（人物卡正文）；
- *       好感来自 saga.relations（父级传入 level）；背包来自会话 items（按 owner 过滤）。
+ * 铁律不变：好感只改难度，永远不删选项——左栏每一个动词对任何人都在；
+ * 看不清的只是**信息**（底细打码），不是**动作**。
+ * 页签 = 鬼谷的档案页（人物属性/故事/道具/关系），详细情报一页页进；
+ * 外面这张卡仍是小界面——打开即用，不必翻页也能做任何事（左栏全在）。
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -64,6 +68,17 @@ interface SheetItem {
   equipped?: boolean;
 }
 
+/** 档案页签：概览=状态+属性速览；底细=故事+洞察；随身=背包+送/摸；关系=关系网+定义关系；本事=功法神通 */
+type Tab = "overview" | "detail" | "carry" | "relations" | "skills";
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "overview", label: "概览" },
+  { key: "detail", label: "底细" },
+  { key: "carry", label: "随身" },
+  { key: "relations", label: "关系" },
+  { key: "skills", label: "本事" },
+];
+
 interface Props {
   open: boolean;
   name: string;
@@ -78,7 +93,7 @@ interface Props {
   /** 点开的是主角自己：不给「辱骂/偷他东西」这套 */
   isSelf?: boolean;
   onAct: (text: string, type?: string) => void;
-  /** 改六格（编辑器在卡里，正文区不再放这套 UI） */
+  /** 改六格（编辑器在左栏，正文区不再放这套 UI） */
   onExtChange?: (slots: ExtendedAction[]) => void;
   onClose: () => void;
 }
@@ -110,20 +125,23 @@ export function PersonPanel({
   open, name, sagaId, level, items, extSlots, disabled, fallbackBrief, isSelf, onAct, onExtChange, onClose,
 }: Props) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
-  const [showGive, setShowGive] = useState(false);
+  const [tab, setTab] = useState<Tab>("overview");
   const [editExt, setEditExt] = useState(false);
   const [custom, setCustom] = useState("");
   const [filling, setFilling] = useState(false);
   const [fillMsg, setFillMsg] = useState<string | null>(null);
-  // 探查与偷窃（2026-11-14 四条需求里的 ③探查 ④判定）
+  // 探查（判定来源是你自己：功法神通/情报，骰子裁成败，AI 只补货不判成败）
   const [inspecting, setInspecting] = useState(false);
   const [inspectRes, setInspectRes] = useState<InspectResult | null>(null);
   const [inspectErr, setInspectErr] = useState<string | null>(null);
-  const [showSteal, setShowSteal] = useState(false);
-  // 头像（导入 / AI 生成，2026-11-14）：busy 标明在干哪件事，消息给卡内回执
+  // 头像（导入 / AI 生成）：busy 标明在干哪件事，消息给卡内回执
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [avatarBusy, setAvatarBusy] = useState<null | "import" | "gen">(null);
   const [avatarMsg, setAvatarMsg] = useState<string | null>(null);
+  // 定义关系（鬼谷红框「定义关系」的等价物）：玩家自己记「我和他是什么关系」
+  const [relNote, setRelNote] = useState("");
+  const [relSaved, setRelSaved] = useState(false);
+  const [savingMark, setSavingMark] = useState(false);
 
   // 人物卡正文：只在打开且换人时拉一次
   useEffect(() => {
@@ -148,11 +166,11 @@ export function PersonPanel({
   }, [open, name, sagaId]);
 
   useEffect(() => {
-    if (!open) { setShowGive(false); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setShowSteal(false); setAvatarMsg(null); setAvatarBusy(null); }
+    if (!open) { setTab("overview"); setCustom(""); setFillMsg(null); setInspectRes(null); setInspectErr(null); setAvatarMsg(null); setAvatarBusy(null); setRelNote(""); setRelSaved(false); }
   }, [open]);
 
-  // 换人时清掉上一轮填充反馈
-  useEffect(() => { setFillMsg(null); }, [name]);
+  // 换人时清掉上一轮反馈，回到概览
+  useEffect(() => { setFillMsg(null); setTab("overview"); setRelNote(""); setRelSaved(false); }, [name]);
 
   if (!open || !name) return null;
 
@@ -222,9 +240,9 @@ export function PersonPanel({
   const hasSeen = !!(sheet?.revealed?.insight || (sheet?.revealed?.inventory || []).length);
   const seal = deadSeal(sheet);
   const titleLine = [sheet?.role, sheet?.title, sheet?.age].filter(Boolean).join(" · ");
+  const marked = !!sheet?.marked;
 
   const fire = (a: PersonAction) => onAct(a.text, a.verb);
-
   // 交谈：全卡主交互——点一下就与这个人聊起来（走 talk 动词，引擎按对话处理）
   const converse = () => onAct(personify(`与${name}交谈`, name), "talk");
 
@@ -257,6 +275,7 @@ export function PersonPanel({
     if (inspecting || self) return;
     setInspecting(true);
     setInspectErr(null);
+    setTab("overview"); // 回执出在概览页
     try {
       const res = await fetch(`/api/game/saga/${encodeURIComponent(sagaId)}/characters/inspect`, {
         method: "POST",
@@ -314,11 +333,42 @@ export function PersonPanel({
     reader.readAsDataURL(f);
   };
 
+  // ── 标记（鬼谷「标记」的等价物）：钉在名录上，找人不累 ──
+  const patchSheet = async (patch: Record<string, unknown>) => {
+    const res = await fetch(`/api/game/saga/${encodeURIComponent(sagaId)}/characters`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, patch }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data?.error || "保存失败");
+    if (data.sheet) setSheet(data.sheet);
+    return data.sheet as CharacterSheet;
+  };
+
+  const toggleMark = async () => {
+    if (savingMark) return;
+    setSavingMark(true);
+    try { await patchSheet({ marked: !marked }); } catch { /* 失败静默——标记不是关键操作 */ }
+    finally { setSavingMark(false); }
+  };
+
+  const saveRelNote = async () => {
+    try {
+      await patchSheet({ relationNote: relNote.trim() });
+      setRelSaved(true);
+      setTimeout(() => setRelSaved(false), 2000);
+    } catch { /* 失败静默 */ }
+  };
+
+  // ── 左栏动作（鬼谷式竖排）：交谈主按钮 + 三组细分 + 往来三件 + 标记 ──
+  const railGo = (t: Tab) => setTab(t);
+
   return (
     <>
       <div className="zp-mask" onClick={onClose} />
       <aside className="zp-panel" role="dialog" aria-label={`${name} 的人物卡`}>
-        {/* ── 头 ──（鬼谷八荒式：大立绘在左，名字/身份/好感在右） ── */}
+        {/* ── 头 ──（大立绘在左，名字/身份/印章在右） ── */}
         <header className="zp-head">
           <div className="zp-portrait-col">
             <div className={`zp-portrait${self ? " self" : ""}${avatarUrl ? " has-img" : ""}`}>
@@ -356,314 +406,375 @@ export function PersonPanel({
             {avatarMsg && <span className="zp-avatar-msg">{avatarMsg}</span>}
           </div>
           <div className="zp-head-main">
-            <h2 className="zp-name">{name}</h2>
+            <h2 className="zp-name">{marked && <em className="zp-mark-star">★</em>}{name}</h2>
             {titleLine && <p className="zp-title">{titleLine}</p>}
             {/* 退场死亡印章：垫后不删除，卡永远打得开 */}
             {seal && <span className="zp-dead-seal inline">{seal}</span>}
+            {!self && (
+              <div className="zp-rel-inline">
+                <RelationScale level={level} />
+                <span className="zp-rel-num">{level > 0 ? `+${level}` : level}</span>
+                <span className="zp-rel-tier">{level === 0 ? "尚未打交道" : relationTier(level)}</span>
+              </div>
+            )}
+            <p className="zp-know">{knowledgeLabel(k)}</p>
+            {!self && sheet?.relationNote && <p className="zp-relnote">「{sheet.relationNote}」</p>}
           </div>
           <button className="zp-close" onClick={onClose} aria-label="关闭">✕</button>
         </header>
 
-        {/* ── 关系：这是全卡最该被一眼看到的东西（对自己没有好感这回事） ── */}
-        {!self && (
-        <div className="zp-relation">
-          <div className="zp-rel-row">
-            <span className="zp-rel-k">好感</span>
-            <RelationScale level={level} />
-            <span className="zp-rel-num">{level > 0 ? `+${level}` : level}</span>
-            <span className="zp-rel-tier">{level === 0 ? "尚未打交道" : relationTier(level)}</span>
-          </div>
-          <p className="zp-know">{knowledgeLabel(k)}</p>
-        </div>
-        )}
-
-        {/* 一键填充：把空白档案项交给 AI 补全（填表系统，从小说系统抄来） */}
-        <div className="zp-fill">
-          <button className="zp-fill-btn" disabled={disabled || filling} onClick={doFill}>
-            {filling ? "补全中…" : "一键填充档案"}
-          </button>
-          {fillMsg && <span className="zp-fill-msg">{fillMsg}</span>}
-        </div>
-
-        {/* ── 状态（查看状态，2026-11-14）：自己的体力/精神 + 对方的伤势/情绪/所在——档案里写了就看得见 ── */}
-        {sheet?.status && (
-          <div className="zp-status">
-            {typeof sheet.status.hp === "number" && (
-              <div className="zp-stat">
-                <span className="zp-stat-k">体力</span>
-                <span className="zp-stat-bar">
-                  {Array.from({ length: 10 }, (_, i) => (
-                    <i key={i} className={i < Math.round((sheet.status!.hp || 0) / 10) ? "on hp" : ""} />
-                  ))}
-                </span>
-                <span className="zp-stat-n">{sheet.status.hp}</span>
-              </div>
-            )}
-            {typeof sheet.status.spirit === "number" && (
-              <div className="zp-stat">
-                <span className="zp-stat-k">精神</span>
-                <span className="zp-stat-bar">
-                  {Array.from({ length: 10 }, (_, i) => (
-                    <i key={i} className={i < Math.round((sheet.status!.spirit || 0) / 10) ? "on sp" : ""} />
-                  ))}
-                </span>
-                <span className="zp-stat-n">{sheet.status.spirit}</span>
-              </div>
-            )}
-            <div className="zp-stat-tags">
-              {sheet.status.injury && <span className="zp-tag inj">{sheet.status.injury}</span>}
-              {sheet.status.mood && <span className="zp-tag mood">{sheet.status.mood}</span>}
-              {sheet.status.location && <span className="zp-tag loc">{sheet.status.location}</span>}
-            </div>
-          </div>
-        )}
-
-        {/* ── 信息栏 ── */}
-        <div className="zp-fields">
-          <Field label="为人" value={sheet?.personality} />
-          <Field label="外貌" value={sheet?.appearance} />
-          <Field label="底细" value={brief} masked={shouldMask(brief, k) && !hasSeen} />
-          {!self && sheet?.revealed?.insight && (
-            <Field label="洞察" value={sheet.revealed.insight} />
-          )}
-              <Field label="牵挂" value={sheet?.notes} masked={shouldMask(sheet?.notes, k)} />
-          {sheet?.abilities && sheet.abilities.length > 0 && (
-            <Field label="本事" value={sheet.abilities.join(" · ")} />
-          )}
-          {k === "stranger" && (brief || sheet?.notes) && !hasSeen && (
-            <p className="zp-hint">再打几次交道，才看得清他的底。</p>
-          )}
-        </div>
-
-        {/* ── 身上 ── */}
-        <div className="zp-sect">
-          <p className="zp-sect-h">身上<span>{theirs.length + extraSeen.length > 0 ? `　${theirs.length + extraSeen.length} 件` : self ? "　空" : "　看不出来"}</span></p>
-          {theirs.length + extraSeen.length === 0 ? (
-            <p className="zp-empty">
-              {self ? "身上没带什么。" : "两手空空——也可能只是没让你看见。"}
-            </p>
-          ) : (
-            <div className="zp-chips">
-              {theirs.map((i, idx) => (
-                <span key={idx} className="zp-chip">
-                  {i.name}
-                  {i.quantity > 1 && <em>×{i.quantity}</em>}
-                  {i.damaged && <s>损</s>}
-                  {i.equipped && <s className="eq">用</s>}
-                </span>
-              ))}
-              {extraSeen.map((i, idx) => (
-                <span key={`s${idx}`} className="zp-chip seen" title={i.desc || "探查所得"}>
-                  {i.name}
-                  <s className="probe">探</s>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── 关系网 ── */}
-        {sheet?.relations && sheet.relations.length > 0 && (
-          <div className="zp-sect">
-            <p className="zp-sect-h">牵涉<span>　{sheet.relations.length} 人</span></p>
-            <div className="zp-chips">
-              {sheet.relations.map((r, idx) => (
-                <span key={idx} className="zp-chip rel">
-                  {r.name}<em>{r.relation}</em>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── 探查（只对别人）——判定来源是你自己的本事：神识/功法/情报，骰子裁成败 ── */}
-        {!self && (
-        <div className="zp-sect">
-          <p className="zp-sect-h">探查<span>　看的是你自己的本事</span></p>
-          <button className="zp-give-btn" disabled={disabled || inspecting} onClick={doInspect}>
-            {inspecting ? "探查中…" : hasSeen ? "再探一次" : "探查此人"}
-          </button>
-          {inspectErr && <p className="zp-fill-msg">{inspectErr}</p>}
-          {inspectRes && (
-            <div className={`zp-inspect t-${inspectRes.verdict.tier}`}>
-              <div className="zp-inspect-dice">
-                <span className="zp-inspect-tier">{tierLabel(inspectRes.verdict.tier)}</span>
-                <span className="zp-inspect-num">骰 {inspectRes.verdict.d100} ／ 率 {inspectRes.verdict.rate}</span>
-              </div>
-              <div className="zp-inspect-parts">
-                {inspectRes.verdict.parts.map((p, i) => (
-                  <span key={i} className="zp-inspect-part">{p.label} +{p.value}</span>
+        {/* ── 身：左栏动作 + 右侧档案页签（鬼谷式两栏） ── */}
+        <div className="zp-body">
+          {/* 左栏：对这个人能做的一切，一列排开；动词永远全在（好感只改难度不删选项） */}
+          <nav className="zp-rail" aria-label="对此人的动作">
+            {!self && (
+              <>
+                <button className="zp-rail-talk" disabled={disabled} onClick={converse}>交谈</button>
+                {groups.map((g) => (
+                  <div className="zp-rail-sect" key={g.tone}>
+                    <span className={`zp-rail-tag ${g.tone}`}>{g.label}</span>
+                    {g.actions.map((a) => (
+                      <button
+                        key={a.label}
+                        className={`zp-rail-btn${a.risk === "deadly" ? " deadly" : a.risk === "risky" ? " risky" : ""}`}
+                        disabled={disabled}
+                        onClick={() => fire(a)}
+                        title={`${a.text}${a.cost ? `（${a.cost}）` : ""}`}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
                 ))}
-              </div>
-              <p className="zp-inspect-note">{inspectRes.verdict.note}</p>
-              {inspectRes.verdict.alertDelta !== 0 && (
-                <p className="zp-inspect-alert">被察觉 · 好感 {inspectRes.verdict.alertDelta}</p>
-              )}
-              {inspectRes.insight && <p className="zp-inspect-insight">洞察：{inspectRes.insight}</p>}
-              {inspectRes.inventory && inspectRes.inventory.length > 0 && (
-                <div className="zp-chips">
-                  {inspectRes.inventory.map((i, idx) => (
-                    <span key={idx} className="zp-chip seen" title={i.desc || undefined}>
-                      {i.name}
-                      {i.desc ? <em>{i.desc}</em> : null}
-                    </span>
-                  ))}
+                <div className="zp-rail-sect">
+                  <span className="zp-rail-tag deal">往来</span>
+                  <button className="zp-rail-btn" disabled={disabled || inspecting} onClick={doInspect} title="判定来源是你自己的神识功法与情报；骰面回执出在概览页">
+                    {inspecting ? "探查中…" : hasSeen ? "再探查" : "探查"}
+                  </button>
+                  <button className="zp-rail-btn" disabled={disabled} onClick={() => railGo("carry")} title="送他一件东西（随身页里点物品）">送物</button>
+                  <button className="zp-rail-btn risky" disabled={disabled} onClick={() => railGo("carry")} title="摸他一件东西（随身页里点物品）">摸物</button>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-        )}
-
-        {/* ── 你能对他做的 ── */}
-        <div className="zp-actions">
-          <p className="zp-sect-h">{self ? "你能对自己做的" : "你能对他做的"}</p>
-          {/* 交谈：鬼谷八荒式主按钮——先有「聊」这个入口，下面才是细分动作 */}
-          {!self && (
-            <button className="zp-talk" disabled={disabled} onClick={converse}>
-              与{name}交谈
-            </button>
-          )}
-          {groups.map((g) => (
-            <div className="zp-act-group" key={g.tone}>
-              <span className={`zp-act-tag ${g.tone}`}>{g.label}</span>
-              <div className="zp-act-list">
+                <div className="zp-rail-sect">
+                  <span className="zp-rail-tag deal">惯用招</span>
+                  {extSlots.map((s) => {
+                    const label = (s.label || "").trim();
+                    const text = (s.text || "").trim();
+                    if (!label && !text) return null;
+                    return (
+                      <button
+                        key={s.slot}
+                        className="zp-rail-btn"
+                        disabled={disabled}
+                        title={personify(text || label, name)}
+                        onClick={() => onAct(personify(text || label, name))}
+                      >
+                        {label || text.slice(0, 4)}
+                      </button>
+                    );
+                  })}
+                  {onExtChange && (
+                    <button className="zp-rail-btn edit" onClick={() => setEditExt((v) => !v)}>
+                      {editExt ? "收起" : "改招"}
+                    </button>
+                  )}
+                </div>
+                <div className="zp-rail-sect">
+                  <span className="zp-rail-tag deal">记号</span>
+                  <button className={`zp-rail-btn${marked ? " marked" : ""}`} disabled={savingMark} onClick={toggleMark} title="钉在名录上，名单里加星">
+                    {marked ? "已标记" : "标记"}
+                  </button>
+                </div>
+              </>
+            )}
+            {self && groups.map((g) => (
+              <div className="zp-rail-sect" key={g.tone}>
+                <span className={`zp-rail-tag ${g.tone}`}>{g.label}</span>
                 {g.actions.map((a) => (
-                  <button
-                    key={a.label}
-                    className={`zp-act${a.risk === "deadly" ? " deadly" : a.risk === "risky" ? " risky" : ""}`}
-                    disabled={disabled}
-                    onClick={() => fire(a)}
-                    title={`${a.text}${a.cost ? `（${a.cost}）` : ""}`}
-                  >
+                  <button key={a.label} className="zp-rail-btn" disabled={disabled} onClick={() => fire(a)} title={a.text}>
                     {a.label}
-                    <em>{a.cost}</em>
                   </button>
                 ))}
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── 送点什么（自己送自己没意义，isSelf 整块不渲染） ── */}
-        {!self && (
-        <div className="zp-sect">
-          <button
-            className="zp-give-btn"
-            disabled={disabled}
-            onClick={() => setShowGive((v) => !v)}
-          >
-            {showGive ? "收起" : `送 ${name} 一件东西`}
-          </button>
-          {showGive && (
-            mine.length === 0 ? (
-              <p className="zp-empty">你身上没有可送的东西。</p>
-            ) : (
-              <div className="zp-chips">
-                {mine.map((i, idx) => (
-                  <button
-                    key={idx}
-                    className="zp-chip give"
-                    disabled={disabled}
-                    onClick={() => onAct(`把「${i.name}」赠予${name}`, "gift")}
-                  >
-                    {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
-                  </button>
+            ))}
+            {editExt && onExtChange && (
+              <div className="zp-ext-panel">
+                {extSlots.map((s) => (
+                  <div className="zp-ext-row" key={s.slot}>
+                    <input
+                      value={s.label}
+                      maxLength={8}
+                      placeholder="按钮字"
+                      onChange={(e) =>
+                        onExtChange(extSlots.map((x) => (x.slot === s.slot ? { ...x, label: e.target.value } : x)))
+                      }
+                    />
+                    <input
+                      value={s.text}
+                      maxLength={60}
+                      placeholder="真说出口的话（他/她会换成名字）"
+                      onChange={(e) =>
+                        onExtChange(extSlots.map((x) => (x.slot === s.slot ? { ...x, text: e.target.value } : x)))
+                      }
+                    />
+                  </div>
                 ))}
               </div>
-            )
-          )}
-        </div>
-        )}
-
-        {/* ── 偷点什么（先探查才知道他身上有什么值得摸的；偷是 risky 动词，好感 -6 起步） ── */}
-        {!self && (
-        <div className="zp-sect">
-          <button
-            className="zp-give-btn"
-            disabled={disabled}
-            onClick={() => setShowSteal((v) => !v)}
-          >
-            {showSteal ? "收起" : `摸 ${name} 一件东西`}
-          </button>
-          {showSteal && (
-            theirs.length + extraSeen.length === 0 ? (
-              <p className="zp-empty">还不知道他身上有什么——先探查，才知道值得摸什么。</p>
-            ) : (
-              <div className="zp-chips">
-                {[...theirs, ...extraSeen.map((i) => ({ name: i.name, quantity: 1 }))].map((i, idx) => (
-                  <button
-                    key={idx}
-                    className="zp-chip give"
-                    disabled={disabled}
-                    onClick={() => onAct(`趁${name}不注意，把「${i.name}」摸走`, "steal")}
-                  >
-                    {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
-                  </button>
-                ))}
-              </div>
-            )
-          )}
-        </div>
-        )}
-
-        {/* ── 你的六格（原来挤在正文输入框下面，现在归位；对自己没有对象可言） ── */}
-        {!self && (
-        <div className="zp-sect">
-          <p className="zp-sect-h">
-            你的惯用招<span>　点一下就说出口</span>
-            {onExtChange && (
-              <button className="zp-ext-edit" onClick={() => setEditExt((v) => !v)}>
-                {editExt ? "收起" : "改"}
-              </button>
             )}
-          </p>
-          <div className="zp-ext">
-            {extSlots.map((s) => {
-              const label = (s.label || "").trim();
-              const text = (s.text || "").trim();
-              if (!label && !text) return null;
-              return (
+          </nav>
+
+          {/* 右栏：档案页签（详细情报一页页进；页签内容独立滚动） */}
+          <div className="zp-main">
+            <div className="zp-tabs" role="tablist">
+              {TABS.map((t) => (
                 <button
-                  key={s.slot}
-                  className="zp-ext-btn"
-                  disabled={disabled}
-                  title={personify(text || label, name)}
-                  onClick={() => onAct(personify(text || label, name))}
+                  key={t.key}
+                  role="tab"
+                  aria-selected={tab === t.key}
+                  className={`zp-tab${tab === t.key ? " on" : ""}`}
+                  onClick={() => setTab(t.key)}
                 >
-                  {label || text.slice(0, 4)}
+                  {t.label}
                 </button>
-              );
-            })}
-          </div>
-          {editExt && onExtChange && (
-            <div className="zp-ext-panel">
-              {extSlots.map((s) => (
-                <div className="zp-ext-row" key={s.slot}>
-                  <input
-                    value={s.label}
-                    maxLength={8}
-                    placeholder="按钮上的字"
-                    onChange={(e) =>
-                      onExtChange(extSlots.map((x) => (x.slot === s.slot ? { ...x, label: e.target.value } : x)))
-                    }
-                  />
-                  <input
-                    value={s.text}
-                    maxLength={60}
-                    placeholder="真说出口的那句话（他/她会换成对方名字）"
-                    onChange={(e) =>
-                      onExtChange(extSlots.map((x) => (x.slot === s.slot ? { ...x, text: e.target.value } : x)))
-                    }
-                  />
-                </div>
               ))}
             </div>
-          )}
-        </div>
-        )}
 
-        {/* ── 自己写一句 ── */}
+            <div className="zp-tabbody">
+              {/* ── 概览：状态 + 属性速览 + 探查回执 ── */}
+              {tab === "overview" && (
+                <div className="zp-sect">
+                  {sheet?.status && (
+                    <div className="zp-status">
+                      {typeof sheet.status.hp === "number" && (
+                        <div className="zp-stat">
+                          <span className="zp-stat-k">体力</span>
+                          <span className="zp-stat-bar">
+                            {Array.from({ length: 10 }, (_, i) => (
+                              <i key={i} className={i < Math.round((sheet.status!.hp || 0) / 10) ? "on hp" : ""} />
+                            ))}
+                          </span>
+                          <span className="zp-stat-n">{sheet.status.hp}</span>
+                        </div>
+                      )}
+                      {typeof sheet.status.spirit === "number" && (
+                        <div className="zp-stat">
+                          <span className="zp-stat-k">精神</span>
+                          <span className="zp-stat-bar">
+                            {Array.from({ length: 10 }, (_, i) => (
+                              <i key={i} className={i < Math.round((sheet.status!.spirit || 0) / 10) ? "on sp" : ""} />
+                            ))}
+                          </span>
+                          <span className="zp-stat-n">{sheet.status.spirit}</span>
+                        </div>
+                      )}
+                      <div className="zp-stat-tags">
+                        {sheet.status.injury && <span className="zp-tag inj">{sheet.status.injury}</span>}
+                        {sheet.status.mood && <span className="zp-tag mood">{sheet.status.mood}</span>}
+                        {sheet.status.location && <span className="zp-tag loc">{sheet.status.location}</span>}
+                      </div>
+                    </div>
+                  )}
+                  <div className="zp-fields">
+                    <Field label="为人" value={sheet?.personality} />
+                    <Field label="外貌" value={sheet?.appearance} />
+                    <Field label="底细" value={brief} masked={shouldMask(brief, k) && !hasSeen} />
+                    {!self && sheet?.revealed?.insight && <Field label="洞察" value={sheet.revealed.insight} />}
+                  </div>
+                  {k === "stranger" && (brief || sheet?.notes) && !hasSeen && (
+                    <p className="zp-hint">再打几次交道，才看得清他的底。左栏「探查」也可以——看的是你自己的本事。</p>
+                  )}
+                  {inspectErr && <p className="zp-fill-msg">{inspectErr}</p>}
+                  {inspectRes && (
+                    <div className={`zp-inspect t-${inspectRes.verdict.tier}`}>
+                      <div className="zp-inspect-dice">
+                        <span className="zp-inspect-tier">{tierLabel(inspectRes.verdict.tier)}</span>
+                        <span className="zp-inspect-num">骰 {inspectRes.verdict.d100} ／ 率 {inspectRes.verdict.rate}</span>
+                      </div>
+                      <div className="zp-inspect-parts">
+                        {inspectRes.verdict.parts.map((p, i) => (
+                          <span key={i} className="zp-inspect-part">{p.label} +{p.value}</span>
+                        ))}
+                      </div>
+                      <p className="zp-inspect-note">{inspectRes.verdict.note}</p>
+                      {inspectRes.verdict.alertDelta !== 0 && (
+                        <p className="zp-inspect-alert">被察觉 · 好感 {inspectRes.verdict.alertDelta}</p>
+                      )}
+                      {inspectRes.insight && <p className="zp-inspect-insight">洞察：{inspectRes.insight}</p>}
+                      {inspectRes.inventory && inspectRes.inventory.length > 0 && (
+                        <div className="zp-chips">
+                          {inspectRes.inventory.map((i, idx) => (
+                            <span key={idx} className="zp-chip seen" title={i.desc || undefined}>
+                              {i.name}
+                              {i.desc ? <em>{i.desc}</em> : null}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── 底细：故事 + 牵挂 + 一键填充（详细设定在这一页） ── */}
+              {tab === "detail" && (
+                <div className="zp-sect">
+                  <div className="zp-fields">
+                    <Field label="底细" value={brief} masked={shouldMask(brief, k) && !hasSeen} />
+                    {!self && sheet?.revealed?.insight && <Field label="洞察" value={sheet.revealed.insight} />}
+                    <Field label="牵挂" value={sheet?.notes} masked={shouldMask(sheet?.notes, k)} />
+                  </div>
+                  {k === "stranger" && (brief || sheet?.notes) && !hasSeen && (
+                    <p className="zp-hint">关系不够，看不清他的底——打码的部分是「他不让陌生人知道的事」。</p>
+                  )}
+                  <div className="zp-fill">
+                    <button className="zp-fill-btn" disabled={disabled || filling} onClick={doFill}>
+                      {filling ? "补全中…" : "一键填充档案"}
+                    </button>
+                    {fillMsg && <span className="zp-fill-msg">{fillMsg}</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 随身：他身上有什么 + 送/摸（点物品即动手） ── */}
+              {tab === "carry" && (
+                <div className="zp-sect">
+                  <p className="zp-sect-h">他身上<span>{theirs.length + extraSeen.length > 0 ? `　${theirs.length + extraSeen.length} 件` : self ? "　（你自己的背包）" : "　看不出来"}</span></p>
+                  {theirs.length + extraSeen.length === 0 ? (
+                    <p className="zp-empty">
+                      {self ? "身上没带什么。" : "两手空空——也可能只是没让你看见。左栏「探查」能看清一些。"}
+                    </p>
+                  ) : (
+                    <div className="zp-chips">
+                      {theirs.map((i, idx) => (
+                        <span key={idx} className="zp-chip">
+                          {i.name}
+                          {i.quantity > 1 && <em>×{i.quantity}</em>}
+                          {i.damaged && <s>损</s>}
+                          {i.equipped && <s className="eq">用</s>}
+                        </span>
+                      ))}
+                      {extraSeen.map((i, idx) => (
+                        <span key={`s${idx}`} className="zp-chip seen" title={i.desc || "探查所得"}>
+                          {i.name}
+                          <s className="probe">探</s>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!self && (
+                    <>
+                      <p className="zp-sect-h">送他<span>　点你背包里的东西即出手</span></p>
+                      {mine.length === 0 ? (
+                        <p className="zp-empty">你身上没有可送的东西。</p>
+                      ) : (
+                        <div className="zp-chips">
+                          {mine.map((i, idx) => (
+                            <button
+                              key={idx}
+                              className="zp-chip give"
+                              disabled={disabled}
+                              onClick={() => onAct(`把「${i.name}」赠予${name}`, "gift")}
+                            >
+                              {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <p className="zp-sect-h">摸他<span>　有险——好感 -6 起步，被抓更难看</span></p>
+                      {theirs.length + extraSeen.length === 0 ? (
+                        <p className="zp-empty">还不知道他身上有什么——先探查，才知道值得摸什么。</p>
+                      ) : (
+                        <div className="zp-chips">
+                          {[...theirs, ...extraSeen.map((i) => ({ name: i.name, quantity: 1 }))].map((i, idx) => (
+                            <button
+                              key={idx}
+                              className="zp-chip give"
+                              disabled={disabled}
+                              onClick={() => onAct(`趁${name}不注意，把「${i.name}」摸走`, "steal")}
+                            >
+                              {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {self && (
+                    <>
+                      <p className="zp-sect-h">你的背包<span>　{mine.length} 件</span></p>
+                      {mine.length === 0 ? (
+                        <p className="zp-empty">空空如也。</p>
+                      ) : (
+                        <div className="zp-chips">
+                          {mine.map((i, idx) => (
+                            <span key={idx} className="zp-chip">
+                              {i.name}{i.quantity > 1 && <em>×{i.quantity}</em>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── 关系：他的关系网 + 你定义的关系（鬼谷「定义关系」的等价物） ── */}
+              {tab === "relations" && (
+                <div className="zp-sect">
+                  {sheet?.relations && sheet.relations.length > 0 ? (
+                    <>
+                      <p className="zp-sect-h">牵涉<span>　{sheet.relations.length} 人</span></p>
+                      <div className="zp-chips">
+                        {sheet.relations.map((r, idx) => (
+                          <span key={idx} className="zp-chip rel">
+                            {r.name}<em>{r.relation}</em>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="zp-empty">档案里还没记他与谁有牵涉。</p>
+                  )}
+                  <p className="zp-sect-h">你与他<span>　自己记，AI 也会看见</span></p>
+                  <div className="zp-relnote-row">
+                    <input
+                      className="zp-input"
+                      value={relNote || sheet?.relationNote || ""}
+                      placeholder={`你和${name}是什么关系（如：过命的交情 / 杀父之仇）`}
+                      maxLength={30}
+                      disabled={disabled}
+                      onChange={(e) => { setRelNote(e.target.value); setRelSaved(false); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") void saveRelNote(); }}
+                    />
+                    <button className="zp-send" disabled={disabled} onClick={() => void saveRelNote()}>
+                      {relSaved ? "已记 ✓" : "记下"}
+                    </button>
+                  </div>
+                  <p className="zp-hint">这是你自己下的定义——写进档案，AI 后续按这个关系演。</p>
+                </div>
+              )}
+
+              {/* ── 本事：功法神通（检定时按它给探查/判定加成） ── */}
+              {tab === "skills" && (
+                <div className="zp-sect">
+                  {sheet?.abilities && sheet.abilities.length > 0 ? (
+                    <div className="zp-chips">
+                      {sheet.abilities.map((a, idx) => (
+                        <span key={idx} className="zp-chip">{a}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="zp-empty">档案里没记他会什么——底细页「一键填充」可补。</p>
+                  )}
+                  {!self && (
+                    <p className="zp-hint">探查他时，你自己的本事（这一页是**他的**）决定看多清。</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 自己写一句：自由输入永远在底部，永远不被拒绝 ── */}
         <div className="zp-write">
           <input
             className="zp-input"

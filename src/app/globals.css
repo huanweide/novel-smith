@@ -2798,9 +2798,9 @@ main.zm-col > * { flex-shrink: 0; }
 }
 .zp-panel {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 62;
-  width: 500px; max-width: 96vw;
+  width: 560px; max-width: 96vw;
   display: flex; flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   background: color-mix(in srgb, var(--zm-paper) 96%, #fff);
   border-left: 1px solid rgba(126, 104, 72, 0.34);
   box-shadow: -28px 0 64px -38px rgba(40, 30, 15, 0.55);
@@ -3199,6 +3199,84 @@ main.zm-col > * { flex-shrink: 0; }
   display: inline-block; align-self: flex-start;
   margin-top: 6px; padding: 2px 8px;
 }
+
+/* ── 人物卡 · 鬼谷式两栏（2026-11-14 深夜）：左栏动作 + 右侧档案页签 ──
+   参考鬼谷八荒人物界面：左侧竖排一列动词（自由度高），右侧属性/故事/道具/关系
+   一页页进。外面的卡仍是小界面——左栏全在，不翻页也能做任何事。 */
+.zp-body {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: stretch;
+  border-top: 1px solid rgba(126, 104, 72, 0.22);
+}
+
+/* 左栏：竖排动作。按钮窄而密，像鬼谷那一列小字——一眼扫完所有能做的事 */
+.zp-rail {
+  flex: 0 0 104px; width: 104px;
+  overflow-y: auto;
+  padding: 10px 8px 14px;
+  border-right: 1px solid rgba(126, 104, 72, 0.22);
+  background: rgba(246, 239, 225, 0.45);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.zp-rail-talk {
+  padding: 9px 0; margin-bottom: 4px;
+  border: 1px solid var(--zm-zhu); background: rgba(155, 58, 44, 0.06);
+  font-family: var(--zm-song); font-size: 14px; letter-spacing: 0.35em;
+  color: var(--zm-zhu); cursor: pointer; text-indent: 0.35em;
+  transition: background 0.18s, color 0.18s;
+}
+.zp-rail-talk:hover:not(:disabled) { background: var(--zm-zhu); color: var(--zm-paper); }
+.zp-rail-talk:disabled { opacity: 0.5; cursor: wait; }
+.zp-rail-sect { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.zp-rail-tag {
+  font-family: var(--zm-kai); font-size: 9.5px; letter-spacing: 0.3em;
+  color: #B7A98B; margin: 4px 0 1px;
+}
+.zp-rail-btn {
+  padding: 5px 6px;
+  border: 1px solid rgba(126, 104, 72, 0.3);
+  font-family: var(--zm-song); font-size: 12px; color: #3B342A;
+  background: rgba(246, 239, 225, 0.7);
+  cursor: pointer; text-align: center;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.zp-rail-btn:hover:not(:disabled) { border-color: var(--zm-zhu); color: var(--zm-zhu); }
+.zp-rail-btn:disabled { opacity: 0.45; cursor: wait; }
+.zp-rail-btn.risky:hover:not(:disabled) { border-color: #B8863C; color: #8A6A3C; }
+.zp-rail-btn.deadly { border-color: rgba(155, 58, 44, 0.4); color: var(--zm-zhu); }
+.zp-rail-btn.deadly:hover:not(:disabled) { background: rgba(155, 58, 44, 0.08); }
+.zp-rail-btn.edit { border-style: dashed; color: #7A6A50; }
+.zp-rail-btn.marked { background: rgba(155, 58, 44, 0.08); color: var(--zm-zhu); border-color: var(--zm-zhu); }
+
+/* 右栏：档案页签。页签头一排直角小牌，选中态朱线压顶 */
+.zp-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.zp-tabs {
+  flex: 0 0 auto;
+  display: flex; gap: 0;
+  border-bottom: 1px solid rgba(126, 104, 72, 0.28);
+  padding: 0 10px;
+  overflow-x: auto;
+}
+.zp-tab {
+  flex: 0 0 auto;
+  padding: 9px 14px 7px;
+  border: none; border-bottom: 2px solid transparent;
+  background: none; cursor: pointer;
+  font-family: var(--zm-song); font-size: 13px; letter-spacing: 0.14em;
+  color: #8B7C64;
+  transition: color 0.15s, border-color 0.15s;
+}
+.zp-tab:hover { color: #3B342A; }
+.zp-tab.on { color: var(--zm-zhu); border-bottom-color: var(--zm-zhu); }
+.zp-tabbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+
+/* 名字旁的标记星 + 关系内嵌行 + 定义关系输入行 */
+.zp-mark-star { font-style: normal; color: var(--zm-zhu); margin-right: 4px; font-size: 18px; }
+.zp-rel-inline { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.zp-relnote { font-family: var(--zm-kai); font-size: 11.5px; color: #1F3833; margin-top: 4px; }
+.zp-relnote-row { display: flex; gap: 6px; margin: 6px 0 4px; }
+.zp-relnote-row .zp-input { flex: 1 1 auto; }
 
 /* 状态条（只有自己的卡有） */
 .zp-status { padding: 12px 24px 4px; }
