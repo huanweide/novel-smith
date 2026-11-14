@@ -6,7 +6,7 @@
 
 [![Stars](https://img.shields.io/github/stars/huanweide/novel-smith)](https://github.com/huanweide/novel-smith/stargazers)
 
-[![在线演示 · 规则引擎自检](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-%E8%A7%84%E5%88%99%E5%BC%95%E6%93%8E%E8%87%AA%E6%A3%80-22c55e)](https://huanweide.github.io/novel-smith/)
+[![在线预览站 · 完整功能](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E9%A2%84%E8%A7%88%E7%AB%99-%E5%AE%8C%E6%95%B4%E5%8A%9F%E8%83%BD-22c55e)](https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W)
 
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/huanweide/novel-smith/pulls)
 
@@ -32,7 +32,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org) [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev) [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![SQLite](https://img.shields.io/badge/SQLite-local-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org) [![LLM](https://img.shields.io/badge/LLM-DeepSeek%20%2F%20OpenAI%20兼容-4D6BFE?style=flat-square)](https://platform.deepseek.com) [![Local-First](https://img.shields.io/badge/Local--First-%E9%9B%B6%E4%B8%8A%E4%BC%A0-22C55E?style=flat-square)](https://github.com/huanweide/novel-smith)
 
 
-**一句话灵感 → 探讨设定 → 自动填表 → 批量写作 → 本地过审 → 导出成书**
+**一句话灵感 → 探讨设定 → 自动填表 → 批量写作 → 导出成书**
 
 
 > 💡 **一句话定位**：用 AI 写长篇网文，最怕写到一半——人设崩了、设定对不上、灵感枯竭。Novel Smith 把 **AI 写作 + 分层记忆 + 创意工坊** 装进你电脑里：AI 帮你从灵感写到成书，写 100 章人设也不崩，设定自动建档，你随时接手改。**未发表稿件一个字节都不上传。**
@@ -40,7 +40,7 @@
 
 <p align="center">
 
-  <a href="https://huanweide.github.io/novel-smith/"><b>▶ 在线 Demo（规则引擎 · 免 Key）</b></a>
+  <a href="https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W"><b>▶ 在线预览站（完整功能 · 免安装）</b></a>
 
   &nbsp;·&nbsp;
 
@@ -68,7 +68,7 @@
 
 - 🔒 **未发表稿件零上传** —— 全部存在你电脑上的一个本地 SQLite 文件里，正文和 API Key 都不出本机；无账号、无云、无遥测。
 
-- 🔍 **（可选）离线过审自检** —— 12 条本地规则逐句标出"哪像 AI、为什么、怎么改"，不联网、不调模型、不花一分钱（下面 30 秒就能试）。它只是质量工具，不是核心——你完全可以写完直接导出，不开它。
+- 🔍 **（可选）离线过审自检** —— 12 条本地规则逐句标出"哪像 AI、为什么、怎么改"，不联网、不调模型、不花一分钱。它只是质量工具，不是核心——你完全可以写完直接导出，不开它。
 
 
 ## 谁该用 / 谁先别用
@@ -89,7 +89,7 @@
 
 - 你只想要一句提示词自动吐出一整本小说（这不现实，我们也故意不做）；
 
-- 你完全不想在本地跑任何程序、连 `npm` 都不碰——可以先去[在线 demo](https://huanweide.github.io/novel-smith/) 试去 AI 味，但完整功能需本地跑；
+- 你完全不想在本地跑任何程序、连 `npm` 都不碰——先去[在线预览站](https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W)体验完整功能；要保存自己的私密稿件，本地跑或按下方「免费云端部署」给自己发一个专属实例；
 
 - 你只写短篇文案、社媒推文等一次性文本。
 
@@ -108,151 +108,58 @@
 
 ## 30 秒看懂
 
+Novel Smith 是一个**写长篇的本地工作台**——它解决的不是「怎么生成文字」，而是「写到第 40 章还记得第 3 章埋的线」：
 
-Novel Smith 是一个**写长篇的本地工作台**，去 AI 味检测只是它完全离线跑的「规则引擎」里最直观的一项能力。先不装、不配 Key，**打开[在线 demo](https://huanweide.github.io/novel-smith/)**，粘一段你自己的文字，立刻看到规则引擎怎么逐句标出 AI 腔、为什么、怎么改。
+  · **分层记忆引擎** → 近章全文 + 远章摘要 + 事实楼层，写 100 章不降智；
+  · **全书一致性互审** → 角色/地点/时间线自动核对，前后矛盾写完就报；
+  · **创意工坊预设市场** → 17 个内置示范预设，一套提示词沉淀成资产；
+  - **游戏本模式** → 第一人称亲历你写的世界：鬼谷式人物卡、探查判定、退场死亡、格子地图；
+  · **去 AI 味自检（内置辅助）** → 本地规则引擎逐句标注机器味，仅作参考不算卖点；
+  · **一键导出** → TXT / Markdown / HTML / EPUB / DOCX。
 
+先不装、不配 Key，**打开[在线预览站](https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W)** 直接体验完整功能；要保存自己的私密稿件，按下方「免费云端部署」三分钟给自己发一个专属实例，或一行命令本地跑。
 
-下面这份是**真实跑出来的输出**（用本仓库 `src/core/humanize` 规则引擎跑下面这段 AI 腔文字）：
-
-
-```
-
-输入：
-
-值得注意的是，夜色中的古城显得格外静谧。他缓缓睁开双眼，心中不由得微微一凛，
-
-仿佛有什么东西正在暗处窥视着自己。
-
-
-综上所述，这场突如其来的变故，不仅仅改变了他一个人的命运，更是深刻地影响了
-
-整个家族的未来走向。他深吸一口气，目光坚定地望向远方——那里，是希望的所在。
-
-
-阳光透过树叶的缝隙洒落下来，形成斑驳的光影。她轻轻叹了口气，似乎想要说些什么，
-
-却最终什么也没有说出口。
-
-```
-
-
-```
-
-=== 本地过审自检报告 ===
-
-AI 痕迹指数  69 / 100          等级：痕迹明显（noticeable）
-
-
-原始统计（可解释，不是玄学分数）
-
-  总字数 181 · 句数 6 · 平均句长 30.2 字 · 句长标准差 9.00
-
-  破折号密度 5.50 /千字 · AI 高频词 27.60 /千字 · 短句占比 0.0%
-
-
-按规则聚合
-
-  ai-vocab          AI 高频词            high    x5
-
-  uniform-sentence  句长过于均匀         medium  x1
-
-  progressive-pair  「不仅…而且…」递进句  medium  x1
-
-
-逐段评分
-
-  [P0] ██████████ 100  命中 3 处
-
-      · AI 高频词(high)  "值得注意的是，夜色中的古城显得格外静…"
-
-        为什么: 典型的说明文过渡腔，小说对话与叙述里几乎没人会这么起句。
-
-        怎么改: 直接删掉，让事实自己说话，或换成具体的人物动作。
-
-      · 句长过于均匀(medium)
-
-        为什么: 6 个句子的长度标准差只有 9.0 字（平均 30.2 字），像用尺子量过。
-
-        怎么改: 刻意加入几个短句（3-8 字）制造节奏变化，长句里塞进一个破句。
-
-  [P1] ██████████ 100  命中 2 处
-
-      · AI 高频词(high)  "综上所述，这场突如其来的变故，不…"
-
-        为什么: 论文腔，出现在小说正文里非常突兀。
-
-        怎么改: 整句删掉，或改成人物的判断与抉择。
-
-      · 「不仅…而且…」递进句(medium)
-
-        为什么: 把两件能分开说的事拧成一个长句，读着累，也是 AI 凑层次感的常用手法。
-
-  [P2] ██████████ 100  命中 2 处
-
-      · AI 高频词(high)  "阳光透过树叶的缝隙洒落下来，形成斑驳…"
-
-        为什么: AI 写环境描写的固定模板句。
-
-        怎么改: 换成与情节相关的环境细节，别用通用美景填充。
-
-```
-
-
-**这一段全程在你浏览器里跑**：不联网、不上传、不调模型、不花一分钱 —— 你的未发表稿件一个字节都不出本机。这一点是任何云端 AI 检测都做不到的（它们都要求你把稿件传上去）。
-
-
-> ⚠️ 规则引擎只能帮你**降低机器味**，不能保证通过任何平台的 AI 率审核。平台算法不公开且持续变化，结果仅供参考。
-
+**全程你的文字归你**：本地跑一个字节不出本机；云端部署时数据在你自己的 Turso 库里。
 
 ---
-
 
 ## 界面一览
 
+真实运行截图，不是概念图。**[在线预览站](https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W)** 里可以直接玩到同样的界面。
 
-真实运行截图，不是概念图。完整演示见[在线 demo](https://huanweide.github.io/novel-smith/)。
+### 角色 · AI 生成 + 探查判定（鬼谷式人物卡）
 
+头像由生图服务按档案生成（设置里配好 Key 即可一键生成）；底细由 AI 填充；「探查」按你自己的神识功法与情报掷骰，看清一层还有更深一层——牵挂仍打码，那是他不愿让陌生人知道的事：
 
-| 首页 · 小说宇宙入口 | 探讨模式 · 对话式构建世界观 |
+![人物卡 · AI 立绘 + 底细填充 + 探查解锁](docs/screenshots/人物卡-AI立绘.png)
 
+### 游戏模式 · 第一人称亲历你写的世界
+
+左书脊右档案，正文里人名即热点（朱色可点开人物卡），「可往之处」给方向、自由输入给一切：
+
+![游戏模式 · 正文热点与可往之处](docs/screenshots/游戏模式-整体.png)
+
+### 小说模式 · 长篇工作台
+
+章纲 / 正文 / 一致性互审 / 一键导出，写到第 100 章还记得第 3 章埋的线：
+
+![小说模式 · 工作台](docs/screenshots/小说模式-工作台.png)
+
+### 游戏模式更多切面
+
+人物卡左栏动作（交谈/试探/强硬/事务/往来/惯用招/标记）与档案页签（概览/底细/随身/关系/本事）的全貌，生图服务在设置页配置：
+
+| 人物卡 · 两栏全貌 | 生图服务可配置（设置页） |
 |---|---|
-
-| ![](docs/screenshots/home.png) | ![](docs/screenshots/explore.png) |
-
-
-| 首页 | 工作台 |
-
-|---|---|
-
-| ![](docs/screenshots/novel-smith-home.png) | ![](docs/screenshots/novel-smith-workbench.png) |
-
-
-**🎮 游戏本模式 · 人物卡（照《鬼谷八荒》的样子做的）**——左栏竖排动作（交谈/试探/强硬/事务/往来/惯用招/标记，自由度拉满），右栏档案页签一页页进（概览/底细/随身/关系/本事）；探查判据是你自己的神识功法与情报，骰面回执全透明；头像可导入本地图片，也可在设置里配好生图服务后一键 AI 生成：
-
-| 人物卡 · 左栏动作 + 档案页签 | 生图服务可配置（设置页） |
-
-|---|---|
-
 | ![](docs/screenshots/角色卡-鬼谷式-两栏.png) | ![](docs/screenshots/设置-生图配置.png) |
 
-
-游戏本还有一整套叙事系统：故事页（阶段进度 / 故事线树 / 伏笔五状态 / 跨章编年）、设定页（15 类世界卡自动归类）、人物名录（重要角色才立卡；退场死亡角色垫后但卡永远打得开）：
+叙事系统协同（故事页：阶段进度 / 故事线树 / 伏笔五状态 / 跨章编年；设定页：15 类世界卡；名录：重要角色才立卡，退场死亡角色垫后但卡永远打得开）：
 
 | 故事页 · 叙事系统协同 | 设定页 · 世界卡 15 类 | 名录 · 殁章与退场 |
-
 |---|---|---|
-
 | ![](docs/screenshots/叙事移植-故事页.png) | ![](docs/screenshots/叙事移植-设定页.png) | ![](docs/screenshots/角色卡探查-名录殁章.png) |
 
-
-完整闭环演示（从一句话灵感到导出成书）：
-
-
-![工作流演示](docs/screenshots/demo.gif)
-
-
 ---
-
 
 ## 它能做什么
 
@@ -306,7 +213,7 @@ Novel Smith 把这些「记不住的活」交给工程台自动管，你只管�
 ```
 
 
-**生成正文、拆书、角色与世界书管理要写本地 SQLite 文件**，所以要在你自己机器上跑（在线 demo 跑在无状态云环境，写不了本地文件）。**你的文字不出本机。**
+**生成正文、拆书、角色与世界书管理要写数据库文件**：本地跑写你电脑上的 SQLite；云端部署写你自己的 Turso 云库（见「免费云端部署」）。[在线预览站](https://wbapp-fhrzoayg7znry5aqqsyov8.app.workbuddy.host/?sharecode=BU3MJIO66W)是共用演示实例，体验用，别把私密稿件留在那。
 
 
 ### 哪些功能不需要 API Key
@@ -448,7 +355,7 @@ npm run dev:db     # 起站后打开 http://localhost:3001/detector
 ```
 
 
-去 AI 味检测给你：一个总分 + 四档等级（基本干净 / 轻微 / 明显 / 严重）、逐段绿黄红色条、**每一处都告诉你为什么像 AI 写的、怎么改**、六项可解释的原始统计。觉得好用了，再去「设置」页配 Key。
+去 AI 味检测（可选辅助）在 `/detector` 页：纯本地规则引擎，逐句给「为什么像 AI、怎么改」。它不是本产品的重点，写完直接导出也完全可以。
 
 
 ### 首次配置 LLM 提供商
@@ -714,7 +621,7 @@ export const PARAGRAPH_RULES = [/* ...既有规则, */ detectNegativeParallel] a
 
 - [x] 本地 SQLite 单文件架构（零配置、无需 Docker）
 
-- [x] 去 AI 味规则引擎 + 在线 demo 零门槛试用
+- [x] 在线预览站零门槛试用（完整功能，免安装）
 
 - [x] 分层记忆引擎 + 事件分级衰减
 
