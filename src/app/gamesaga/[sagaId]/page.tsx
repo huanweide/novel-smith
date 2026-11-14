@@ -15,13 +15,18 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useParams, useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { CharacterSheetPanel } from "@/components/game/saga/CharacterSheetPanel";
+import { FreedomSection } from "@/components/game/saga/FreedomSection";
+import { DEFAULT_EXTENDED, EXTENDED_SLOT_COUNT, type ExtendedAction } from "@/core/game/verbs";
+import { PersonPanel } from "@/components/game/saga/PersonPanel";
+import { NarrativeStoryPanel, NarrativeLorePanel } from "@/components/game/saga/NarrativePanels";
+import { parseDiscovery, staggerDelays, type DiscoveryKind } from "@/core/game/discovery-view";
+import { SagaMapPanel } from "@/components/game/saga/SagaMapPanel";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/components/ui/States";
 import { Modal } from "@/components/ui/Modal";
 import { toastError, toastSuccess } from "@/components/ui/toast";
 import { isConfrontationalAction } from "@/core/game/game-prompts";
 import { applyFrontendItemChanges } from "@/core/game/reconcile";
-import GameParticles, { type GameParticlesHandle } from "@/components/game/GameParticles";
 
 interface SagaChapter {
   id: string;
@@ -50,6 +55,8 @@ interface SagaDetail {
   narrativeMode: string;
   /** 暗线账本：仅上帝/GM 视角返回真相（其他视角为空数组） */
   secretLedger: Array<{ name: string; owner: string; truth: string; round: number }>;
+  /** 好感账：{ 人名: { level, reason } }。此前只有 saga-map 在读，界面从不显示 */
+  relations?: Record<string, { level: number; reason: string }>;
   rollMode: string;
   rollDifficulty: string;
   playAsCandidates: Array<{ id: string | null; name: string; role: string; brief: string }>;
@@ -79,11 +86,20 @@ const LEFT_TABS = [
   { key: "plot", label: "情节", icon: "book" },
   { key: "characters", label: "角色", icon: "user" },
   { key: "factions", label: "势力", icon: "building" },
+  // 因果脉络（伏笔）：玩家种下的因终会结果，抄小说系统"伏笔"在游戏模式的对应实现
+  { key: "causality", label: "因果", icon: "link" },
+  // 叙事系统移植：故事线树 / 伏笔五状态 / 世界线编年 / 6 阶段
+  { key: "story", label: "故事", icon: "scroll" },
+  // 15 类世界卡（自动登记 → 待审 → 确认后注入 AI 上下文）
+  { key: "lore", label: "设定", icon: "grid" },
+  // R9 自由度：目标 / 声明事实 / 因果——玩家改写世界的一栏
+  { key: "freedom", label: "自由", icon: "pencil" },
 ] as const;
 const RIGHT_TABS = [
   { key: "text", label: "正文", icon: "file" },
   { key: "backpack", label: "背包", icon: "backpack" },
   { key: "world", label: "世界", icon: "globe" },
+  { key: "map", label: "地图", icon: "map" },
 ] as const;
 const QUICK_ACTIONS = [
   { type: "observe", label: "观察", icon: "search", desc: "观察环境/人物" },
@@ -119,7 +135,7 @@ function renderHotspots(text: string, names: string[], onPick: (name: string) =>
         key={i}
         onClick={() => onPick(p)}
         title={`点击发起行动：观察 ${p}`}
-        className="game-hotspot mx-px rounded px-0.5 text-[#E4B863] underline decoration-dotted underline-offset-2 transition-colors hover:bg-[#E4B863]/15"
+        className="game-hotspot mx-px px-0.5 text-[var(--nv-creative)] underline decoration-dotted underline-offset-[3px] transition-opacity hover:opacity-70"
       >
         {p}
       </button>
@@ -133,6 +149,18 @@ function renderHotspots(text: string, names: string[], onPick: (name: string) =>
  * 流式显示截断：结构区块（===新实体/角色物品变动/暗线===、【情节进度】）都在正文之后，
  * 出现即截断——暗线（TRICK|…）绝不能在流式期闪现给玩家（轮末 parse 只对落库正文生效）。
  */
+/** 汉字数字（页码用）：37 → 三十七 */
+const CN_DIGIT = ["〇", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+function cnNum(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "〇";
+  if (n < 10) return CN_DIGIT[n];
+  if (n < 20) return "十" + (n % 10 ? CN_DIGIT[n % 10] : "");
+  if (n < 100) return CN_DIGIT[Math.floor(n / 10)] + "十" + (n % 10 ? CN_DIGIT[n % 10] : "");
+  return String(n);
+}
+/** 十二时辰（书口显示「故事里的现在」，不是机器时间） */
+const SHICHEN = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+
 function hideStructBlocks(raw: string) {
   const idx = raw.search(/(===|【情节进度)/);
   return idx >= 0 ? raw.slice(0, idx) : raw;
@@ -154,6 +182,8 @@ function SagaDetailInner() {
   const [streamed, setStreamed] = useState("");
   const [options, setOptions] = useState<GameOption[]>([]);
   const [customInput, setCustomInput] = useState("");
+  /** 被判定层拦下：在左栏说清楚，不进正文（拒绝写成剧情最难看） */
+  const [blocked, setBlocked] = useState<{ reason: string; alternatives: string[] } | null>(null);
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterOutline, setChapterOutline] = useState("");
   const [showNewChapter, setShowNewChapter] = useState(false);
@@ -163,6 +193,32 @@ function SagaDetailInner() {
   const [dice, setDice] = useState<DiceState | null>(null);
   const [diceTick, setDiceTick] = useState(0);
   const streamRef = useRef<AbortController | null>(null);
+  /** 正文滚动容器：生成时不打扰，生成完只跳到新内容的开头 */
+  const narrativeRef = useRef<HTMLDivElement | null>(null);
+  /** 位置跳转（隐藏式）：章节轮次一多就找不到刚看的那段 */
+  const [showIndex, setShowIndex] = useState(false);
+  // 纸本皮肤：左抽屉（目录/情节/自由）· 右抽屉（背包/世界/地图）
+  const [showLeftDrawer, setShowLeftDrawer] = useState(false);
+  const [showRightDrawer, setShowRightDrawer] = useState(false);
+  const [showQuickBar, setShowQuickBar] = useState(false);
+  // 扩展按键：6 格自定义即时行为，存浏览器本地（这是玩家的键盘，不是世界的设定）
+  const [extSlots, setExtSlots] = useState<ExtendedAction[]>(DEFAULT_EXTENDED);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("nv-ext-slots-v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length === EXTENDED_SLOT_COUNT) setExtSlots(parsed);
+      }
+    } catch { /* 坏数据当默认 */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("nv-ext-slots-v1", JSON.stringify(extSlots));
+    } catch { /* 无痕模式忽略 */ }
+  }, [extSlots]);
 
   // ── 游戏面板状态（移植自旧游戏模式，数据源 = 同一引擎的 SSE 事件）──
   const [round, setRound] = useState(0);
@@ -171,15 +227,14 @@ function SagaDetailInner() {
   const [entities, setEntities] = useState<GEntity[]>([]);
   const [items, setItems] = useState<GItem[]>([]);
   const [turns, setTurns] = useState<TurnRec[]>([]);
-  const [leftTab, setLeftTab] = useState<"plot" | "characters" | "factions">("plot");
-  const [rightTab, setRightTab] = useState<"text" | "backpack" | "world">("text");
+  const [leftTab, setLeftTab] = useState<"plot" | "characters" | "factions" | "causality" | "story" | "lore" | "freedom">("plot");
+  const [rightTab, setRightTab] = useState<"text" | "backpack" | "world" | "map">("text");
   const [backpackFilter, setBackpackFilter] = useState<"all" | "mine" | "companions">("all");
   const [showTutorial, setShowTutorial] = useState(false);
 
   // 发现提示（及时演算）+ 新物品高亮 + 粒子 + 音效
-  const particlesRef = useRef<GameParticlesHandle>(null);
   const discoveryIdRef = useRef(0);
-  const [discoveries, setDiscoveries] = useState<Array<{ id: number; label: string }>>([]);
+  const [discoveries, setDiscoveries] = useState<Array<{ id: number; label: string; kind?: DiscoveryKind }>>([]);
   const [newItemKeys, setNewItemKeys] = useState<Set<string>>(new Set());
   const newItemKeysRef = useRef<Set<string>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -244,10 +299,9 @@ function SagaDetailInner() {
   }, []);
 
   // 发现提示上屏：pill + 粒子爆发（香槟金，与旧游戏模式同款）
-  const fireDiscovery = useCallback((label: string) => {
-    particlesRef.current?.emitBurst({ color: "#E4B863", count: 12 });
+  const fireDiscovery = useCallback((label: string, kind?: DiscoveryKind) => {
     const id = ++discoveryIdRef.current;
-    setDiscoveries((prev) => [...prev, { id, label }]);
+    setDiscoveries((prev) => [...prev, { id, label, kind }]);
     setTimeout(() => setDiscoveries((prev) => prev.filter((d) => d.id !== id)), 3200);
   }, []);
 
@@ -402,18 +456,28 @@ function SagaDetailInner() {
   };
 
   // ── 行动入口（两段式分流）：跑团+对抗 → 先掷骰（动画+可重骰），点「继续」才叙事 ──
-  const pendingActionRef = useRef<{ actionType: string; actionText: string; selectedOption?: number } | null>(null);
+  const pendingActionRef = useRef<{
+    actionType: string;
+    actionText: string;
+    selectedOption?: number;
+    extra?: { target?: string; targetItem?: string };
+  } | null>(null);
 
-  const act = async (actionType: string, actionText: string, selectedOption?: number) => {
+  const act = async (
+    actionType: string,
+    actionText: string,
+    selectedOption?: number,
+    extra?: { target?: string; targetItem?: string }
+  ) => {
     if (!sessionId || status !== "playing") return;
     // 上帝/GM 视角不掷骰：没有"我在冒险"，编排里的成败由 AI 按戏剧性演（也避免上帝给自己作弊）
     if (saga?.narrativeMode !== "god" && saga?.rollMode === "tabletop" && isConfrontationalAction(actionType, actionText)) {
-      pendingActionRef.current = { actionType, actionText, selectedOption };
+      pendingActionRef.current = { actionType, actionText, selectedOption, extra };
       setDice({ rolling: true, result: null });
       await doRoll(false);
       return;
     }
-    await runAction(actionType, actionText, selectedOption, undefined);
+    await runAction(actionType, actionText, selectedOption, undefined, extra);
   };
 
   // ── 掷骰（第一段）：/api/game/roll，动画 1.6s 后揭晓；isReroll 消耗次数 ──
@@ -431,7 +495,7 @@ function SagaDetailInner() {
       if (data.skipped) {
         // 非对抗/自由模式兜底：直接叙事
         setDice(null);
-        await runAction(p.actionType, p.actionText, p.selectedOption, undefined);
+        await runAction(p.actionType, p.actionText, p.selectedOption, undefined, p.extra);
         return;
       }
       // 悬浮动画 1.6 秒后揭晓（期间页面完全可操作）
@@ -457,7 +521,7 @@ function SagaDetailInner() {
     if (!p || !d) return;
     pendingActionRef.current = null;
     setDice(null);
-    await runAction(p.actionType, p.actionText, p.selectedOption, { d100: d.d100, successRate: d.successRate, reasons: d.reasons });
+    await runAction(p.actionType, p.actionText, p.selectedOption, { d100: d.d100, successRate: d.successRate, reasons: d.reasons }, p.extra);
   };
 
   // ── 执行行动（第二段本体）──
@@ -465,9 +529,11 @@ function SagaDetailInner() {
     actionType: string,
     actionText: string,
     selectedOption: number | undefined,
-    preRolled: { d100: number; successRate: number; reasons?: string[] } | undefined
+    preRolled: { d100: number; successRate: number; reasons?: string[] } | undefined,
+    extra?: { target?: string; targetItem?: string }
   ) => {
     if (!sessionId || status !== "playing") return;
+    setBlocked(null);
     setStatus("generating");
     setStreamed("");
     setRollInfo(null);
@@ -478,11 +544,20 @@ function SagaDetailInner() {
       const res = await fetch("/api/game/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, actionType, actionText, selectedOption, preRolled }),
+        body: JSON.stringify({ sessionId, actionType, actionText, selectedOption, preRolled, ...(extra || {}) }),
         signal: controller.signal,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "未知错误" }));
+        // 判定层拦下（409）：这类拒绝写在界面上，不写进正文
+        if (res.status === 409 && (err as any)?.reason) {
+          setBlocked({
+            reason: (err as any).reason as string,
+            alternatives: Array.isArray((err as any).alternatives) ? (err as any).alternatives : [],
+          });
+          setStatus("playing");
+          return;
+        }
         throw new Error(err.error || "行动失败");
       }
       await consumeSSE(res, (done) => {
@@ -506,7 +581,19 @@ function SagaDetailInner() {
         const updated = applyFrontendItemChanges(prevItems as any, done.itemChanges || [], newRound) as unknown as GItem[];
         setItems(updated);
         flagNewItems(prevItems, updated);
+        // 发现提示：物品 / 称号 / 关系变化，逐条上屏（错开 120ms，一条一条来）
+        const disc = (done as any).discoveries;
+        if (Array.isArray(disc)) {
+          disc.forEach((d: any, i: number) => {
+            if (d?.text) window.setTimeout(() => fireDiscovery(d.text as string, d.kind), i * 120);
+          });
+        }
         setTurns((prev) => [...prev, { round: newRound, playerAction: actionText, narrative: done.narrative || "" }]);
+        // 生成完毕：只做一件事——把这一轮的开头带到视野顶端。
+        // 生成途中一律不跟随，玩家想往上翻就往上翻，读完再说。
+        setTimeout(() => {
+          document.getElementById(`turn-${newRound}`)?.scrollIntoView({ block: "start" });
+        }, 80);
         load();
       });
     } catch (e: any) {
@@ -562,7 +649,8 @@ function SagaDetailInner() {
   const interactWith = (name: string, actionType: string, text: string) => {
     setInteractChar(null);
     setShowGive(false);
-    void act(actionType, text);
+    // target 显式带上：引擎结算好感时用它，不从正文里猜人名
+    void act(actionType, text, undefined, { target: name });
   };
   const saveEdit = async () => {
     if (editingRound == null || !sessionId) return;
@@ -741,7 +829,7 @@ function SagaDetailInner() {
         body: JSON.stringify({ narrativeMode: mode }),
       });
       if (!res.ok) throw new Error("切换失败");
-      const label = mode === "god" ? "上帝视角：你不再扮演任何人，输入即导演编排" : mode === "third" ? "第三人称小说视角：镜头跟随你的角色" : "第一人称：你就是你的角色";
+      const label = mode === "god" ? "上帝：写什么就成为事实，荒诞无上限" : mode === "third" ? "小说：镜头跟随，不合剧情时转成波折" : "沉浸：受距离与条件约束，成败真算";
       if (mode === "god") setLeftTab("plot"); // 暗线账本在「情节」页，切过去就能看见
       toastSuccess(label);
       load();
@@ -780,43 +868,44 @@ function SagaDetailInner() {
     return <div className="flex justify-center py-20"><LoadingDots label="加载游戏本" /></div>;
   }
 
-  const charEntities = entities.filter((e) => e.type === "角色" || (e.type || "").includes("角色"));
-  const factionEntities = entities.filter((e) => e.type === "势力" || (e.type || "").includes("势力"));
+  // 实体 type 是英文枚举（character/faction/...），不是中文——此前用"角色"过滤永远为空
+  const charEntities = entities.filter((e) => e.type === "character");
+  const factionEntities = entities.filter((e) => e.type === "faction");
   const activeChapterOutline = activeChapter?.outline || null;
 
   return (
-    <div
-      data-game-theme="night"
+      <div
+      data-game-theme="paper"
       className="game-root relative flex h-screen flex-col overflow-hidden bg-[var(--nv-void)] text-[var(--nv-text-secondary)] font-sans"
     >
-      {/* 星空粒子背景（吸收旧游戏模式的沉浸氛围） */}
-      <div className="pointer-events-none absolute inset-0 z-0">
-        <GameParticles ref={particlesRef} theme="night" />
-      </div>
 
-      {/* 检测发现提示层（及时演算：标记一出现立即上屏） */}
+      {/* 渲染填表 · 右侧浮体（略立体、四色分类、一条条浮上来、不用点确定） */}
       {discoveries.length > 0 && (
-        <div className="pointer-events-none fixed left-1/2 top-16 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
-          {discoveries.map((d) => (
-            <div
-              key={d.id}
-              className="nf-discovery-pill flex items-center gap-1.5 rounded-full border bg-[var(--nv-surface-1)]/90 px-3 py-1 text-xs font-medium shadow-lg backdrop-blur-sm"
-              style={{ borderColor: "#E4B863", color: "#E4B863" }}
-            >
-              <Icon name="sparkles" size={12} />
-              {d.label}
-            </div>
-          ))}
+        <div className="zm-float-stack">
+          {discoveries.map((d, i) => {
+            const dv = parseDiscovery(d.label, d.kind ? { kind: d.kind } : undefined);
+            return (
+              <div
+                key={d.id}
+                className={`zm-float ${dv.kind}`}
+                style={{ animationDelay: `${staggerDelays(discoveries.length)[i] || 0}ms` }}
+              >
+                <span className="zm-float-cat">{dv.cat}</span>
+                <span className="zm-float-text">{dv.text}</span>
+                {dv.sub && <span className="zm-float-sub">{dv.sub}</span>}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* 顶部：暗色玻璃 */}
-      <div className="relative z-10 mb-3 flex items-center justify-between gap-3 border-b border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/60 px-4 py-3 backdrop-blur-sm">
+      {/* 顶栏：纸本薄条（不是暗色玻璃） */}
+      <div className="relative z-10 mb-0 flex shrink-0 items-center justify-between gap-3 border-b border-[var(--nv-border-2)] px-4 py-1.5">
         <div className="flex min-w-0 items-center gap-3">
           {/* 退出游戏：用户反馈「进去退不出去」——从 16px 图标改为带文字的明显按钮 */}
           <button
             onClick={() => router.push("/gamesaga")}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2.5 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+            className="zm-topctl"
             title="退出游戏模式，返回游戏本列表（进度已保存）"
           >
             <Icon name="arrowLeft" size={13} /> 退出
@@ -836,16 +925,16 @@ function SagaDetailInner() {
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {/* 玩法教程（本页直达） */}
-          <Button onClick={() => setShowTutorial(true)} className="btn-ghost h-8 rounded-lg px-3 text-xs" title="怎么玩：模式区别 / 背包世界 / 发现提示">
+          <button onClick={() => setShowTutorial(true)} className="zm-topctl" title="怎么玩：模式区别 / 背包世界 / 发现提示">
             <Icon name="lightbulb" size={12} /> 玩法
-          </Button>
-          {/* 叙事视点（三档）：亲历 / 小说 / 上帝——分段控件比下拉更直观 */}
+          </button>
+          {/* 三档玩法：差别在「世界怎么回应你」，不是人称 */}
           <div
-            className="flex h-8 items-center gap-0.5 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] p-0.5"
-            title="亲历=你就是角色（第二人称「你」）；小说=第三人称镜头跟随你的角色；上帝=不扮演任何人，输入即导演编排，暗线真相对你公开"
+            className="zm-seg"
+            title="沉浸（推荐）=你是角色，受距离与条件约束，成败真算；小说=第三人称镜头，不合剧情时转成波折而非拒绝；上帝=不扮演任何人，写什么就成为事实，荒诞无上限"
           >
             {([
-              { v: "first", label: "亲历", icon: "user" },
+              { v: "first", label: "沉浸", icon: "user" },
               { v: "third", label: "小说", icon: "book" },
               { v: "god", label: "上帝", icon: "eye" },
             ] as const).map((m) => {
@@ -854,13 +943,7 @@ function SagaDetailInner() {
                 <button
                   key={m.v}
                   onClick={() => { if (!on) setNarrativeMode(m.v); }}
-                  className={`flex h-full items-center gap-1 rounded-md px-2 text-[11px] transition-colors ${
-                    on
-                      ? m.v === "god"
-                        ? "bg-[var(--nv-primary)]/15 font-medium text-[var(--nv-primary)]"
-                        : "bg-[var(--nv-creative-soft)] font-medium text-[var(--nv-creative)]"
-                      : "text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
-                  }`}
+                  className={on ? (m.v === "god" ? "on-god" : "on") : ""}
                 >
                   <Icon name={m.icon as IconName} size={11} /> {m.label}
                 </button>
@@ -886,10 +969,10 @@ function SagaDetailInner() {
               }
             }}
             title="自由叙事=AI 裁决一切；跑团检定=对抗行动掷骰定结果，AI 只演不判"
-            className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
+            className="zm-topctl"
           >
-            <option value="free">模式：自由叙事（无骰子）</option>
-            <option value="tabletop">模式：跑团检定（对抗掷骰）</option>
+            <option value="free">自由叙事（无骰子）</option>
+            <option value="tabletop">跑团检定（对抗掷骰）</option>
           </select>
           {/* 重骰难度档：简单=无限重骰 / 困难=3 次 / 真实=不可重骰 */}
           {saga.rollMode === "tabletop" && (
@@ -911,7 +994,7 @@ function SagaDetailInner() {
                 }
               }}
               title="简单=无限重骰；困难=每章 3 次重骰；真实=骰出什么是什么，不能重骰"
-              className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
+              className="zm-topctl"
             >
               <option value="easy">难度：简单</option>
               <option value="hard">难度：困难</option>
@@ -924,7 +1007,7 @@ function SagaDetailInner() {
               value={saga.playAsName || ""}
               onChange={(e) => setPlayAs(e.target.value)}
               title="选择你扮演的角色（局级设置，下一章生效）"
-              className="h-8 cursor-pointer rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 text-xs text-[var(--nv-text-primary)] outline-none transition-colors hover:border-[var(--nv-creative-soft)] focus:border-[var(--nv-creative-soft)]"
+              className="zm-topctl"
             >
               <option value="">扮演：默认主角</option>
               {saga.playAsCandidates.map((c) => (
@@ -932,26 +1015,47 @@ function SagaDetailInner() {
               ))}
             </select>
           )}
-          <Button onClick={() => setShowNewChapter((v) => !v)} className="btn-ghost h-8 shrink-0 rounded-lg px-3 text-xs">
+          <button onClick={() => setShowNewChapter((v) => !v)} className="zm-topctl">
             <Icon name="plus" size={12} /> 新章
-          </Button>
+          </button>
         </div>
       </div>
 
       {showNewChapter && (
-        <div className="relative z-10 mx-4 mb-3 space-y-2 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 p-4">
-          <input value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} placeholder="章节名（留空自动「第N章」）" className="input-glass w-full rounded-lg px-3 py-2 text-sm" />
-          <textarea value={chapterOutline} onChange={(e) => setChapterOutline(e.target.value)} placeholder="本章章纲（可选：想让这一章发生什么）" rows={3} className="input-glass w-full rounded-lg px-3 py-2 text-sm" />
+        <div className="relative z-10 mx-4 mb-3 space-y-2 rounded-none border border-[var(--zm-rule)] bg-[var(--nv-surface-2)]/40 p-4">
+          <input value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} placeholder="章节名（留空自动「第N章」）" className="zm-field" />
+          <textarea value={chapterOutline} onChange={(e) => setChapterOutline(e.target.value)} placeholder="本章章纲（可选：想让这一章发生什么）" rows={3} className="zm-field" />
           <div className="flex gap-2">
-            <Button onClick={createChapter} className="btn-primary rounded-lg px-4 py-1.5 text-xs">建章</Button>
-            <Button onClick={() => setShowNewChapter(false)} className="btn-ghost rounded-lg px-4 py-1.5 text-xs">取消</Button>
+            <Button onClick={createChapter} className="btn-primary rounded-none px-4 py-1.5 text-xs">建章</Button>
+            <Button onClick={() => setShowNewChapter(false)} className="btn-ghost rounded-none px-4 py-1.5 text-xs">取消</Button>
           </div>
         </div>
       )}
 
-      <div className="relative z-10 flex min-h-0 flex-1 gap-3 px-4 pb-4">
+      <div className="relative z-10 flex min-h-0 flex-1">
         {/* 左栏：章节 + 情节/角色/势力 */}
-        <aside className="hidden w-60 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 backdrop-blur-sm lg:flex">
+        {/* 书脊：常驻。这一栏回答「我在这本书的哪儿」 */}
+        <aside className="zm-spine">
+          <div className="zm-spine-brand">NS</div>
+          <div className="zm-spine-name" title={saga.title}>{saga.title.replace(/^游戏本\s*[·・]\s*/, "").slice(0, 12)}</div>
+          <div className="zm-spine-vol">卷 一</div>
+          <div className="zm-scale" title={`共 ${saga.chapters.length} 章`}>
+            {saga.chapters.map((c) => (
+              <i key={c.id} className={activeChapter?.id === c.id ? "on" : ""} />
+            ))}
+          </div>
+          <button className="zm-spine-btn" onClick={() => setShowLeftDrawer(true)} title="目录 · 情节 · 人物 · 自由行动">目</button>
+          <div className="zm-seal">{saga.narrativeMode === "god" ? "目送" : saga.narrativeMode === "third" ? "旁观" : "在此"}</div>
+        </aside>
+
+        {showLeftDrawer && (
+          <>
+            <div className="zm-mask" onClick={() => setShowLeftDrawer(false)} />
+            <div className="zm-drawer" style={{ left: 66 }}>
+              <div className="flex shrink-0 items-center justify-between border-b border-[var(--nv-border-2)] px-4 py-2.5">
+                <span className="text-[11px] tracking-[0.3em] text-[var(--nv-text-tertiary)]">目 录 · 情 节</span>
+                <button onClick={() => setShowLeftDrawer(false)} className="text-sm text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-text-primary)]">✕</button>
+              </div>
           <div className="shrink-0 space-y-1 overflow-y-auto border-b border-[var(--nv-border-2)] p-2" style={{ maxHeight: "34%" }}>
             {saga.chapters.map((c) => (
               <div
@@ -1000,18 +1104,16 @@ function SagaDetailInner() {
               </div>
             ))}
           </div>
-          <div className="flex shrink-0 border-b border-[var(--nv-border-2)]">
-            {LEFT_TABS.map(({ key, label, icon }) => (
+          {/* 叙事系统移植后共 7 个页签：去掉图标、两字等分，否则最后一个会被裁掉。
+              纸本目录本来就该是文字栏，不是一排图标胶囊。 */}
+          <div className="zm-lefttabs">
+            {LEFT_TABS.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setLeftTab(key)}
-                className={`flex flex-1 items-center justify-center gap-1 py-2 text-xs font-medium transition-colors ${
-                  leftTab === key
-                    ? "border-b-2 border-[var(--nv-creative)] bg-[var(--nv-creative-soft)] text-[var(--nv-creative)]"
-                    : "border-b-2 border-transparent text-[var(--nv-text-tertiary)] hover:text-[var(--nv-text-primary)]"
-                }`}
+                className={leftTab === key ? "on" : ""}
               >
-                <Icon name={icon} size={12} /> {label}
+                {label}
               </button>
             ))}
           </div>
@@ -1127,11 +1229,91 @@ function SagaDetailInner() {
                 ))}
               </div>
             )}
+            {/* 因果脉络（伏笔）：游戏模式"抄小说系统伏笔"的落地点。种子由引擎跨章持久化到 saga.causality，
+                此前只被提示词读取、界面从不展示。这里把"种下的因/已了的果"做成玩家可见的网。 */}
+            {leftTab === "causality" && (
+              <div>
+                <p className="mb-1 font-medium text-[var(--nv-text-primary)]">因果脉络</p>
+                <p className="mb-3 text-[10px] leading-4 text-[var(--nv-text-tertiary)]">
+                  你或他人埋下的「因」，会在合适的剧情时机自然「结果」——这是你的伏笔网。
+                </p>
+                {(() => {
+                  const seeds = Array.isArray((saga as any).causality) ? ((saga as any).causality as any[]) : [];
+                  const active = seeds.filter((s) => !s.triggered);
+                  const done = seeds.filter((s) => s.triggered);
+                  if (seeds.length === 0) {
+                    return <p className="italic text-[var(--nv-text-muted)]">还没有种下的因果——你的每个重大选择都可能埋下一颗种子，它会回来找你。</p>;
+                  }
+                  return (
+                    <>
+                      {active.length > 0 && (
+                        <>
+                          <p className="mb-1.5 mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--nv-creative)]">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--nv-creative)]" />
+                            未了 · 种下的因（{active.length}）
+                          </p>
+                          {active.map((s) => (
+                            <div key={s.id} className="zm-cause zm-cause-active">
+                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                <span className="zm-cause-type">{s.type}</span>
+                                <span className="zm-cause-subject">{s.subject}</span>
+                                <span className="zm-cause-round">第{s.plantedRound}轮种下</span>
+                              </div>
+                              <p className="zm-cause-desc">{s.description}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {done.length > 0 && (
+                        <>
+                          <p className="mb-1.5 mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[var(--nv-text-tertiary)]">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--nv-text-tertiary)]" />
+                            已了 · 回响的果（{done.length}）
+                          </p>
+                          {done.map((s) => (
+                            <div key={s.id} className="zm-cause zm-cause-done">
+                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                <span className="zm-cause-type">{s.type}✓</span>
+                                <span className="zm-cause-subject">{s.subject}</span>
+                                {s.triggeredRound != null && <span className="zm-cause-round">第{s.triggeredRound}轮结果</span>}
+                              </div>
+                              <p className="zm-cause-desc">{s.description}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            {/* 叙事系统移植：故事线/伏笔/世界线/6 阶段 —— 全部收在左抽屉，正文区一件 UI 都不加 */}
+            {leftTab === "story" && (
+              <NarrativeStoryPanel sagaId={sagaId} refreshKey={round} />
+            )}
+            {/* 15 类世界卡：自动登记→待审→确认；确认后才注入 AI 上下文 */}
+            {leftTab === "lore" && (
+              <NarrativeLorePanel sagaId={sagaId} refreshKey={round} />
+            )}
+            {/* R9 自由：目标 / 声明事实 / 因果（声明会走一个 declare 回合，由引擎先入账再演绎） */}
+            {leftTab === "freedom" && (
+              <FreedomSection
+                sessionId={sessionId}
+                round={round}
+                disabled={status !== "playing"}
+                onAct={(c) => act(c.actionType, c.actionText, undefined, { target: c.target, targetItem: c.targetItem })}
+                blocked={blocked}
+                onDismissBlocked={() => setBlocked(null)}
+                onPickAlternative={(t) => { setBlocked(null); setCustomInput(t); }}
+              />
+            )}
           </div>
-        </aside>
+            </div>
+          </>
+        )}
 
-        {/* 中栏：游戏循环（暗色沉浸） */}
-        <main className="flex min-w-0 flex-1 flex-col rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 p-5 backdrop-blur-sm">
+        {/* 中栏：版心 */}
+        <main className="zm-col custom-scrollbar flex min-w-0 flex-1 flex-col overflow-y-auto px-3">
           {!activeChapter ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
               <div className="nv-glow-strong flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--nv-creative)]/15">
@@ -1160,16 +1342,25 @@ function SagaDetailInner() {
             </div>
           ) : (
             <>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <p className="truncate text-sm font-medium text-[var(--nv-text-primary)]">
-                    第 {activeChapter.index} 章 · {activeChapter.title}
-                  </p>
-                  {status === "idle" && activeChapter.status === "archived" && (
-                    <span className="shrink-0 rounded-full bg-[var(--nv-surface-3)] px-2 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">已归档 · 正文含 AI 收尾</span>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <div className="zm-skyline" />
+              <div className="zm-skyline-2" />
+              <div className="zm-runhead">
+                <span>卷 一　·　第 {activeChapter.index} 章</span>
+                <span>{totalWords} 字　<b>／</b>　{round} 轮</span>
+              </div>
+              <div className="mb-1 flex items-start gap-3">
+                <div className="zm-chapno">第{cnNum(Math.max(1, round))}轮</div>
+                <div className="min-w-0 flex-1">
+                    <h1 className="zm-h1">{activeChapter.title}</h1>
+                    <div className="zm-chead-sub">
+                      {status === "idle" && activeChapter.status === "archived"
+                        ? "本章已收束 · 正文含 AI 收尾"
+                        : `${saga.narrativeMode === "god" ? "上帝视角 · 目送" : saga.narrativeMode === "third" ? "小说镜头 · 旁观" : "沉浸扮演 · 在此"} · 第 ${round} 轮`}
+                    </div>
+                  </div>
+              </div>
+              <div className="zm-zhu-rule" />
+              <div className="mb-3 mt-3 flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {rollInfo && (
                     <span
                       className="max-w-[46%] truncate rounded-lg border border-[var(--nv-creative-soft)] bg-[var(--nv-creative-soft)] px-2.5 py-1 text-xs text-[var(--nv-text-primary)]"
@@ -1180,6 +1371,56 @@ function SagaDetailInner() {
                   )}
                   {(status === "playing" || endingChapter) && (
                     <>
+                      {/* 位置：默认收起，点开才是一张目录。轮次一多，找刚才那段靠它 */}
+                      <div className="relative">
+                        <Button
+                          onClick={() => setShowIndex((v) => !v)}
+                          className="btn-ghost h-7 rounded-lg px-3 text-xs"
+                          title="跳到某一轮：轮次多了以后靠它定位"
+                        >
+                          <Icon name="history" size={11} /> 位置
+                        </Button>
+                        {showIndex && (
+                          <div className="absolute right-0 top-9 z-30 max-h-72 w-60 overflow-y-auto rounded-xl border border-[var(--nv-border-3)] bg-[var(--nv-abyss)] p-1 shadow-2xl ring-1 ring-[var(--nv-border-3)]">
+                            <button
+                              onClick={() => {
+                                narrativeRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                                setShowIndex(false);
+                              }}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)]"
+                            >
+                              <Icon name="arrowLeft" size={10} /> 本章开头
+                            </button>
+                            {turns.map((t) => (
+                              <button
+                                key={t.round}
+                                onClick={() => {
+                                  document.getElementById(`turn-${t.round}`)?.scrollIntoView({ block: "start" });
+                                  setShowIndex(false);
+                                }}
+                                className="flex w-full items-baseline gap-1.5 rounded-md px-2 py-1 text-left hover:bg-[var(--nv-surface-2)]"
+                              >
+                                <span className="w-8 shrink-0 text-[10px] text-[var(--nv-creative)]/80">
+                                  第{t.round}轮
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--nv-text-secondary)]">
+                                  {t.playerAction || "—"}
+                                </span>
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => {
+                                const el = narrativeRef.current;
+                                if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+                                setShowIndex(false);
+                              }}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] text-[var(--nv-text-tertiary)] hover:bg-[var(--nv-surface-2)] hover:text-[var(--nv-text-primary)]"
+                            >
+                              <Icon name="arrowDown" size={10} /> 最新一段
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <Button
                         onClick={rollbackLastRound}
                         disabled={round <= 1 || endingChapter}
@@ -1203,17 +1444,31 @@ function SagaDetailInner() {
                     </>
                   )}
                 </div>
-              </div>
               {status === "idle" && activeChapter.status === "archived" && (
                 <div className="mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)]/50 px-3 py-1.5 text-[11px] text-[var(--nv-text-tertiary)]">
                   <Icon name="check" size={12} className="text-[var(--nv-creative)]" />
                   本章已结束并归档（收尾已写入正文）。点左侧另一章继续，或右上「新章」开启下一章。
                 </div>
               )}
-              <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-                {streamed ? (
-                  <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{streamed}</p>
-                ) : turns.length > 0 ? (
+              {/* 到收束点：提示放在这里，但不擅自花一次模型调用——
+                  收尾要写正文，得你点头。 */}
+              {status === "playing" && plotProgress >= 100 && activeChapter?.status !== "archived" && (
+                <div className="mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-[var(--nv-creative)]/30 bg-[var(--nv-creative)]/[0.07] px-3 py-1.5 text-[11px]">
+                  <Icon name="bookmarked" size={12} className="shrink-0 text-[var(--nv-creative)]" />
+                  <span className="min-w-0 flex-1 text-[var(--nv-text-secondary)]">
+                    本章已到收束点（进度 100%）。收尾会写进正文并归档，随时可回看。
+                  </span>
+                  <button
+                    onClick={continueNextChapter}
+                    disabled={endingChapter}
+                    className="shrink-0 rounded-md bg-[var(--nv-creative)]/15 px-2 py-1 text-[10px] text-[var(--nv-creative)] transition-colors hover:bg-[var(--nv-creative)]/25 disabled:opacity-60"
+                  >
+                    {endingChapter ? "正在收尾…" : "收尾并开下一章"}
+                  </button>
+                </div>
+              )}
+              <div ref={narrativeRef} className="zm-bod">
+                {turns.length > 0 ? (
                   <div className="space-y-5">
                     {turns.map((t) => (
                       <div key={t.round} id={`turn-${t.round}`} className="group/turn relative scroll-mt-4">
@@ -1236,13 +1491,36 @@ function SagaDetailInner() {
                           </div>
                         ) : (
                           <>
+                            {/* 你的选择：不进正文，但排在正文前面——读者要看得见"这一句是我说的"。
+                                衬线 + 斜体 + 左侧细线，和叙事分属两种字体；不可就地改，只能整体撤回。 */}
+                            {t.playerAction && !/^开始(游戏|本章)$/.test(t.playerAction) && (
+                              <div className="nv-choice-enter mb-2 border-l-2 border-[var(--nv-creative)]/35 pl-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-serif text-[9px] tracking-[0.2em] text-[var(--nv-creative)]/75">
+                                    你的选择
+                                  </span>
+                                  {t.round === turns[turns.length - 1]?.round && round > 1 && (
+                                    <button
+                                      onClick={rollbackLastRound}
+                                      className="ml-auto text-[10px] text-[var(--nv-text-muted)] transition-colors hover:text-[var(--nv-danger)]"
+                                      title="撤回本轮（叙事、物品、实体变动一起退回）"
+                                    >
+                                      撤回本轮
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 whitespace-pre-wrap font-serif text-[12.5px] italic leading-6 text-[var(--nv-text-secondary)]">
+                                  {t.playerAction}
+                                </p>
+                              </div>
+                            )}
                             <div
-                              className="rounded-xl border border-[var(--nv-border-2)]/60 bg-[var(--nv-surface-1)]/40 px-4 py-3 shadow-[0_1px_12px_rgba(0,0,0,0.04)] nv-turn-enter"
+                              className="zm-turn zm-prose nv-turn-enter"
                               style={{ animationDelay: `${Math.min(t.round - 1, 6) * 45}ms` }}
                             >
-                              <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">
-                                {renderHotspots(t.narrative, hotspotNames, (n) => setInteractChar(n))}
-                              </p>
+                              {t.narrative.split(/\n{2,}/).filter(Boolean).map((para, pi) => (
+                                <p key={pi}>{renderHotspots(para, hotspotNames, (n) => setInteractChar(n))}</p>
+                              ))}
                             </div>
                             <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover/turn:opacity-100">
                               <span className="rounded-md border border-[var(--nv-border-2)]/60 px-1.5 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">第 {t.round} 轮</span>
@@ -1259,6 +1537,23 @@ function SagaDetailInner() {
                         )}
                       </div>
                     ))}
+                    {/* 流式输出接在列表末尾，而不是替换整个列表——
+                        替换会让已经读过的内容整块消失、滚动位置乱跳。 */}
+                    {streamed && (
+                      <div className="zm-turn zm-prose">
+                        <p>
+                          {streamed}
+                          <span className="nv-typing-caret" aria-hidden />
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : streamed ? (
+                  <div className="rounded-xl border border-[var(--nv-border-2)]/40 bg-[var(--nv-surface-1)]/30 px-4 py-3">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">
+                      {streamed}
+                      <span className="nv-typing-caret" aria-hidden />
+                    </p>
                   </div>
                 ) : narrative ? (
                   <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--nv-text-secondary)]">{narrative}</p>
@@ -1270,21 +1565,59 @@ function SagaDetailInner() {
               {/* 选项 + 快捷动作 + 输入区 */}
               {status === "playing" && (
                 <div className="mt-3 shrink-0 space-y-2">
-                  {options.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.map((opt) => (
+                  {options.length > 0 && status === "playing" && (
+                    /* 选项不该像聊天软件的功能键。它们是「路」——用衬线体排在正文同一列，
+                       一眼能看出"这不是正文，是可走的方向"，点了就走，不弹确认。 */
+                    <div className="zm-walk">
+                      <div className="zm-walk-h">
+                        <span>可 往 之 处</span>
+                        <i />
+                        <em>{String(options.length).padStart(2, "0")}</em>
+                      </div>
+                      {options.map((opt, oi) => (
                         <button
                           key={opt.index}
                           onClick={() => act("option", `选择：${opt.text}`, opt.index)}
-                          className="rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-3 py-2 text-left text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
+                          className="zm-opt"
                         >
-                          <span className="mr-1.5 font-mono text-[var(--nv-creative)]">{opt.index}.</span>
-                          {opt.text}
+                          <div className="zm-opt-row">
+                            <span className="zm-opt-n">{cnNum(oi + 1)}</span>
+                            <span className="zm-opt-m">{opt.text}</span>
+                          </div>
                         </button>
                       ))}
                     </div>
                   )}
                   {/* 快捷条：上帝视角=导演编排（点击填入半成品，补完再发），其余=角色行动（点了即发） */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={customInput}
+                      onChange={(e) => setCustomInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && customInput.trim()) { act("custom", customInput.trim()); setCustomInput(""); } }}
+                      placeholder={
+                        saga.narrativeMode === "god"
+                          ? "写下你的编排：安排谁做什么、发生什么、镜头切到哪…"
+                          : saga.narrativeMode === "third"
+                            ? `替「${saga.playAsName || "你的角色"}」决定下一步…`
+                            : "描述你的行动…"
+                      }
+                      className="zm-input flex-1"
+                    />
+                    <Button
+                      onClick={() => { if (customInput.trim()) { act("custom", customInput.trim()); setCustomInput(""); } }}
+                      disabled={!customInput.trim()}
+                      className="btn-primary px-4 py-1.5 text-xs"
+                    >
+                      发送
+                    </Button>
+                  </div>
+                  <button
+                    onClick={() => setShowQuickBar((v) => !v)}
+                    className="self-start font-serif text-[10.5px] tracking-[0.18em] text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-creative)]"
+                  >
+                    {showQuickBar ? "收起编排 ▴" : "快捷编排 ▾"}
+                  </button>
+                  {showQuickBar && (
                   <div className="flex gap-1.5">
                     {saga.narrativeMode === "god"
                       ? GM_ACTIONS.map((action) => (
@@ -1312,28 +1645,7 @@ function SagaDetailInner() {
                           </button>
                         ))}
                   </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={customInput}
-                      onChange={(e) => setCustomInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && customInput.trim()) { act("custom", customInput.trim()); setCustomInput(""); } }}
-                      placeholder={
-                        saga.narrativeMode === "god"
-                          ? "写下你的编排：安排谁做什么、发生什么、镜头切到哪…"
-                          : saga.narrativeMode === "third"
-                            ? `替「${saga.playAsName || "你的角色"}」决定下一步…`
-                            : "描述你的行动…"
-                      }
-                      className="input-glass flex-1 rounded-lg px-3 py-2 text-sm"
-                    />
-                    <Button
-                      onClick={() => { if (customInput.trim()) { act("custom", customInput.trim()); setCustomInput(""); } }}
-                      disabled={!customInput.trim()}
-                      className="btn-primary rounded-lg px-4 py-2 text-sm"
-                    >
-                      发送
-                    </Button>
-                  </div>
+                  )}
                 </div>
               )}
             </>
@@ -1341,7 +1653,25 @@ function SagaDetailInner() {
         </main>
 
         {/* 右栏：正文 / 背包 / 世界 */}
-        <aside className="hidden w-64 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-abyss)]/50 backdrop-blur-sm xl:flex">
+        {/* 书口：常驻。这一栏回答「故事里现在是什么时候」 */}
+        <aside className="zm-edge">
+          <div className="zm-edge-time">
+            <span>时辰</span>
+            <span className="now">{SHICHEN[Math.max(0, round) % 12]}时</span>
+          </div>
+          <div className="zm-edge-track"><i style={{ height: `${Math.max(3, Math.min(100, plotProgress))}%` }} /></div>
+          <div className="zm-edge-pg">{cnNum(Math.max(1, round))}</div>
+          <button className="zm-edge-btn" onClick={() => setShowRightDrawer(true)} title="背包 · 世界 · 地图 · 正文">≡</button>
+        </aside>
+
+        {showRightDrawer && (
+          <>
+            <div className="zm-mask" onClick={() => setShowRightDrawer(false)} />
+            <div className="zm-drawer right" style={{ right: 56 }}>
+              <div className="flex shrink-0 items-center justify-between border-b border-[var(--nv-border-2)] px-4 py-2.5">
+                <span className="text-[11px] tracking-[0.3em] text-[var(--nv-text-tertiary)]">背 包 · 世 界</span>
+                <button onClick={() => setShowRightDrawer(false)} className="text-sm text-[var(--nv-text-tertiary)] transition-colors hover:text-[var(--nv-text-primary)]">✕</button>
+              </div>
           <div className="flex shrink-0 border-b border-[var(--nv-border-2)]">
             {RIGHT_TABS.map(({ key, label, icon }) => (
               <button
@@ -1519,6 +1849,10 @@ function SagaDetailInner() {
                 })()}
               </div>
             )}
+            {rightTab === "map" && (
+              <SagaMapPanel sessionId={sessionId} round={round} onGoto={(name) => setCustomInput(`前往${name}`)} />
+            )}
+
             {rightTab === "world" && (
               <div>
                 <p className="mb-3 flex items-center gap-1.5 font-medium text-[var(--nv-text-primary)]">
@@ -1560,7 +1894,9 @@ function SagaDetailInner() {
               </div>
             )}
           </div>
-        </aside>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── 骰子悬浮判定（两段式）：右下角小面板，动画期间页面完全可操作 ── */}
@@ -1615,102 +1951,21 @@ function SagaDetailInner() {
         </div>
       )}
 
-      {/* ── 角色交互菜单（P1 自由操作）：查看随身物品（纯 UI）+ 一键行动模板，后果由 AI 演 ── */}
-      {interactChar && (
-        <Modal open onClose={() => { setInteractChar(null); setShowGive(false); }} bare panelClassName="max-w-sm" labelledBy="interact-title">
-          <div className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--nv-creative-soft)] text-[var(--nv-creative)]">
-                <Icon name="user" size={16} />
-              </span>
-              <div className="min-w-0">
-                <h2 id="interact-title" className="truncate text-base font-bold text-[var(--nv-text-primary)]">{interactChar}</h2>
-                {(() => {
-                  const ent = entities.find((e) => e.name === interactChar);
-                  return ent?.description ? (
-                    <p className="truncate text-[10px] text-[var(--nv-text-tertiary)]" title={ent.description}>{ent.description}</p>
-                  ) : null;
-                })()}
-              </div>
-              <button onClick={() => { setInteractChar(null); setShowGive(false); }} className="ml-auto text-[var(--nv-text-muted)] hover:text-[var(--nv-text-primary)]" title="关闭">
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-
-            {/* 随身物品（纯 UI 查看：背包总账里 TA 的那一节） */}
-            {(() => {
-              const theirs = items.filter((i) => (i.owner || "主角") === interactChar);
-              return (
-                <div className="mb-3 rounded-xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-3">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--nv-text-tertiary)]">随身物品（{theirs.length}）</p>
-                  {theirs.length === 0 ? (
-                    <p className="text-[11px] italic text-[var(--nv-text-muted)]">看起来两手空空——但 TA 说什么你可要自己判断。</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {theirs.map((i, idx) => (
-                        <p key={idx} className="text-[11px] text-[var(--nv-text-secondary)]">
-                          · {i.name} ×{i.quantity}
-                          {i.damaged && <span className="ml-1 rounded bg-[var(--nv-warning)]/20 px-1 text-[9px] text-[var(--nv-warning)]">损</span>}
-                          {i.equipped && <span className="ml-1 rounded bg-[var(--nv-success)]/20 px-1 text-[9px] text-[var(--nv-success)]">装备中</span>}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* 行动模板：点了就发，成败由 AI 裁决（跑团模式下偷窃/抢夺自动掷骰） */}
-            <p className="mb-2 text-[10px] text-[var(--nv-text-tertiary)]">选择行动（后果由剧情裁决——跑团模式下对抗行动先掷骰）：</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {([
-                { label: "观察", text: `仔细观察${interactChar}的神态与举动`, type: "observe" },
-                { label: "对话", text: `与${interactChar}交谈`, type: "dialogue" },
-                { label: "交易", text: `尝试与${interactChar}做一笔交易`, type: "custom" },
-                { label: "讨要", text: `试着向${interactChar}讨要一件东西`, type: "custom" },
-                { label: "偷窃", text: `趁${interactChar}不注意，偷偷摸走TA身上的一样东西`, type: "custom" },
-                { label: "抢夺", text: `直接动手抢夺${interactChar}身上的物品`, type: "custom" },
-              ] as const).map((a) => (
-                <button
-                  key={a.label}
-                  onClick={() => interactWith(interactChar, a.type, a.text)}
-                  disabled={status !== "playing"}
-                  className="rounded-lg border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2 py-2 text-xs text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:bg-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-
-            {/* 赠予：展开主角物品选择 */}
-            <div className="mt-2">
-              <button
-                onClick={() => setShowGive((v) => !v)}
-                disabled={status !== "playing"}
-                className="w-full rounded-lg border border-dashed border-[var(--nv-border-3)] py-1.5 text-xs text-[var(--nv-text-muted)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {showGive ? "收起" : `送 ${interactChar} 一件东西`}
-              </button>
-              {showGive && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {items.filter((i) => (i.owner || "主角") === "主角").length === 0 && (
-                    <p className="text-[11px] italic text-[var(--nv-text-muted)]">你的背包是空的，先拿到东西才能送。</p>
-                  )}
-                  {items.filter((i) => (i.owner || "主角") === "主角").map((i, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => interactWith(interactChar, "custom", `把「${i.name}」赠予${interactChar}`)}
-                      className="rounded-full border border-[var(--nv-border-2)] bg-[var(--nv-surface-2)] px-2.5 py-1 text-[11px] text-[var(--nv-text-secondary)] transition-colors hover:border-[var(--nv-creative-soft)] hover:text-[var(--nv-text-primary)]"
-                    >
-                      {i.name} ×{i.quantity}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* ── 人物卡（纸本）：看他的同时就能对他动手，正文区不再放这套 UI ── */}
+      <PersonPanel
+        open={!!interactChar}
+        name={interactChar || ""}
+        sagaId={sagaId}
+        level={interactChar ? (saga.relations?.[interactChar]?.level ?? 0) : 0}
+        items={items}
+        extSlots={extSlots}
+        disabled={status !== "playing"}
+        fallbackBrief={interactChar ? entities.find((e) => e.name === interactChar)?.description : ""}
+        isSelf={!!interactChar && interactChar === (saga.playAsName || "")}
+        onAct={(text, type) => { if (interactChar) interactWith(interactChar, type || "custom", text); }}
+        onExtChange={setExtSlots}
+        onClose={() => setInteractChar(null)}
+      />
 
       {/* ── 角色卡 / 个人界面（我的角色 + 同伴） ── */}
       <CharacterSheetPanel

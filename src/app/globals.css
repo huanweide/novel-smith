@@ -2155,3 +2155,1139 @@ html.theme-paper {
 @media (prefers-reduced-motion: reduce) {
   .nv-turn-enter { animation: none; }
 }
+
+/* 选择块入场：从左侧轻轻推入，像镜头切到「你刚才做了什么」。
+   与正文的淡入区分开——选择是玩家的动作，叙事是世界的回应。 */
+@keyframes nv-choice-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.nv-choice-enter {
+  animation: nv-choice-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nv-choice-enter { animation: none; }
+}
+
+/* 生成中的光标呼吸：实时渲染时给一点"还在写"的实感，不闪不跳 */
+@keyframes nv-typing-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+.nv-typing-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--nv-creative, #c9a227);
+  animation: nv-typing-pulse 1.05s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nv-typing-caret { animation: none; opacity: 0.8; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   游戏本 · 纸本「朱墨」皮肤（2026-11-14 视觉重构·丙案定稿）
+   机制同 day 主题：只在 [data-game-theme="paper"] 子树内覆盖 --nv-*，
+   现有组件无需改一行，自动跟随；本皮肤自有令牌 --zm-* 供新版式骨架取用。
+   硬约束（评审逐条查）：零圆角、零装饰阴影、零渐变（界栏渐隐除外）、无金色。
+   ════════════════════════════════════════════════════════════════════════════ */
+[data-game-theme="paper"] {
+  --game-bg:      #EFE6D3;
+  --game-bg-2:    #E5D9C0;
+  --game-glow:    155, 58, 44;
+  --game-glow-2:  31, 56, 51;
+  --game-particle:155, 58, 44;
+  --game-pointer-a: 155, 58, 44;
+  --game-pointer-b: 31, 56, 51;
+
+  /* —— 语义令牌覆盖（对比度已核：正文 12.9:1 / 次 7.9 / 三级 6.1 / muted 4.9，全 >=AA）—— */
+  --nv-void:          #EFE6D3;
+  --nv-abyss:         #F6EFE1;
+  --nv-surface-1:     rgba(60, 45, 25, 0.035);
+  --nv-surface-2:     rgba(60, 45, 25, 0.06);
+  --nv-surface-3:     rgba(60, 45, 25, 0.10);
+  --nv-border-1:      rgba(126, 104, 72, 0.16);
+  --nv-border-2:      rgba(126, 104, 72, 0.26);
+  --nv-border-3:      rgba(126, 104, 72, 0.40);
+  --nv-text-primary:  #211E19;
+  --nv-text-secondary:#4A4237;
+  --nv-text-tertiary: #5E5240;
+  --nv-text-muted:    #655741;
+  --nv-text-muted-on-surface-3: #655741;
+  --nv-creative:      #9B3A2C;
+  --nv-creative-soft: rgba(155, 58, 44, 0.14);
+  --nv-accent:        #9B3A2C;
+  --nv-creative-fill: #9B3A2C;
+  --nv-primary:       #1F3833;
+  --background:       #EFE6D3;
+  --foreground:       #211E19;
+  --card:             rgba(246, 239, 225, 0.72);
+  --popover:          #F6EFE1;
+  --card-foreground:  #211E19;
+  --popover-foreground:#211E19;
+  --secondary:        rgba(60, 45, 25, 0.06);
+  --secondary-foreground:#211E19;
+  --muted:            rgba(60, 45, 25, 0.05);
+  --muted-foreground: #5E5240;
+  --accent:           rgba(155, 58, 44, 0.07);
+  --accent-foreground:#211E19;
+  --border:           rgba(126, 104, 72, 0.26);
+  --input:            rgba(126, 104, 72, 0.22);
+
+  /* —— 本皮肤自有令牌 —— */
+  --zm-paper:  #EFE6D3;
+  --zm-ink:    #211E19;
+  --zm-zhu:    #9B3A2C;
+  --zm-green:  #1F3833;
+  --zm-gray:   #6E6049;
+  --zm-rule:   rgba(126, 104, 72, 0.26);
+  --zm-kai:    "LXGW WenKai Screen", "KaiTi", "STKaiti", "Kaiti SC", serif;
+  --zm-song:   "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+  --zm-mono:   Consolas, "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* —— 书脊：这一栏回答「我在这本书的哪儿」，不是「我去哪个页面」—— */
+.zm-spine {
+  width: 66px; flex: 0 0 66px; align-self: stretch;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 0 16px;
+  background: var(--zm-green);
+  box-shadow: 2px 0 0 rgba(0, 0, 0, 0.22);
+  position: relative; z-index: 20;
+  overflow: hidden;
+}
+.zm-spine-brand {
+  font-family: var(--zm-mono); font-size: 9px; letter-spacing: 0.32em;
+  color: rgba(239, 230, 211, 0.42); text-indent: 0.32em;
+}
+.zm-spine-name {
+  writing-mode: vertical-rl; font-family: var(--zm-kai);
+  font-size: 17px; letter-spacing: 0.3em; text-indent: 0.3em;
+  color: #EBE1CC; margin-top: 26px; max-height: 40%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.zm-spine-vol {
+  writing-mode: vertical-rl; font-family: var(--zm-kai);
+  font-size: 10px; letter-spacing: 0.28em; text-indent: 0.28em;
+  color: rgba(235, 225, 204, 0.55); margin-top: 12px;
+}
+.zm-scale {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; gap: 7px; width: 100%; margin: 22px 0; overflow: hidden;
+}
+.zm-scale i {
+  display: block; width: 12px; height: 1px;
+  background: rgba(235, 225, 204, 0.30);
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s;
+}
+.zm-scale i:nth-child(5n + 1) { width: 19px; background: rgba(235, 225, 204, 0.52); }
+.zm-scale i.on {
+  width: 28px; height: 2px; background: #B54A38;
+  box-shadow: 0 0 10px rgba(181, 74, 56, 0.6);
+}
+.zm-spine-btn {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(235, 225, 204, 0.34); background: transparent;
+  font-family: var(--zm-kai); font-size: 13px; color: #D9CDB4;
+  cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s;
+  margin-bottom: 14px;
+}
+.zm-spine-btn:hover { background: rgba(235, 225, 204, 0.12); border-color: rgba(235, 225, 204, 0.6); color: #F3EADA; }
+.zm-seal {
+  width: 32px; height: 32px; border: 2px solid #B54A38;
+  display: flex; align-items: center; justify-content: center;
+  writing-mode: vertical-rl; font-family: var(--zm-kai); font-size: 10px;
+  letter-spacing: 0.12em; text-indent: 0.12em; color: #C85A46;
+  flex: 0 0 auto;
+}
+
+/* —— 书口：回答「故事里现在是什么时候」，不是数据面板 —— */
+.zm-edge {
+  width: 56px; flex: 0 0 56px; align-self: stretch;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 26px 0 18px;
+  border-left: 1px solid var(--zm-rule);
+  position: relative; z-index: 20;
+  background: color-mix(in srgb, var(--zm-paper) 88%, #fff);
+}
+.zm-edge-time { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.zm-edge-time span {
+  writing-mode: vertical-rl; font-family: var(--zm-kai); font-size: 11px;
+  letter-spacing: 0.3em; text-indent: 0.3em; color: var(--zm-gray);
+}
+.zm-edge-time span.now { color: var(--zm-zhu); font-size: 12.5px; }
+.zm-edge-track {
+  flex: 1; width: 1px; background: var(--zm-rule);
+  margin: 22px 0; position: relative;
+}
+.zm-edge-track i {
+  position: absolute; left: -1px; top: 0; width: 3px;
+  background: var(--zm-zhu); opacity: 0.72; transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zm-edge-pg {
+  writing-mode: vertical-rl; font-family: var(--zm-song); font-size: 11px;
+  letter-spacing: 0.2em; text-indent: 0.2em; color: var(--zm-gray);
+}
+.zm-edge-btn {
+  margin-top: 14px; width: 30px; height: 30px; display: flex;
+  align-items: center; justify-content: center; border: 1px solid var(--zm-rule);
+  background: transparent; color: var(--zm-gray); cursor: pointer;
+  font-size: 14px; transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.zm-edge-btn:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+
+/* —— 版心 —— */
+.zm-col { width: 100%; max-width: 620px; margin: 0 auto; padding-bottom: 48px; }
+.zm-skyline { height: 3px; background: var(--zm-ink); opacity: 0.86; }
+.zm-skyline-2 { height: 1px; background: var(--zm-ink); opacity: 0.5; margin-top: 3px; }
+.zm-runhead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-family: var(--zm-mono); font-size: 9.5px; letter-spacing: 0.24em;
+  color: var(--zm-gray); margin: 16px 0 22px;
+}
+.zm-runhead b { font-weight: 400; color: var(--zm-zhu); }
+
+/* —— 章头：竖排章号 + 横排大标题 —— */
+.zm-chead { display: flex; align-items: flex-start; gap: 20px; }
+.zm-chapno {
+  writing-mode: vertical-rl; font-family: var(--zm-kai); font-size: 14px;
+  letter-spacing: 0.28em; color: var(--zm-zhu);
+  height: 96px; flex: 0 0 auto; padding: 2px 12px 0 0;
+  border-right: 1px solid rgba(155, 58, 44, 0.32);
+}
+.zm-chead-txt { flex: 1; min-width: 0; }
+.zm-h1 {
+  font-family: var(--zm-song); font-size: 38px; font-weight: 700;
+  letter-spacing: 0.02em; line-height: 1.18; color: var(--zm-ink);
+  overflow-wrap: anywhere;
+}
+.zm-chead-sub {
+  font-size: 11px; font-weight: 300; letter-spacing: 0.14em;
+  color: var(--zm-gray); margin-top: 12px;
+}
+.zm-zhu-rule { position: relative; height: 3px; background: var(--zm-zhu); margin-top: 20px; }
+.zm-zhu-rule::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -6px;
+  height: 1px; background: var(--zm-rule);
+}
+
+/* —— 界栏：两条渐变竖线，不封口（封口就成卡片框了）—— */
+.zm-bodied { position: relative; padding: 0 26px; }
+.zm-bodied::before, .zm-bodied::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 1px;
+  background: linear-gradient(to bottom,
+    rgba(126, 104, 72, 0.42) 0%,
+    rgba(126, 104, 72, 0.20) 26%,
+    rgba(126, 104, 72, 0.20) 74%,
+    rgba(126, 104, 72, 0) 100%);
+}
+.zm-bodied::before { left: 0; }
+.zm-bodied::after { right: 0; }
+
+.zm-prose {
+  font-family: var(--zm-song); font-size: 17px; line-height: 1.98;
+  color: #26221B; text-align: justify; text-spacing-trim: trim-start;
+}
+.zm-prose p { text-indent: 2em; margin-bottom: 0.78em; }
+.zm-prose p:last-child { margin-bottom: 0; }
+
+/* —— 可往之处 —— */
+.zm-walk-h {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 2px;
+}
+.zm-walk-h span {
+  font-family: var(--zm-song); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.34em; color: var(--zm-zhu); white-space: nowrap;
+}
+.zm-walk-h i { flex: 1; height: 1px; background: var(--zm-rule); }
+.zm-walk-h em {
+  font-style: normal; font-family: var(--zm-mono); font-size: 9px;
+  letter-spacing: 0.14em; color: var(--zm-gray);
+}
+
+.zm-opt {
+  position: relative; display: block; width: calc(100% + 20px);
+  margin-left: -20px; padding: 17px 12px 17px 20px;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+  border-bottom: 1px dashed rgba(126, 104, 72, 0.32);
+  transition: background 0.22s, padding-left 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zm-opt::before {
+  content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 4px;
+  background: var(--zm-zhu); transform: scaleY(0); transform-origin: 50% 0;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zm-opt:hover { background: rgba(155, 58, 44, 0.055); padding-left: 26px; }
+.zm-opt:hover::before { transform: scaleY(1); }
+.zm-opt:active { background: rgba(155, 58, 44, 0.10); }
+.zm-opt:disabled { opacity: 0.45; cursor: default; }
+.zm-opt-row { display: flex; align-items: baseline; gap: 15px; }
+.zm-opt-n {
+  font-family: var(--zm-song); font-size: 16px; color: #B7A98B;
+  flex: 0 0 16px; transition: color 0.2s;
+}
+.zm-opt:hover .zm-opt-n { color: var(--zm-zhu); }
+.zm-opt-m {
+  font-family: var(--zm-song); font-size: 17px; font-weight: 500;
+  color: var(--zm-ink); line-height: 1.5; letter-spacing: 0.01em;
+}
+.zm-opt-w {
+  font-size: 12px; font-weight: 300; line-height: 1.72;
+  color: #6E6353; margin: 6px 0 7px 31px;
+}
+.zm-opt-c {
+  font-family: var(--zm-mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--zm-gray); margin-left: 31px;
+}
+.zm-opt-c b { color: var(--zm-zhu); font-weight: 400; }
+.zm-opt-c s { text-decoration: none; color: #B7A98B; margin: 0 6px; }
+
+/* —— 页脚：鱼尾 + 汉字页码 —— */
+.zm-colophon {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin-top: 46px; padding-top: 16px;
+  border-top: 1px solid var(--zm-rule);
+}
+.zm-colophon i {
+  width: 0; height: 0; border-left: 5px solid transparent;
+  border-right: 5px solid transparent; border-top: 7px solid rgba(126, 104, 72, 0.5);
+}
+.zm-colophon b {
+  font-family: var(--zm-song); font-size: 12px; font-weight: 400;
+  letter-spacing: 0.36em; color: var(--zm-gray); text-indent: 0.36em;
+}
+
+/* —— 覆盖式抽屉（不挤压版心）—— */
+.zm-drawer {
+  position: fixed; top: 0; bottom: 0; z-index: 60;
+  width: 340px; max-width: 88vw;
+  display: flex; flex-direction: column;
+  background: var(--zm-paper);
+  border-right: 1px solid var(--zm-rule);
+  box-shadow: 24px 0 60px -30px rgba(40, 30, 15, 0.5);
+  animation: zm-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zm-drawer.right { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--zm-rule); box-shadow: -24px 0 60px -30px rgba(40, 30, 15, 0.5); }
+@keyframes zm-slide-in { from { transform: translateX(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .zm-drawer { animation: none; } }
+.zm-mask {
+  position: fixed; inset: 0; z-index: 55;
+  background: rgba(33, 30, 25, 0.28);
+  animation: zm-fade 0.24s ease;
+}
+@keyframes zm-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* —— 窄屏降级：书脊收窄为 44px，书口隐藏 —— */
+@media (max-width: 1180px) {
+  .zm-edge { display: none; }
+}
+@media (max-width: 900px) {
+  .zm-spine { width: 44px; flex-basis: 44px; }
+  .zm-spine-name { font-size: 14px; }
+  .zm-h1 { font-size: 28px; }
+  .zm-col { max-width: none; }
+  .zm-prose { font-size: 16px; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   纸本作用域 · 旧组件适配层
+   页面里大量沿用 Tailwind 圆角/阴影/玻璃类，若逐个改 className 会侵入功能代码；
+   改为在 paper 作用域内统一收口——这正是「直角是印刷、圆角是App」的落地方式。
+   ════════════════════════════════════════════════════════════════════════════ */
+[data-game-theme="paper"] *,
+[data-game-theme="paper"] *::before,
+[data-game-theme="paper"] *::after {
+  border-radius: 0 !important;
+}
+[data-game-theme="paper"] .shadow-sm,
+[data-game-theme="paper"] .shadow,
+[data-game-theme="paper"] .shadow-md,
+[data-game-theme="paper"] .shadow-lg,
+[data-game-theme="paper"] .shadow-xl,
+[data-game-theme="paper"] .shadow-2xl {
+  box-shadow: none !important;
+}
+[data-game-theme="paper"] .backdrop-blur,
+[data-game-theme="paper"] .backdrop-blur-sm,
+[data-game-theme="paper"] .backdrop-blur-md {
+  backdrop-filter: none !important;
+}
+
+/* 纸本里正文与面板一律宋体（黑体只留给元信息与按钮） */
+.zm-col,
+.zm-drawer {
+  font-family: var(--zm-song);
+}
+
+/* 旧按钮组件在纸面上的形态：细线 + 透明底，不用胶囊 */
+[data-game-theme="paper"] .btn-ghost {
+  border: 1px solid var(--zm-rule);
+  background: transparent;
+  color: var(--nv-text-secondary);
+  box-shadow: none;
+}
+[data-game-theme="paper"] .btn-ghost:hover {
+  border-color: var(--zm-zhu);
+  color: var(--zm-zhu);
+  background: rgba(155, 58, 44, 0.05);
+}
+[data-game-theme="paper"] .btn-primary {
+  border: 1px solid var(--zm-zhu);
+  background: var(--zm-zhu);
+  color: #F6EFE1;
+  box-shadow: none;
+}
+[data-game-theme="paper"] .btn-primary:hover {
+  background: #8A3125;
+  border-color: #8A3125;
+}
+
+/* 顶栏的旧控件（三档切换、下拉、退出）统一去胶囊去玻璃 */
+[data-game-theme="paper"] select {
+  border-color: var(--zm-rule);
+  background-color: transparent;
+  color: var(--nv-text-secondary);
+  font-family: var(--zm-song);
+}
+[data-game-theme="paper"] select:hover {
+  border-color: var(--zm-zhu);
+}
+
+/* 抽屉内的分区标题统一为朱色小字（和「可往之处」同一种语言） */
+.zm-drawer .zm-zhu-label {
+  font-family: var(--zm-song);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  color: var(--zm-zhu);
+}
+
+/* —— 正文滚动区：界栏竖线（随内容延伸，滚动时始终在两侧） —— */
+.zm-bod { position: relative; padding: 0 26px; }
+.zm-bod::before, .zm-bod::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(to bottom,
+    rgba(126, 104, 72, 0.40) 0%,
+    rgba(126, 104, 72, 0.18) 18%,
+    rgba(126, 104, 72, 0.18) 82%,
+    rgba(126, 104, 72, 0) 100%);
+}
+.zm-bod::before { left: 0; }
+.zm-bod::after { right: 0; }
+
+/* —— 一轮正文 = 书页上的一段，不是一个卡片 —— */
+.zm-turn { position: relative; margin-bottom: 30px; }
+.zm-turn:last-child { margin-bottom: 6px; }
+.zm-turn + .zm-turn::before {
+  content: "◆";
+  position: absolute; top: -23px; left: 50%; transform: translateX(-50%);
+  font-family: var(--zm-song); font-size: 7px; line-height: 1;
+  color: rgba(126, 104, 72, 0.52);
+}
+/* 段内单换行保留（对话分行），段首仍有 2em 缩进 */
+.zm-prose p { white-space: pre-wrap; }
+
+/* —— 选项：本轮选择改书页目录式（汉字序号 + 处境句 + 代价） —— */
+.zm-walk { margin-top: 30px; }
+.zm-choice-free {
+  width: 100%; margin-top: 22px; display: flex; align-items: center; gap: 12px;
+  border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.4);
+  background: transparent; padding: 0 0 9px; cursor: text; text-align: left;
+}
+.zm-choice-free input {
+  flex: 1; min-width: 0; border: 0; background: transparent; outline: none;
+  font-family: var(--zm-kai); font-size: 14px; color: #3B342A; letter-spacing: 0.04em;
+}
+.zm-choice-free input::placeholder { color: #A4967D; }
+.zm-choice-free span { font-family: var(--zm-mono); font-size: 13px; color: #A4967D; }
+
+/* —— 写作输入：一条底线，不用盒子 —— */
+.zm-input {
+  border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.4);
+  background: transparent; outline: none;
+  font-family: var(--zm-kai); font-size: 14px; color: #3B342A; padding: 6px 0;
+  letter-spacing: 0.03em;
+}
+.zm-input::placeholder { color: #A4967D; }
+.zm-input:focus { border-bottom-color: var(--zm-zhu); }
+
+/* 版心的直接子项不许被 flex 压缩：否则空间不足时 3px 朱线会被压成 0 高（实测） */
+main.zm-col > * { flex-shrink: 0; }
+
+/* 选项序号：朱色四成，弱到不抢戏，但足够显示"这是一条可走的路" */
+.zm-opt-n { color: rgba(155, 58, 44, 0.42); }
+.zm-opt:hover .zm-opt-n { color: var(--zm-zhu); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   实时渲染填表 · 右侧浮体（2026-11-14）
+   用户原话：不能是黑框，最好略微立体；不同颜色的浮体；右侧一个位置、一个个被
+   渲染上去；不用点确定，只是显示效果。
+   做法：纸面小卡 + 1px 类色边 + 左侧类色竖块 + 很淡的投影做"浮"；直角（全站禁圆角）。
+   六类各有其色，一眼能分"这是物品 / 称号 / 关系 / 线索 / 时辰 / 变故"。
+   ════════════════════════════════════════════════════════════════════════════ */
+.zm-float-stack {
+  position: fixed; right: 62px; top: 84px; z-index: 38;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  width: 268px; max-width: 42vw;
+  pointer-events: none;
+}
+.zm-float {
+  position: relative;
+  display: block; width: 100%;
+  padding: 9px 13px 10px 16px;
+  /* 极淡的类色底纹：让"不同颜色"一眼可辨，又不破坏纸面（不用金、不用亮色块） */
+  background: color-mix(in srgb, var(--zc, #9B3A2C) 7%, color-mix(in srgb, var(--zm-paper) 94%, #fff));
+  border: 1px solid color-mix(in srgb, var(--zc, #9B3A2C) 42%, rgba(126, 104, 72, 0.28));
+  /* 略立体：很淡的投影，不是发光不是阴影描边，只是"浮在纸面上方" */
+  box-shadow: 0 6px 16px -10px rgba(40, 30, 15, 0.42), 0 2px 4px -2px rgba(40, 30, 15, 0.2);
+  text-align: left;
+  animation: zm-float-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: auto;
+}
+.zm-float::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--zc, var(--zm-zhu));
+}
+.zm-float-cat {
+  display: block;
+  font-family: var(--zm-mono); font-size: 9px; letter-spacing: 0.2em;
+  color: var(--zc, var(--zm-zhu)); margin-bottom: 3px;
+}
+.zm-float-text {
+  display: block;
+  font-family: var(--zm-song); font-size: 13.5px; font-weight: 500; line-height: 1.45;
+  color: var(--zm-ink); overflow-wrap: anywhere;
+}
+.zm-float-sub {
+  display: block;
+  font-family: var(--zm-kai); font-size: 10px; letter-spacing: 0.04em;
+  color: var(--zm-gray); margin-top: 3px;
+}
+/* 六类色：朱(物品) · 暖褐(变故) · 墨绿(称号) · 赭(关系) · 青(线索) · 灰(时辰)
+   物品与变故特意拉开色相（亮朱 vs 暖褐），其余各自独立，一眼可辨 */
+.zm-float.item    { --zc: #B0432F; }
+.zm-float.event   { --zc: #6B4A3A; }
+.zm-float.title   { --zc: #1F3833; }
+.zm-float.relation{ --zc: #7A6A50; }
+.zm-float.clue    { --zc: #3A5A6B; }
+.zm-float.time    { --zc: #6E747A; }
+@keyframes zm-float-in {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .zm-float { animation: none; } }
+@media (max-width: 1180px) {
+  .zm-float-stack { right: 14px; width: 232px; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   因果脉络（伏笔）· 左抽屉「因果」页签（2026-11-15）
+   一张张因果卡：未了 = 朱左边块（活的「因」）；已了 = 虚线框 + 灰（已收束的「果」）。
+   只用一个强调色（朱）。这是「伏笔网」，不是调色盘。
+   ════════════════════════════════════════════════════════════════════════════ */
+.zm-cause {
+  margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--zm-rule);
+  background: rgba(255, 252, 244, 0.6);
+  border-radius: 0;
+}
+.zm-cause + .zm-cause { margin-top: 8px; }
+.zm-cause-active { border-left: 3px solid var(--zm-zhu); }
+.zm-cause-done { border: 1px dashed rgba(126, 104, 72, 0.5); background: rgba(126, 104, 72, 0.05); }
+.zm-cause-type {
+  font-family: var(--zm-mono); font-size: 10px; letter-spacing: 0.08em;
+  color: var(--zm-zhu); border: 1px solid rgba(155, 58, 44, 0.45);
+  padding: 0 5px; line-height: 16px; border-radius: 0; white-space: nowrap;
+}
+.zm-cause-done .zm-cause-type { color: #8C7B63; border-color: rgba(126, 104, 72, 0.4); }
+.zm-cause-subject {
+  font-family: var(--zm-song); font-size: 12.5px; font-weight: 600;
+  color: #3B342A; letter-spacing: 0.02em;
+}
+.zm-cause-done .zm-cause-subject { color: #7A6F5E; font-weight: 500; }
+.zm-cause-round {
+  margin-left: auto; font-family: var(--zm-mono); font-size: 9.5px;
+  color: #A4967D; letter-spacing: 0.04em; white-space: nowrap;
+}
+.zm-cause-desc {
+  margin-top: 4px; font-family: var(--zm-kai); font-size: 12px; line-height: 1.5;
+  color: #5B5246;
+}
+.zm-cause-done .zm-cause-desc { color: #9A8E79; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   顶栏控件（2026-11-15）：纸面直角 + 细墨线 + 朱强调，去掉胶囊与圆角阴影。
+   此前是 rounded-lg 的玻璃质控件，与纸本零圆角零阴影的基调相冲突。
+   ════════════════════════════════════════════════════════════════════════════ */
+.zm-topctl {
+  height: 30px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 10px; border: 1px solid var(--zm-rule);
+  background: rgba(246, 239, 225, 0.5);
+  border-radius: 0; font-family: var(--zm-song); font-size: 12px;
+  color: var(--zm-ink); letter-spacing: 0.04em; white-space: nowrap;
+  box-shadow: none; transition: border-color .18s, background .18s, color .18s;
+  cursor: pointer;
+}
+.zm-topctl:hover { border-color: rgba(155, 58, 44, 0.45); color: var(--zm-ink); }
+.zm-topctl-on {
+  background: var(--nv-creative-soft); color: var(--nv-creative);
+  border-color: rgba(155, 58, 44, 0.5); font-weight: 600;
+}
+/* 分段控件（三档玩法）：容器 + 内部按钮，全直角 */
+.zm-seg {
+  display: inline-flex; align-items: stretch; height: 30px;
+  border: 1px solid var(--zm-rule); background: rgba(246, 239, 225, 0.5);
+  border-radius: 0; padding: 2px; gap: 2px;
+}
+.zm-seg > button {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 9px; border: 0; background: transparent;
+  border-radius: 0; font-family: var(--zm-song); font-size: 12px;
+  color: var(--zm-gray); letter-spacing: 0.04em; cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.zm-seg > button:hover { color: var(--zm-ink); }
+.zm-seg > button.on { background: var(--nv-creative-soft); color: var(--nv-creative); font-weight: 600; }
+/* 上帝档用墨绿（secondary accent），与朱区分，避免「选中=朱」一色到底 */
+.zm-seg > button.on-god { background: rgba(31, 56, 51, 0.14); color: var(--zm-green); font-weight: 600; }
+/* 盒式输入（新章名 / 章纲） */
+.zm-field {
+  width: 100%; border: 1px solid var(--zm-rule); background: rgba(246, 239, 225, 0.5);
+  border-radius: 0; padding: 8px 10px; font-family: var(--zm-kai); font-size: 13px;
+  line-height: 1.5; color: var(--zm-ink); outline: none; transition: border-color .18s;
+  resize: vertical;
+}
+.zm-field::placeholder { color: #A4967D; }
+.zm-field:focus { border-color: var(--zm-zhu); }
+
+/* ── 扩展按键：6 格自定义即时行为 ── */
+.zm-ext { display: flex; flex-wrap: wrap; items-align: center; align-items: center; gap: 6px; }
+.zm-ext-btn {
+  font-family: var(--zm-kai); font-size: 12.5px; color: #3B342A;
+  padding: 3px 10px; border: 1px solid var(--zm-rule);
+  background: transparent; cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.zm-ext-btn:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+.zm-ext-btn:disabled { opacity: 0.4; cursor: default; }
+.zm-ext-edit {
+  font-family: var(--zm-mono); font-size: 9.5px; letter-spacing: 0.14em;
+  color: var(--zm-gray); background: none; border: 0; cursor: pointer; padding: 2px 4px;
+}
+.zm-ext-edit:hover { color: var(--zm-zhu); }
+.zm-ext-panel { border-top: 1px solid var(--zm-rule); padding-top: 9px; display: grid; gap: 7px; }
+.zm-ext-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; align-items: center; }
+.zm-ext-row input {
+  background: transparent; border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.32);
+  font-family: var(--zm-kai); font-size: 12.5px; color: #3B342A;
+  padding: 3px 0; outline: none; width: 100%; min-width: 0;
+}
+.zm-ext-row input:focus { border-bottom-color: var(--zm-zhu); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   人物卡 · 纸本（2026-11-14）
+   正文区只留「可往之处」；所有"对人"的动作搬进这张卡，看与做同屏。
+   抄鬼谷八荒三处：信息与动作同屏 / 分栏读 / 看不清就真的看不清。
+   ════════════════════════════════════════════════════════════════════════════ */
+.zp-mask {
+  position: fixed; inset: 0; z-index: 58;
+  background: rgba(33, 30, 25, 0.22);
+  animation: zm-fade 0.22s ease;
+}
+.zp-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 62;
+  width: 442px; max-width: 94vw;
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--zm-paper) 96%, #fff);
+  border-left: 1px solid rgba(126, 104, 72, 0.34);
+  box-shadow: -28px 0 64px -38px rgba(40, 30, 15, 0.55);
+  animation: zp-slide 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes zp-slide { from { transform: translateX(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .zp-panel { animation: none; } }
+
+.zp-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 24px 24px 14px;
+}
+.zp-head-main { min-width: 0; flex: 1; }
+.zp-name {
+  font-family: var(--zm-song); font-size: 27px; font-weight: 700;
+  letter-spacing: 0.02em; line-height: 1.2; color: var(--zm-ink);
+  overflow-wrap: anywhere;
+}
+.zp-title {
+  font-family: var(--zm-kai); font-size: 11.5px; letter-spacing: 0.1em;
+  color: var(--zm-gray); margin-top: 7px;
+}
+.zp-close {
+  flex: 0 0 auto; width: 26px; height: 26px; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; background: none; cursor: pointer;
+  color: #A4967D; font-size: 12px;
+  transition: border-color 0.18s, color 0.18s;
+}
+.zp-close:hover { border-color: var(--zm-rule); color: var(--zm-zhu); }
+
+/* ── 好感：全卡最该一眼看到的东西 ── */
+.zp-relation {
+  padding: 0 24px 16px;
+  border-bottom: 1px solid var(--zm-rule);
+}
+.zp-rel-row { display: flex; align-items: center; gap: 11px; }
+.zp-rel-k {
+  font-family: var(--zm-kai); font-size: 11px; letter-spacing: 0.24em;
+  color: #7A6A50; flex: 0 0 auto;
+}
+.zp-scale { display: inline-flex; gap: 2px; flex: 0 0 auto; }
+.zp-scale i {
+  display: block; width: 9px; height: 13px;
+  background: rgba(126, 104, 72, 0.14);
+  transition: background 0.24s;
+}
+.zp-scale i.on { background: var(--zm-zhu); }
+.zp-scale.neg i.on { background: #4A4740; }
+.zp-rel-num {
+  font-family: var(--zm-mono); font-size: 12px; color: var(--zm-ink);
+  min-width: 30px;
+}
+.zp-rel-tier {
+  font-family: var(--zm-song); font-size: 12.5px; color: var(--zm-zhu);
+  margin-left: auto;
+}
+.zp-know {
+  font-family: var(--zm-kai); font-size: 10.5px; letter-spacing: 0.2em;
+  color: #A4967D; margin-top: 8px;
+}
+
+/* ── 信息栏：标签 + 内容，不用表格线，靠缩进分栏 ── */
+.zp-fields { padding: 16px 24px 4px; }
+.zp-field { display: flex; gap: 12px; margin-bottom: 9px; }
+.zp-field-k {
+  flex: 0 0 34px; font-family: var(--zm-kai); font-size: 11px;
+  letter-spacing: 0.2em; color: #8B7C64; padding-top: 2px;
+}
+.zp-field-v {
+  flex: 1; min-width: 0; font-family: var(--zm-song); font-size: 13px;
+  line-height: 1.72; color: #2E2A23; text-align: justify;
+  overflow-wrap: anywhere;
+}
+.zp-field-v.masked {
+  font-family: var(--zm-mono); letter-spacing: 0.14em;
+  color: #B7A98B; font-size: 11px;
+}
+.zp-hint {
+  font-family: var(--zm-kai); font-size: 10.5px; color: #A4967D;
+  margin: 2px 0 10px 46px; line-height: 1.6;
+}
+
+/* ── 分区（身上 / 牵涉 / 动作 / 六格） ── */
+.zp-sect { padding: 13px 24px 4px; border-top: 1px solid var(--zm-rule); margin-top: 10px; }
+.zp-sect-h {
+  font-family: var(--zm-kai); font-size: 11.5px; letter-spacing: 0.2em;
+  color: var(--zm-zhu); margin-bottom: 9px;
+}
+.zp-sect-h span {
+  font-family: var(--zm-mono); font-size: 9.5px; letter-spacing: 0.08em;
+  color: #A4967D;
+}
+.zp-empty {
+  font-family: var(--zm-kai); font-size: 11.5px; color: #A4967D;
+  line-height: 1.7; margin-bottom: 6px;
+}
+.zp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.zp-chip {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  padding: 3px 9px; border: 1px solid var(--zm-rule);
+  font-family: var(--zm-song); font-size: 12px; color: #3B342A;
+  background: rgba(246, 239, 225, 0.6);
+}
+.zp-chip em {
+  font-style: normal; font-family: var(--zm-mono); font-size: 9.5px;
+  color: #A4967D;
+}
+.zp-chip s {
+  text-decoration: none; font-family: var(--zm-mono); font-size: 9px;
+  color: var(--zm-zhu); border-left: 1px solid var(--zm-rule); padding-left: 4px;
+}
+.zp-chip s.eq { color: var(--zm-green); }
+.zp-chip.rel { border-style: dashed; }
+.zp-chip.give { cursor: pointer; background: transparent; transition: border-color 0.18s, color 0.18s, background 0.18s; }
+.zp-chip.give:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+
+/* ── 动作：四组，越往下越难收场 ── */
+.zp-actions { padding: 13px 24px 6px; border-top: 1px solid var(--zm-rule); margin-top: 10px; }
+.zp-act-group { display: flex; gap: 12px; margin-bottom: 11px; }
+.zp-act-tag {
+  flex: 0 0 34px; font-family: var(--zm-kai); font-size: 11px;
+  letter-spacing: 0.16em; padding-top: 4px;
+}
+.zp-act-tag.soft { color: #5E7A5E; }
+.zp-act-tag.probe { color: #8B7C64; }
+.zp-act-tag.hard { color: var(--zm-zhu); }
+.zp-act-tag.deal { color: var(--zm-green); }
+.zp-act-list { flex: 1; display: flex; flex-wrap: wrap; gap: 5px 12px; }
+.zp-act {
+  position: relative; border: 0; background: none; cursor: pointer; padding: 3px 0;
+  font-family: var(--zm-song); font-size: 13.5px; color: #2E2A23;
+  border-bottom: 1px solid transparent;
+  transition: color 0.16s, border-color 0.16s;
+}
+.zp-act em {
+  font-style: normal; font-family: var(--zm-mono); font-size: 9px;
+  color: #A4967D; margin-left: 4px;
+}
+.zp-act:hover { color: var(--zm-zhu); border-bottom-color: rgba(155, 58, 44, 0.5); }
+.zp-act.risky::after {
+  content: ""; position: absolute; top: 4px; right: -6px;
+  width: 3px; height: 3px; background: #C9A227;
+}
+.zp-act.deadly { color: #7A3628; }
+.zp-act.deadly::after {
+  content: ""; position: absolute; top: 4px; right: -6px;
+  width: 3px; height: 3px; background: var(--zm-zhu);
+}
+.zp-act:disabled { opacity: 0.4; cursor: default; }
+
+/* 交谈：全卡最醒目的主交互（鬼谷八荒式的「主按钮」），朱色低饱和填充，不发光不描金 */
+.zp-talk {
+  width: 100%; margin-bottom: 12px; padding: 10px 0;
+  border: 1px solid var(--zm-zhu); cursor: pointer;
+  background: color-mix(in srgb, var(--zm-zhu) 11%, transparent);
+  font-family: var(--zm-song); font-size: 14.5px; font-weight: 600; letter-spacing: 0.05em;
+  color: var(--zm-zhu);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.zp-talk:hover { background: color-mix(in srgb, var(--zm-zhu) 19%, transparent); }
+.zp-talk:disabled { opacity: 0.4; cursor: default; }
+
+/* 一键填充：把空白档案项交给 AI 补全（填表系统，从小说系统抄来） */
+.zp-fill { padding: 12px 24px 0; display: flex; flex-direction: column; gap: 6px; }
+.zp-fill-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  align-self: flex-start; cursor: pointer; padding: 4px 13px;
+  border: 1px solid rgba(126, 104, 72, 0.55); background: color-mix(in srgb, var(--zm-zhu) 5%, transparent);
+  font-family: var(--zm-kai); font-size: 11.5px; letter-spacing: 0.14em; color: #6B5640;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.zp-fill-btn::before { content: "✎"; font-size: 11px; color: var(--zm-zhu); }
+.zp-fill-btn:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); background: color-mix(in srgb, var(--zm-zhu) 10%, transparent); }
+.zp-fill-btn:disabled { opacity: 0.5; cursor: default; }
+.zp-fill-msg { font-family: var(--zm-kai); font-size: 10.5px; color: #A4967D; letter-spacing: 0.04em; line-height: 1.6; }
+
+.zp-give-btn {
+  width: 100%; padding: 7px 0; margin-bottom: 8px;
+  border: 1px dashed rgba(126, 104, 72, 0.42); background: none; cursor: pointer;
+  font-family: var(--zm-kai); font-size: 12px; color: #7A6A50;
+  transition: border-color 0.18s, color 0.18s;
+}
+.zp-give-btn:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); }
+
+/* ── 六格惯用招（从正文输入区搬来） ── */
+.zp-ext { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.zp-ext-btn {
+  font-family: var(--zm-kai); font-size: 12.5px; color: #3B342A;
+  padding: 3px 10px; border: 1px solid var(--zm-rule);
+  background: transparent; cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.zp-ext-btn:hover { border-color: var(--zm-zhu); color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+.zp-ext-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── 自己写一句 ── */
+.zp-write {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 24px 8px; margin-top: auto;
+  border-top: 1px solid var(--zm-rule);
+}
+.zp-input {
+  flex: 1; min-width: 0; border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.4);
+  background: transparent; outline: none; padding: 6px 0;
+  font-family: var(--zm-kai); font-size: 13.5px; color: #3B342A;
+}
+.zp-input::placeholder { color: #A4967D; }
+.zp-input:focus { border-bottom-color: var(--zm-zhu); }
+.zp-send {
+  flex: 0 0 auto; border: 0; background: none; cursor: pointer;
+  font-family: var(--zm-kai); font-size: 12.5px; letter-spacing: 0.16em;
+  color: var(--zm-zhu); padding: 5px 2px;
+  border-bottom: 1px solid rgba(155, 58, 44, 0.42);
+  transition: opacity 0.18s;
+}
+.zp-send:disabled { opacity: 0.32; cursor: default; }
+.zp-foot {
+  font-family: var(--zm-kai); font-size: 10px; color: #B7A98B;
+  padding: 0 24px 18px; letter-spacing: 0.06em;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   渲染填表 · 右侧浮体（2026-11-14）
+   玩家原话：「不能是黑框，最好有一种略微的立体效果。不要浮夸得炫眼睛，
+   就是用不同颜色的浮体这种感觉，呈现在右侧的一个位置，一个个被渲染上去。
+   也不需要点什么确定，它只是一个显示效果，看着挺舒服的。」
+
+   做法：不用纯平面，也不用发光。三层叠出"离纸面一点"的错觉：
+     ① 顶边 1px 亮线（光从上方来）
+     ② 底色比纸面亮 4%（浮起来的纸）
+     ③ 投影只有两层、都很淡（0 1px 2px + 0 6px 14px）
+   分类靠左侧那道 2px 色条和标题色，不靠整块染色——整块染色会炫眼。
+   ════════════════════════════════════════════════════════════════════════════ */
+.zm-float-stack {
+  position: fixed; right: 74px; bottom: 96px; z-index: 42;
+  display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 7px;
+  pointer-events: none; width: 268px;
+}
+.zm-float {
+  position: relative; width: 100%;
+  padding: 9px 12px 10px 14px;
+  background: color-mix(in srgb, var(--zm-paper) 90%, #fff);
+  border: 1px solid rgba(126, 104, 72, 0.2);
+  border-left: 2px solid var(--zm-zhu);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.72) inset,
+    0 1px 2px rgba(52, 40, 22, 0.1),
+    0 6px 14px -6px rgba(52, 40, 22, 0.22);
+  animation: zm-float-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: auto;
+}
+@keyframes zm-float-in {
+  from { transform: translateY(10px) scale(0.985); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .zm-float { animation: none; } }
+
+.zm-float-cat {
+  display: block; font-family: var(--zm-mono); font-size: 8.5px;
+  letter-spacing: 0.2em; color: var(--zm-zhu); margin-bottom: 3px;
+}
+.zm-float-text {
+  display: block; font-family: var(--zm-song); font-size: 12.5px;
+  line-height: 1.6; color: #2E2A23;
+}
+.zm-float-sub {
+  display: block; font-family: var(--zm-kai); font-size: 10px;
+  color: #A4967D; margin-top: 3px;
+}
+
+/* 四色分类：物品朱 / 称号墨绿 / 关系赭 / 线索靛。只改色条与类名，不改底色 */
+.zm-float.item { border-left-color: var(--zm-zhu); }
+.zm-float.item .zm-float-cat { color: var(--zm-zhu); }
+.zm-float.title { border-left-color: var(--zm-green); }
+.zm-float.title .zm-float-cat { color: var(--zm-green); }
+.zm-float.relation { border-left-color: #8C6239; }
+.zm-float.relation .zm-float-cat { color: #8C6239; }
+.zm-float.clue { border-left-color: #4A5A6B; }
+.zm-float.clue .zm-float-cat { color: #4A5A6B; }
+.zm-float.time { border-left-color: #7A6A50; }
+.zm-float.time .zm-float-cat { color: #7A6A50; }
+
+/* 窄屏：浮体不要盖住正文，压到右下角且窄一点 */
+@media (max-width: 1180px) {
+  .zm-float-stack { right: 14px; bottom: 84px; width: 232px; }
+}
+
+/* 六格编辑器（在人物卡内） */
+.zp-ext-edit {
+  margin-left: auto; font-family: var(--zm-mono); font-size: 9.5px;
+  letter-spacing: 0.14em; color: #A4967D; background: none; border: 0;
+  cursor: pointer; padding: 0 2px;
+}
+.zp-ext-edit:hover { color: var(--zm-zhu); }
+.zp-ext-panel { display: grid; gap: 7px; margin: 8px 0 6px; }
+.zp-ext-row { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 8px; }
+.zp-ext-row input {
+  background: transparent; border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.32);
+  font-family: var(--zm-kai); font-size: 12px; color: #3B342A;
+  padding: 3px 0; outline: none; width: 100%; min-width: 0;
+}
+.zp-ext-row input:focus { border-bottom-color: var(--zm-zhu); }
+.zp-ext-row input::placeholder { color: #B7A98B; }
+.zp-sect-h { display: flex; align-items: baseline; }
+
+/* 头像位：现在只放一个字，接立绘时换 background-image 即可，版式不动 */
+.zp-portrait {
+  flex: 0 0 auto; width: 54px; height: 68px;
+  border: 1px solid rgba(126, 104, 72, 0.34);
+  background: rgba(246, 239, 225, 0.7);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.zp-portrait::before {
+  content: ""; position: absolute; inset: 3px;
+  border: 1px solid rgba(126, 104, 72, 0.14);
+}
+.zp-portrait span {
+  font-family: var(--zm-kai); font-size: 26px; color: #B7A98B;
+  line-height: 1;
+}
+.zp-portrait.self span { color: var(--zm-zhu); opacity: 0.5; }
+.zp-head-main { padding-top: 2px; }
+
+/* 状态条（只有自己的卡有） */
+.zp-status { padding: 12px 24px 4px; }
+.zp-stat { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+.zp-stat-k {
+  flex: 0 0 30px; font-family: var(--zm-kai); font-size: 10.5px;
+  letter-spacing: 0.14em; color: #8B7C64;
+}
+.zp-stat-bar { display: inline-flex; gap: 2px; }
+.zp-stat-bar i {
+  display: block; width: 7px; height: 9px; background: rgba(126, 104, 72, 0.13);
+}
+.zp-stat-bar i.on.hp { background: #9B3A2C; }
+.zp-stat-bar i.on.sp { background: var(--zm-green); }
+.zp-stat-n { font-family: var(--zm-mono); font-size: 10.5px; color: #6E6049; }
+.zp-stat-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.zp-tag {
+  font-family: var(--zm-kai); font-size: 10.5px; padding: 1px 7px;
+  border: 1px solid var(--zm-rule); color: #6E6049;
+}
+.zp-tag.inj { color: #7A3628; border-color: rgba(155, 58, 44, 0.3); }
+.zp-tag.mood { color: #5E7A5E; }
+
+/* 动作代价小字：原先紧贴主字，读起来像"说句话一刻" */
+.zp-act em { margin-left: 6px; letter-spacing: 0.02em; }
+
+/* ═══════════════════════════════════════════════════════════════
+   叙事系统页签（故事 / 设定）——纸本朱墨，零圆角零阴影零渐变
+   抄小说系统 StorylineWorkbench + WorldPanel 的信息结构，不抄它的暗玻璃卡片。
+   ═══════════════════════════════════════════════════════════════ */
+/* 左抽屉 7 页签：等分、直角、朱线选中（原 flex+图标会把最后一栏挤掉） */
+.zm-lefttabs {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  flex-shrink: 0; border-bottom: 1px solid var(--zm-rule);
+}
+.zm-lefttabs button {
+  min-width: 0; padding: 7px 0 8px; border: 0; border-bottom: 2px solid transparent;
+  background: none; cursor: pointer;
+  font-family: var(--zm-kai); font-size: 11px; letter-spacing: 0.04em; color: #8B7C64;
+  transition: color 0.16s, border-color 0.16s, background 0.16s;
+}
+.zm-lefttabs button:hover { color: #3B342A; }
+.zm-lefttabs button.on {
+  color: var(--zm-zhu); border-bottom-color: var(--zm-zhu);
+  background: rgba(155, 58, 44, 0.05);
+}
+
+.nv-panel { font-family: var(--zm-song); color: var(--zm-ink); }
+.nv-empty { font-family: var(--zm-kai); font-size: 11.5px; color: #A4967D; line-height: 1.75; padding: 6px 0; }
+.nv-err { font-family: var(--zm-kai); font-size: 11px; color: #9B3A2C; padding: 4px 0; }
+.nv-hint { font-family: var(--zm-kai); font-size: 10.5px; color: #A4967D; line-height: 1.65; margin-top: 6px; }
+
+/* 阶段 / 收束率 */
+.nv-stage { padding: 0 0 12px; border-bottom: 1px solid var(--zm-rule); margin-bottom: 10px; }
+.nv-stage-row { display: flex; align-items: baseline; gap: 10px; }
+.nv-stage-k { font-family: var(--zm-kai); font-size: 11px; letter-spacing: 0.2em; color: #8B7C64; flex: 0 0 auto; }
+.nv-stage-v { font-family: var(--zm-song); font-size: 14px; font-weight: 600; color: var(--zm-zhu); }
+.nv-stage-pct { font-family: var(--zm-mono); font-size: 11px; color: #7A6A50; margin-left: auto; flex: 0 0 auto; }
+.nv-stage-bar { height: 4px; background: rgba(126, 104, 72, 0.3); margin-top: 8px; }
+.nv-stage-bar i { display: block; height: 100%; background: var(--zm-zhu); transition: width 0.3s; }
+.nv-stage-note { font-family: var(--zm-kai); font-size: 10.5px; color: #8B7C64; line-height: 1.7; margin-top: 8px; }
+
+/* 视图切换：文字 + 朱线，不做按钮组 */
+.nv-subtabs { display: flex; gap: 14px; border-bottom: 1px solid var(--zm-rule); margin-bottom: 4px; }
+.nv-subtabs button {
+  border: 0; background: none; cursor: pointer; padding: 5px 0 7px;
+  font-family: var(--zm-kai); font-size: 11.5px; color: #8B7C64;
+  border-bottom: 2px solid transparent;
+}
+.nv-subtabs button.on { color: var(--zm-zhu); border-bottom-color: var(--zm-zhu); }
+.nv-sect { padding: 11px 0 4px; border-bottom: 1px solid var(--zm-rule); }
+.nv-sect-h { font-family: var(--zm-kai); font-size: 11.5px; letter-spacing: 0.16em; color: var(--zm-zhu); margin-bottom: 8px; }
+.nv-sect-h span { font-family: var(--zm-mono); font-size: 9.5px; letter-spacing: 0.06em; color: #A4967D; }
+
+/* 故事线树：主线一行、支线缩进，完结沉底 */
+.nv-line-tree { display: flex; flex-direction: column; gap: 2px; }
+.nv-line-row {
+  display: flex; align-items: baseline; gap: 7px; width: 100%;
+  border: 0; border-left: 2px solid transparent; background: none; cursor: pointer;
+  padding: 5px 6px; text-align: left; transition: background 0.16s, border-color 0.16s;
+}
+.nv-line-row:hover { background: rgba(155, 58, 44, 0.04); }
+.nv-line-row.on { border-left-color: var(--zm-zhu); background: rgba(155, 58, 44, 0.06); }
+.nv-line-row.child { padding-left: 18px; }
+.nv-line-type { flex: 0 0 auto; font-family: var(--zm-kai); font-size: 9.5px; letter-spacing: 0.1em; color: #8B7C64; border: 1px solid var(--zm-rule); padding: 0 4px; }
+.nv-line-row.on .nv-line-type { color: var(--zm-zhu); border-color: rgba(155, 58, 44, 0.4); }
+.nv-line-title { flex: 1; min-width: 0; font-family: var(--zm-song); font-size: 13px; color: #2E2A23; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-line-status, .nv-line-pct { flex: 0 0 auto; font-family: var(--zm-mono); font-size: 9.5px; color: #A4967D; }
+
+/* 三/七要素 */
+.nv-elems { display: flex; flex-direction: column; gap: 5px; }
+.nv-elem { display: flex; gap: 10px; align-items: baseline; }
+.nv-elem-k { flex: 0 0 30px; font-family: var(--zm-kai); font-size: 10.5px; letter-spacing: 0.14em; color: #8B7C64; }
+.nv-elem-v { flex: 1; min-width: 0; font-family: var(--zm-song); font-size: 12px; line-height: 1.6; color: #2E2A23; overflow-wrap: anywhere; }
+.nv-elem-v.empty { font-family: var(--zm-kai); color: #B7A98B; }
+.nv-line-actions, .nv-pay-btns, .nv-card-btns { display: flex; gap: 10px; margin-top: 8px; }
+.nv-line-actions button, .nv-pay-btns button, .nv-card-btns button {
+  border: 0; border-bottom: 1px solid rgba(155, 58, 44, 0.35);
+  background: none; cursor: pointer; padding: 3px 0;
+  font-family: var(--zm-kai); font-size: 10.5px; color: var(--zm-zhu);
+}
+.nv-line-actions button:disabled, .nv-pay-btns button:disabled, .nv-card-btns button:disabled { opacity: 0.4; cursor: default; }
+
+/* 时间轴：先发生 → 后导致 */
+.nv-timeline, .nv-chronicle { list-style: none; margin: 0; padding: 0; }
+.nv-timeline li { display: flex; align-items: baseline; gap: 7px; padding: 5px 0; border-bottom: 1px dashed var(--zm-rule); }
+.nv-tl-k { flex: 0 0 auto; font-family: var(--zm-kai); font-size: 9.5px; color: #8B7C64; }
+.nv-tl-t { flex: 1; min-width: 0; font-family: var(--zm-song); font-size: 12px; color: #2E2A23; }
+.nv-timeline li em { font-family: var(--zm-mono); font-size: 9px; color: #A4967D; font-style: normal; }
+.nv-clues p { font-family: var(--zm-song); font-size: 12px; line-height: 1.65; padding: 4px 0; }
+.nv-clues em { font-family: var(--zm-mono); font-size: 9px; color: #8B7C64; font-style: normal; margin-right: 6px; }
+.nv-add-row { margin-top: 8px; }
+.nv-input {
+  width: 100%; border: 0; border-bottom: 1px solid rgba(126, 104, 72, 0.4);
+  background: transparent; outline: none; padding: 5px 0;
+  font-family: var(--zm-kai); font-size: 11.5px; color: #3B342A;
+}
+.nv-input::placeholder { color: #A4967D; }
+.nv-input:focus { border-bottom-color: var(--zm-zhu); }
+
+/* 伏笔分组 */
+.nv-payoff { padding: 0 0 12px; border-bottom: 1px solid var(--zm-rule); margin-bottom: 4px; }
+.nv-pay-group { margin-bottom: 10px; }
+.nv-pay-gh { font-family: var(--zm-kai); font-size: 10.5px; letter-spacing: 0.14em; color: #8B7C64; border-left: 2px solid var(--zm-rule); padding-left: 7px; margin-bottom: 5px; }
+.nv-pay-row { padding: 5px 0 7px 9px; border-bottom: 1px dashed var(--zm-rule); }
+.nv-pay-desc { font-family: var(--zm-song); font-size: 12px; line-height: 1.6; color: #2E2A23; }
+.nv-pay-meta { font-family: var(--zm-mono); font-size: 9px; color: #A4967D; margin-top: 3px; }
+
+/* 世界线编年 */
+.nv-chronicle li { padding: 8px 0 9px 12px; border-left: 1px solid var(--zm-rule); position: relative; }
+.nv-chronicle li::before { content: ""; position: absolute; left: -3px; top: 13px; width: 5px; height: 5px; background: var(--zm-zhu); }
+.nv-ch-n { font-family: var(--zm-mono); font-size: 9.5px; color: var(--zm-zhu); margin-right: 8px; }
+.nv-ch-t { font-family: var(--zm-song); font-size: 12.5px; color: #2E2A23; }
+.nv-chronicle li em { font-family: var(--zm-kai); font-size: 9.5px; color: #8B7C64; font-style: normal; margin-left: 8px; }
+.nv-chronicle li p { font-family: var(--zm-song); font-size: 11.5px; line-height: 1.65; color: #4A4237; margin-top: 5px; }
+.nv-chronicle li .nv-ch-ev { font-family: var(--zm-kai); font-size: 10px; color: #8B7C64; }
+
+/* 世界卡分类条 + 15 格 */
+.nv-cat-bar { display: flex; gap: 12px; border-bottom: 1px solid var(--zm-rule); padding-bottom: 7px; }
+.nv-cat-bar button { border: 0; background: none; cursor: pointer; padding: 2px 0; font-family: var(--zm-kai); font-size: 11px; color: #8B7C64; border-bottom: 2px solid transparent; }
+.nv-cat-bar button.on { color: var(--zm-zhu); border-bottom-color: var(--zm-zhu); }
+.nv-cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 9px 0 4px; }
+.nv-cat-grid button {
+  display: flex; align-items: center; justify-content: space-between; gap: 3px;
+  border: 1px solid var(--zm-rule); background: transparent; cursor: pointer;
+  padding: 3px 5px; font-family: var(--zm-kai); font-size: 9.5px; color: #6E6049;
+  text-align: left; transition: border-color 0.16s, color 0.16s;
+}
+.nv-cat-grid button:hover { border-color: rgba(155, 58, 44, 0.45); }
+.nv-cat-grid button.on { border-color: var(--zm-zhu); color: var(--zm-zhu); background: rgba(155, 58, 44, 0.05); }
+.nv-cat-grid em { font-family: var(--zm-mono); font-size: 9px; color: #A4967D; font-style: normal; }
+
+/* 世界卡 */
+.nv-card { padding: 7px 0 8px; border-bottom: 1px dashed var(--zm-rule); }
+.nv-card.pending { border-left: 2px solid rgba(155, 58, 44, 0.5); padding-left: 8px; }
+.nv-card.off { opacity: 0.55; }
+.nv-card-head { display: flex; align-items: baseline; gap: 8px; }
+.nv-card-t { flex: 1; font-family: var(--zm-song); font-size: 13px; color: #2E2A23; }
+.nv-card-head em { font-family: var(--zm-kai); font-size: 9.5px; color: var(--zm-zhu); font-style: normal; }
+.nv-card.off .nv-card-head em { color: #8B7C64; }
+.nv-card-c { font-family: var(--zm-song); font-size: 11.5px; line-height: 1.6; color: #4A4237; margin-top: 4px; }
+.nv-card-meta { font-family: var(--zm-mono); font-size: 9px; color: #A4967D; margin-top: 3px; }
+
+/* 浮体：世界卡独立一色（低饱和赭，与物品朱、线索青拉开） */
+.zm-float.world { --zc: #8A6A3C; border-left-color: #8A6A3C; }
+.zm-float.world .zm-float-cat { color: #8A6A3C; }

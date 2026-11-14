@@ -3,12 +3,18 @@ import {
   parseGameOutput,
   buildMemorySummary,
   buildActionPrompt,
+  buildGameSystemPrompt,
   buildPersonaContract,
   buildPersonaRoundAnchor,
   isConfrontationalAction,
   rollTier,
   buildRollDirective,
 } from "./game-prompts";
+import { syncRound } from "./narrative/sync";
+import { buildNarrativeContext } from "./narrative/context";
+import { writeEnvelope } from "./narrative/ledger";
+import { readNarrative } from "./narrative/ledger";
+import { causalityOnly } from "./session-extensions";
 import type { GameActionInput, GameSessionContext } from "./types";
 
 // 验证游戏模式「背包物品归属」解析：CI| 格式带归属者字段。
@@ -401,5 +407,49 @@ describe("isConfrontationalAction / rollTier —— 检定判定", () => {
     expect(d).toContain("d100 = 87");
     expect(d).toContain("成功");
     expect(d).toContain("必须如实演绎");
+  });
+});
+
+// 叙事系统移植：账本要真的进提示词（不是只画在左抽屉里），且信封不破坏因果读取。
+describe("叙事账本注入提示词 · 协同闭环", () => {
+  const baseCtx: GameSessionContext = {
+    bookName: "测试书", chapterTitle: "第一章", outline: null, existingContent: null,
+    characters: [], worldLore: [], previousTurns: [], entities: [], items: [],
+    currentRound: 1, totalWords: 0, maxWords: 3000, plotProgress: 5,
+  };
+
+  it("叙事上下文原样注入，占位符被替换、不残留", () => {
+    const r = syncRound(null, {
+      round: 1, chapterIndex: 0, chapterTitle: "第一章", totalChapters: 1,
+      narrative: "林舟推开木门。", playerAction: "推门",
+      newEntities: [{ name: "青云宗", type: "faction", description: "山门大派" }],
+      gainedItems: [], titles: [],
+      plantedSeeds: [{ id: "cs_1", type: "羁绊", subject: "老陈", description: "当年欠他一条命", plantedRound: 1, triggered: false }],
+      triggeredSeeds: [],
+    });
+    const context = buildNarrativeContext(r.ledger, { chapterIndex: 0, totalChapters: 1 });
+    const prompt = buildGameSystemPrompt({ ...baseCtx, narrativeContext: context });
+    expect(prompt).toContain("## 待收伏笔");
+    expect(prompt).toContain("老陈");
+    expect(prompt).toContain("## 故事线");
+    expect(prompt).not.toContain("{narrativeSection}");
+  });
+
+  it("不传上下文时该段为空，模板其它内容不受影响", () => {
+    const prompt = buildGameSystemPrompt(baseCtx);
+    expect(prompt).not.toContain("{narrativeSection}");
+    expect(prompt).toContain("## 写作风格要求");
+  });
+
+  it("信封写回后 causalityOnly 仍读到因果种子（零迁移不破坏跨章继承）", () => {
+    const seeds = [{ id: "cs_1", type: "羁绊", subject: "老陈", description: "当年欠他一条命", plantedRound: 1, triggered: false }];
+    const r = syncRound(null, {
+      round: 1, chapterIndex: 0, chapterTitle: "第一章", totalChapters: 1,
+      narrative: "林舟推门。", playerAction: "推门", newEntities: [], gainedItems: [], titles: [],
+      plantedSeeds: [], triggeredSeeds: [],
+    });
+    const env = writeEnvelope(seeds, seeds, r.ledger);
+    expect(causalityOnly(env)).toHaveLength(1);
+    expect(readNarrative(env).version).toBe(1);
   });
 });

@@ -10,6 +10,9 @@
 
 import type { GameSessionContext, GameActionInput } from "./types";
 import { ACTION_LABELS } from "./types";
+import { buildCausalityContext } from "./causality-ledger";
+import { buildDeclaredFactsContext } from "./declare-fact";
+import { buildGoalsContext } from "./goals";
 
 // ─── 操作归一化（阿游 P0：唯一归一化点）────────────────────────────
 // AI 产出中文操作（CI|获得|…/CI|消耗|/CI|装备|/CI|丢弃|），而引擎(game-engine.ts)、
@@ -321,6 +324,19 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 9. 如果累计字数接近或超过 {maxWords} 字的限制，应该开始收束剧情，给出"走向章节结尾"的选项
 10. 玩家的行动（尤其是自定义输入）只是「意图声明」，不是既定结果：你必须按剧情合理性、角色能力与当前处境裁决成败——可以失败、被阻止、被反制。明显违背常理或实力悬殊的意图（如凡人妄图一击灭敌、凭空杀人夺宝）不可直接兑现：让剧情给出合理的阻力或反制（如被对方轻松化解、反被制服），也可用幽默化解（如对方一个侧身躲开，把你当成玩笑）。不要生硬拒绝、不要中断叙事，让裁决本身成为有趣的故事。
 11. {narrativeRule}
+12. 世界不是只回应你的回声（R9·世界脉动）：即便玩家此轮只是观察或休息，世界也在自行运转——NPC 各有其事、时间持续流动、远方可能有消息传来。你可以在叙事里自然带出"世界也在继续"的旁支：其他人的动向、某个被遗忘的约定开始发酵、季节推移、一处未被探索之地的变化。让故事像活的世界，而非只对玩家按键反应的机器。
+13. 因果账（结构行，引擎记账用）：本轮若结了仇、许了诺、欠下人情、救过人、动过不该动的东西，就在【情节进度：X%】那一行的**下一行**直接写：
+   CAUSE|类型|相关实体|描述
+   类型只能取：善缘、仇怨、羁绊、因果、誓言（例：CAUSE|仇怨|赌坊打手|当众打翻了他，这笔账他记下了）。
+   若之前种下的因在本轮兑现了，再加一行 CAUSE_DONE|相关实体|类型。
+   没有未了的后果就不写这行；不要向玩家解释它，也不要加 ===因果=== 之类的标题。
+
+## 输出顺序（照这个结构写，结构行有则写、无则整段省略）
+1) 叙事正文
+2) 【情节进度：X%】
+   （紧接下一行写 CAUSE|… ，若本轮埋了因）
+3) 3-4 个编号选项
+4) 其余结构行：===新实体=== / ===角色物品变动=== / ===暗线===
 
 ## 写作风格要求
 - 每段叙事有明确的推进感，不做无效重复描写
@@ -329,6 +345,10 @@ const GAME_SYSTEM_PROMPT = `你是一位资深互动小说大师，正在与用�
 - 新信息（实体/物品）自然融入叙事，不生硬介绍
 
 {memorySection}
+{causalitySection}
+{narrativeSection}
+{declaredFactsSection}
+{goalsSection}
 {historySection}{secretSection}`;
 
 // ─── 用户行动提示词模板 ────────────────────────────────────────
@@ -346,6 +366,10 @@ const ACTION_PROMPTS: Record<string, string> = {
     "【使用物品】使用背包中的物品。{itemHint}",
   rest:
     "【休息】找一个安全的地方休息恢复。时间推进，状态恢复，可能会有突发事件或梦境预兆。",
+  // R9 声明事实：这不是"角色尝试"，而是玩家行使作者权确立的世界设定。
+  // 文案必须把差别说死，否则模型会把它当成一次可能失败的行动来"裁决"。
+  declare:
+    "【玩家声明事实】玩家以「作者权」直接确立了一条世界既定事实：{customText}\n这条事实即刻为真，不可违背、不可质疑、不存在失败可能。请把它当作已经成立的世界设定，自然融入本轮叙事（人物与环境都按这条事实运作），不要把它当成角色的尝试或请求。",
   custom: "{customText}",
 };
 
@@ -492,7 +516,8 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
   const progressPercent =
     ctx.maxWords > 0 ? Math.round((ctx.totalWords / ctx.maxWords) * 100) : 0;
 
-  // ── 叙事视点（三档）：只改口径，不改机制 —— 同一套演算，换一种看戏的位置 ──
+  // ── 三档玩法：不是换人称，是换规则 ──
+  // 玩家能感觉到的差别必须是「世界怎么回应我」，而不是「句子里有没有"你"」。
   const actorRule =
     mode === "god"
       ? "玩家以上帝/GM 身份给出编排（安排谁做什么、发生什么、镜头切到哪），你据此生成 1-3 段紧凑的群像叙事（共 300-600 字）：把编排演成多角色同时在场的好戏，每个角色按自己的目的与性格反应，可有并行线索"
@@ -506,9 +531,38 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
         ? `第三人称小说口径：始终用名字/他/她写「${lens}」，不用「你」；镜头跟随 ${lens}，只写 TA 能看到、听到、感知到的范围——TA 不知道的事不要提前揭露（悬念留给后面）。例如「${lens}握紧钥匙，林振山眯起了眼」。`
         : `叙事以第二人称「你」称呼玩家所扮演的角色（${lens}），让玩家以第一人称代入；其他角色才使用名字与第三人称。只写「你」能感知到的范围——你不知道的事不要提前揭露。例如「你握紧钥匙，林振山眯起了眼」。`;
 
+  const modeRule =
+    mode === "god"
+      ? [
+          "【本档规则 · 上帝】",
+          "· 玩家的输入是命令，不是请求。写「他死了」就是死了，写「天降陨石」就落下来。不要问玩家是否确定，不要要求铺垫，不要用合理性打折。",
+          "· 荒诞没有上限：突破神功、灌顶传承、凭空出现的势力与宝物，都可以直接成为事实。",
+          "· 不掷骰、不设失败、不写「你做不到」。要让代价存在，也是剧情代价（有人记恨、有势力盯上），不是能力门槛。",
+          "· 仍然要写好看：把命令演成有画面、有反应、有连锁后果的戏，而不是把玩家的话复述一遍。",
+        ].join("\n")
+      : mode === "third"
+        ? [
+            "【本档规则 · 小说】",
+            "· 玩家的输入是意图，要顺着剧情走。明显不合剧情时，不要拒绝、也不要在正文里说「这不可能」——把它变成波折：扑空、被打断、代价变大、惹出新麻烦。",
+            "· 荒诞容忍低：飞升、天降神物这类要有前置铺垫才成立，否则写成传闻、错觉或有人编的谎。",
+            "· 判定为戏剧性服务：小失手不必真失败（写成差一点、留下后患即可）；关键抉择才允许失败。",
+            "· 若玩家要见的人不在场，写成「扑了个空 / 托人带话 / 只看见他留下的痕迹」，不要假装他就在眼前。",
+            "· 转场按章节奏，路上可以略写，但要给出一句时间流逝的实感（天色、脚程、身上添的尘土）。",
+          ].join("\n")
+        : [
+            "【本档规则 · 沉浸】",
+            "· 玩家的输入是意图，受距离、物品、能力、身份的约束——这是本档的核心体验，不要替他抹平。",
+            "· 荒诞容忍极低：没有铺垫的奇迹一律不成立，写成巧合可以，写成神通不行。",
+            "· 判定要真：该失败就失败，失败要留下后果（伤、债、暴露、错过），不要每次都「惊险成功」。",
+            "· 做不到的事不要写进正文。「你身上没有这把刀」「你到不了百里之外」这类判断由系统在正文之外处理，你只写发生的事；正文里不要出现「你不能 / 系统不允许 / 条件不足」这种腔调。",
+            "· 转场要花时间：去近处是几刻，去远处是半日到数日，途中可以什么都没有发生，但要让人感到路是真的走了。",
+          ].join("\n");
+
+  const finalActorRule = `${actorRule}\n\n${modeRule}`;
+
   return GAME_SYSTEM_PROMPT.replace("{bookName}", ctx.bookName)
     .replace("{chapterTitle}", ctx.chapterTitle)
-    .replace("{actorRule}", actorRule)
+    .replace("{actorRule}", finalActorRule)
     .replace("{narrativeRule}", narrativeRule)
     .replace("{outlineSection}", outlineSection)
     .replace("{existingSection}", existingSection)
@@ -522,6 +576,11 @@ export function buildGameSystemPrompt(ctx: GameSessionContext): string {
     .replace("{itemsSection}", itemsSection)
     .replace("{memorySection}", buildMemorySummary(ctx))
     .replace("{historySection}", historySection)
+    .replace("{causalitySection}", buildCausalityContext(ctx.causalitySeeds || []))
+    // 叙事账本（故事线 / 伏笔 / 世界卡 / 阶段）：空账本时为空串，不污染 prompt
+    .replace("{narrativeSection}", ctx.narrativeContext || "")
+    .replace("{declaredFactsSection}", buildDeclaredFactsContext(ctx.declaredFacts || []))
+    .replace("{goalsSection}", buildGoalsContext(ctx.goals || []))
     .replace("{secretSection}", secretSection);
 }
 
@@ -532,8 +591,12 @@ export function buildActionPrompt(input: GameActionInput): string {
   const template =
     ACTION_PROMPTS[input.actionType] ?? ACTION_PROMPTS.custom;
 
+  // 声明事实的正文来自 declareText（actionText 可能只是兜底标签），二者取其一
+  const customText =
+    input.actionType === "declare" ? input.declareText || input.actionText : input.actionText;
+
   let prompt = template
-    .replace("{customText}", input.actionText)
+    .replace("{customText}", customText)
     .replace("{itemHint}", input.targetItem ? `使用：${input.targetItem}` : "请列出可以使用的物品");
 
   // 阿游 P1-1：显式承接上一轮玩家选择的选项，让 AI 知道从哪个分支继续推进。
@@ -547,6 +610,13 @@ export function buildActionPrompt(input: GameActionInput): string {
   // 注入到 prompt 头部，让 AI 把该对象作为本轮行动的核心受者。
   if (input.target && input.target.trim()) {
     prompt = `【行动目标】本次行动针对：${input.target.trim()}。请围绕该对象展开叙事与反应（对方的回应、状态变化等）。\n` + prompt;
+  }
+
+  // 轻回合（JEV 分流）：看一眼、挪一步这类动作不该被写成一大段，
+  // 否则节奏拖沓——玩家挪个位置要看四段描写，体感就是"卡"。
+  if (input.light) {
+    prompt +=
+      "\n（轻回合：只写 1-2 句——这个动作的直接结果 + 一处感官细节。不展开对话、不引入新人物、不写心理长段。）";
   }
 
   return prompt;
@@ -565,6 +635,10 @@ export function parseGameOutput(rawOutput: string): {
   newTricks: Array<{ name: string; owner: string; truth: string }>;
   /** 暗线销账（P1）：REVEAL|物品名|归属者——真相已揭露，引擎从暗账移除该条 */
   newReveals: Array<{ name: string; owner: string }>;
+  /** R9 因果链：CAUSE|类型|相关实体|描述——AI 埋下的"因"，引擎抽为种子库 */
+  causality: Array<{ type: string; subject: string; description: string }>;
+  /** R9 因果兑现：CAUSE_DONE|相关实体|类型——AI 明确让某因果回响，引擎标记种子已触发 */
+  causalityDone: Array<{ subject: string; type?: string }>;
 } {
   let narrative = rawOutput;
   const options: Array<{ index: number; text: string }> = [];
@@ -572,6 +646,8 @@ export function parseGameOutput(rawOutput: string): {
   const itemChanges: Array<{ operation: string; name: string; quantity: number; owner?: string; category?: string }> = [];
   const newTricks: Array<{ name: string; owner: string; truth: string }> = [];
   const newReveals: Array<{ name: string; owner: string }> = [];
+  const causality: Array<{ type: string; subject: string; description: string }> = [];
+  const causalityDone: Array<{ subject: string; type?: string }> = [];
   let plotProgress = -1;
 
   // ── 提取选项（阿游 P1-1 重写）──
@@ -694,6 +770,33 @@ export function parseGameOutput(rawOutput: string): {
     narrative = narrative.replace(trickSection[0], "").trim();
   }
 
+  // ── 提取因果链（R9）──
+  // 两种写法都认：① 写在 ===因果=== 段里；② 直接内联一行（不要求标题）。
+  // 为什么要认内联：实测当前模型会整块忽略"尾随结构段"（NE| / CI| / 因果 一起丢），
+  // 只肯把标记写在【情节进度】这类正文流里。若只认段头，功能在真机上永远是空的——
+  // 代码全绿、界面正常、因果库零条，这是最难发现的那种"假成功"。
+  const allLines = rawOutput.split("\n");
+  for (const raw of allLines) {
+    const line = raw.trim();
+    if (line.startsWith("CAUSE_DONE|")) {
+      const parts = line.slice("CAUSE_DONE|".length).split("|").map((s) => s.trim());
+      if (parts[0]) causalityDone.push({ subject: parts[0], type: parts[1] || undefined });
+    } else if (line.startsWith("CAUSE|")) {
+      const parts = line.slice("CAUSE|".length).split("|").map((s) => s.trim());
+      if (parts.length >= 3 && parts[0] && parts[1] && parts[2]) {
+        causality.push({ type: parts[0], subject: parts[1], description: parts[2] });
+      }
+    }
+  }
+  // 结构行与段头一律不进正文
+  narrative = narrative
+    .replace(/===因果(兑现)?===\s*\n?/g, "")
+    .split("\n")
+    .filter((l) => !/^CAUSE(_DONE)?\|/.test(l.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
   // ── 提取情节进度 ──
   const progressMatch = rawOutput.match(/【情节进度[：:]\s*(\d+)%?】/);
   if (progressMatch) {
@@ -704,7 +807,7 @@ export function parseGameOutput(rawOutput: string): {
   // 清理多余空行
   narrative = narrative.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals };
+  return { narrative, options, newEntities, itemChanges, plotProgress, newTricks, newReveals, causality, causalityDone };
 }
 
 /**

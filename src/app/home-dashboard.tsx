@@ -321,6 +321,54 @@ export default function HomeDashboard({ initialProjects }: { initialProjects?: P
         </div>
       </section>
 
+      {/* ── 模式入口（v3.2）：小说 / 游戏（自由）——两条路互相独立，别让人猜 ── */}
+      <section aria-label="选择模式" id="modes" className="relative z-10 border-b border-[var(--nv-border-2)]">
+        <div className="mx-auto max-w-7xl px-6 py-8">
+          <p className="text-[11px] tracking-[0.18em] text-[var(--nv-text-tertiary)]">两种模式 · 共用同一套世界设定</p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            {/* 小说模式：产出是一本书 */}
+            <Link
+              href="/explore"
+              className="group relative overflow-hidden rounded-2xl border border-[var(--nv-border-2)] bg-[var(--nv-surface-1)] p-5 transition-all hover:border-[var(--nv-accent)]/60 hover:bg-[var(--nv-surface-2)]"
+            >
+              <span className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--nv-accent-soft)] text-[var(--nv-accent)]">
+                  <Icon name="book" size={17} />
+                </span>
+                <span className="text-base font-semibold text-[var(--nv-text-primary)]">小说模式</span>
+                <span className="ml-auto rounded-full border border-[var(--nv-border-2)] px-2 py-0.5 text-[10px] text-[var(--nv-text-tertiary)]">产出是一本书</span>
+              </span>
+              <span className="mt-3 block text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+                章纲、正文、角色与世界书，按章节推进到成稿；可导入已有 txt / epub / docx 续写，随时导出。
+              </span>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[var(--nv-accent)]">
+                开始写小说 <Icon name="arrowRight" size={12} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+
+            {/* 游戏（自由）模式：产出是一条世界线 */}
+            <Link
+              href="/gamesaga"
+              className="group relative overflow-hidden rounded-2xl border border-[var(--nv-creative)]/30 bg-[var(--nv-creative)]/[0.05] p-5 transition-all hover:border-[var(--nv-creative)]/60 hover:bg-[var(--nv-creative)]/[0.09]"
+            >
+              <span className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--nv-creative)]/15 text-[var(--nv-creative)]">
+                  <Icon name="gamepad" size={17} />
+                </span>
+                <span className="text-base font-semibold text-[var(--nv-text-primary)]">游戏（自由）模式</span>
+                <span className="ml-auto rounded-full border border-[var(--nv-creative)]/30 px-2 py-0.5 text-[10px] text-[var(--nv-creative)]">产出是一条世界线</span>
+              </span>
+              <span className="mt-3 block text-xs leading-relaxed text-[var(--nv-text-tertiary)]">
+                没有强制主线：你扮演一个人，自己定目标、自己声明设定，种下的因会在后面回响。玩出的内容可导出回小说。
+              </span>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[var(--nv-creative)]">
+                进入自由模式 <Icon name="arrowRight" size={12} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* 灵感文体墙：精选文体悬浮卡，点击即以该文体开局（取代旧版「纸舟星海」） */}
       <GenreWall onPick={(genre) => router.push('/explore?genre=' + encodeURIComponent(genre))} loadingId={null} />
 

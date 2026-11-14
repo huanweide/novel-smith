@@ -9,6 +9,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getApprovedCharacters } from "@/lib/approved-cards";
+import { causalityOnly } from "@/core/game/session-extensions";
+import { readNarrative } from "@/core/game/narrative/ledger";
+import { narrativeSummary } from "@/core/game/narrative/context";
 
 type Params = { params: Promise<{ sagaId: string }> };
 
@@ -79,6 +82,33 @@ export async function GET(_req: Request, { params }: Params) {
       // 是否已有可编辑角色卡档案（前端据此在首次进入时弹一次「确认你的角色」）
       hasCharacterSheets: !!saga.characterSheets && Object.keys(saga.characterSheets as object).length > 0,
       rollMode: saga.rollMode,
+      // 好感账：人物卡要显示"他对你什么态度"。此前该字段只被 saga-map 读去上色，界面从不显示。
+      relations: (() => { try { return JSON.parse((saga as any).relations || "{}"); } catch { return {}; } })(),
+      // 因果脉络（伏笔系统）：跨章持久化的种子库，玩家可见"种下的因 / 已了的果"。
+      // 此前该字段只被引擎写入、提示词读取，前端从不展示——这正是游戏模式"抄小说系统伏笔"的落地点。
+      causality: (() => {
+        try {
+          const raw = (saga as any).causality;
+          if (!raw) return [];
+          return causalityOnly(raw).map((s: any) => ({
+            id: s.id,
+            type: s.type,
+            subject: s.subject,
+            description: s.description,
+            plantedRound: s.plantedRound,
+            triggered: !!s.triggered,
+            triggeredRound: s.triggeredRound ?? null,
+          }));
+        } catch {
+          return [];
+        }
+      })(),
+      // 叙事账本（故事线/伏笔/世界卡/世界线）：主接口只带摘要，详情走 /narrative 按需拉，
+      // 避免每轮 load() 把整本账本塞进主响应。
+      narrative: {
+        summary: narrativeSummary(readNarrative((saga as any).causality)),
+        hasLedger: !!readNarrative((saga as any).causality).storylines.length,
+      },
       playAsCandidates,
       chapters: saga.chapters.map((c) => ({
         id: c.id,

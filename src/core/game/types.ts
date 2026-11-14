@@ -16,7 +16,8 @@ export type GameActionType =
   | "use_item"  // 使用背包物品
   | "rest"      // 休息/恢复
   | "option"    // 选择了编号选项
-  | "custom";   // 自定义文本输入
+  | "custom"    // 自定义文本输入
+  | "declare";  // 玩家声明一个世界事实（R9：共享叙事权威）
 
 export const ACTION_LABELS: Record<GameActionType, string> = {
   observe: "观察",
@@ -27,6 +28,7 @@ export const ACTION_LABELS: Record<GameActionType, string> = {
   rest: "休息",
   option: "选项",
   custom: "自定义",
+  declare: "声明事实",
 };
 
 export const ACTION_ICONS: Record<GameActionType, string> = {
@@ -38,6 +40,7 @@ export const ACTION_ICONS: Record<GameActionType, string> = {
   rest: "💤",
   option: "🔢",
   custom: "✏️",
+  declare: "🖋️",
 };
 
 // ─── 游戏实体 ─────────────────────────────────────────────────
@@ -94,6 +97,10 @@ export interface GameActionInput {
   actionText: string;       // 自定义文本 或 按钮标签
   selectedOption?: number;  // 如果选了编号选项
   selectedOptionText?: string; // 上一轮选项对应的文本（承接分支用，由引擎从 states 补全）
+  /** 玩家声明事实（actionType=declare 时使用）：一句话既定事实，引擎校验后并入世界状态 */
+  declareText?: string;
+  /** JEV 分流：轻回合（看一眼/挪一步）只写过场，不展开——节奏不该被小事拖慢 */
+  light?: boolean;
   targetItem?: string;      // 如果用物品，目标物品名
   target?: string;          // 行动目标：本次交互针对的角色/生物/势力/物品名（目标指定，阿游 R-目标）
   /** 两段式判定：前端已掷的骰（/api/game/roll），引擎直接采用不重掷（AI 只演不判） */
@@ -151,6 +158,23 @@ export interface GameSessionContext {
   playAsName?: string | null; // first/third 的镜头角色
   // 暗账（表层/真相分层，P1）：仅注入 prompt 给 AI，UI 不显示（god 模式例外：上帝本就全知）
   secretLedger?: Array<{ name: string; owner: string; truth: string; round: number }>;
+  // R9 自由度扩展：从会话/游戏本持久态读取，注入 prompt 让 AI 围绕其创作
+  causalitySeeds?: CausalitySeed[]; // 未了因果种子库（鬼谷八荒式因果链）
+  declaredFacts?: DeclaredFact[];   // 玩家既定事实（FATE Core 式共享叙事权威）
+  goals?: PlayerGoal[];             // 玩家自定义目标（无强制主线）
+  /**
+   * 叙事账本上下文（故事线 / 待收伏笔 / 已确认世界卡 / 6 阶段 / 跨章编年）。
+   * 由游戏本路径从 saga.causality 信封读出并注入；非游戏本路径为空串。
+   * 只有「玩家看得见 + AI 也看得见」才算协同，单做 UI 不算。
+   */
+  narrativeContext?: string;
+  /** 章序元数据，供结算时的 syncRound 记编年 / 算阶段（避免重复查库） */
+  sagaMeta?: {
+    chapterIndex: number;
+    chapterTitle: string;
+    totalChapters: number;
+    worldTime?: string;
+  };
 }
 
 // ─── 游戏会话摘要（返回给前端）────────────────────────────────
@@ -177,4 +201,35 @@ export interface GameSessionSummary {
     narrative: string;
     options: GameOption[];
   }>;
+}
+
+// ─── R9 自由度扩展：因果链 / 声明事实 / 玩家目标 ──────────────
+
+/** 因果类型（与提示词 CAUSE|类型|相关实体|描述 白名单对齐） */
+export type CausalityType = "善缘" | "仇怨" | "羁绊" | "因果" | "誓言";
+
+/** 因果种子：玩家某个行动埋下的"因"，后续在合适时机自然回响（鬼谷八荒式"无限可能"引擎） */
+export interface CausalitySeed {
+  id: string;
+  type: CausalityType;
+  subject: string;   // 相关实体（人物/势力/地点）—— 因涉及谁
+  description: string; // 因的描述（埋下时的情形）
+  plantedRound: number; // 埋下轮次
+  triggered: boolean;   // 是否已兑现（回响）
+  triggeredRound?: number;
+}
+
+/** 玩家声明事实：玩家用"作者权"直接声明一个世界既定事实（FATE Core 式"declare a story detail"） */
+export interface DeclaredFact {
+  id: string;
+  text: string;       // 声明的事实文本
+  declaredRound: number;
+}
+
+/** 玩家自定义目标：无强制主线，玩家自定追求，AI 围绕其生成机会但不强行完成 */
+export interface PlayerGoal {
+  id: string;
+  text: string;
+  createdRound: number;
+  done?: boolean;
 }

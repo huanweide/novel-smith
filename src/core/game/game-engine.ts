@@ -20,6 +20,19 @@ import { buildGameSystemPrompt, buildActionPrompt, parseGameOutput, buildPersona
 import { arbitrateRoll, computeAdjustments, nextRollStats, judgeRoll, rateLabel, type RollStats } from "./roll-arbiter";
 import type { GameActionInput, GameTurnOutput, GameSessionContext, GameEntity, GameItem, GameOption, GameSessionSummary } from "./types";
 import { validateStateProposal } from "./state-proposal";
+// R9 自由度扩展：因果链 / 声明事实 / 目标 / 扩展态容器
+import { extractCausalitySeeds, markSeedTriggered, mergeSeeds } from "./causality-ledger";
+import { addDeclaredFact } from "./declare-fact";
+import { causalityOnly, parseExtensions, serializeExtensions } from "./session-extensions";
+// 自由模式三件套：动词表 / 好感账 / 拾取门槛
+import { inferVerb } from "./verbs";
+import { applyRelations, describeChange, outcomeFromTurn, type RelationChange, type RelationMap } from "./relation-ledger";
+import { gateLoot, lootNotice } from "./item-gate";
+// 叙事系统移植：账本信封 / 提示词上下文 / 每轮协同推进
+import { readNarrative, writeEnvelope } from "./narrative/ledger";
+import { buildNarrativeContext } from "./narrative/context";
+import { syncRound, capDiscoveries, toRoundSignals, type NarrativeDiscovery } from "./narrative/sync";
+import type { DiscoveryKind } from "./discovery-view";
 
 // 物品变动输入（含可选 owner，用于背包按 name+owner 隔离，阿游 P1）。
 interface ItemChangeRequest {
@@ -318,15 +331,27 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
   // ── 游戏本（Saga）路径：不绑小说章节，章纲/正文来自 GameSagaChapter，
   //    角色/世界书等长期资产在派生本下实时取项目现值（跨模式共享），从零新建用前传快照。──
   if (session.sagaChapterId && !session.nodeId) {
-    const [chapter, saga, states] = await Promise.all([
+    const [chapter, saga, states, chapterCount] = await Promise.all([
       prisma.gameSagaChapter.findUnique({ where: { id: session.sagaChapterId } }),
       prisma.gameSaga.findUnique({ where: { id: session.sagaId! } }),
       prisma.gameState.findMany({
         where: { sessionId: session.id },
         orderBy: { round: "asc" },
       }),
+      prisma.gameSagaChapter.count({ where: { sagaId: session.sagaId! } }),
     ]);
     if (!chapter || !saga) throw new Error("游戏本或章节不存在");
+
+    // 叙事账本：从 saga.causality 信封读出（零迁移，老存档裸数组 → 空账本）。
+    // 注入提示词让 AI 知道当前主线、未收伏笔、已确认世界设定与阶段——
+    // 只看 UI 不注入，等于系统没协同。
+    const sagaMeta = {
+      chapterIndex: chapter.index || 0,
+      chapterTitle: chapter.title,
+      totalChapters: Math.max(1, chapterCount),
+      ...(saga.gameTime ? { worldTime: saga.gameTime } : {}),
+    };
+    const narrativeContext = buildNarrativeContext(readNarrative(saga.causality), sagaMeta);
 
     let snap: any = {};
     try { snap = saga.sourceSnapshot ? JSON.parse(saga.sourceSnapshot) : {}; } catch { /* 坏快照当空 */ }
@@ -378,9 +403,21 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
       // 叙事视点：first 第二人称亲历 | third 第三人称小说镜头 | god 群像上帝/GM
       narrativeMode: ((saga as any).narrativeMode || "first") as "first" | "third" | "god",
       playAsName: saga.playAsName ?? null,
+      narrativeContext,
+      sagaMeta,
       // 暗账（P1 谎言与伪装）：未揭露的真相注入 prompt（仅 AI 可见），跨章持久
       secretLedger: (() => {
         try { return JSON.parse(saga.secretLedger || "[]"); } catch { return []; }
+      })(),
+      // R9：因果种子跨章继承（saga.causality 存裸数组）+ 本会话扩展态（声明事实/目标）。
+      // 两者都必须注入，否则玩家「声明过的设定」到下一轮就忘了——那比没有这个功能更伤。
+      ...(() => {
+        const ext = parseExtensions(session.extensions);
+        return {
+          causalitySeeds: mergeSeeds(causalityOnly(saga.causality), ext.causality),
+          declaredFacts: ext.declaredFacts,
+          goals: ext.goals,
+        };
       })(),
     };
   }
@@ -437,6 +474,11 @@ async function loadGameContext(session: any): Promise<GameSessionContext> {
     totalWords: session.totalWords,
     maxWords: session.maxWords,
     plotProgress: session.plotProgress,
+    // R9：章节节点路径同样承载扩展态（schema 注释指明这是主路径）
+    ...(() => {
+      const ext = parseExtensions(session.extensions);
+      return { causalitySeeds: ext.causality, declaredFacts: ext.declaredFacts, goals: ext.goals };
+    })(),
   };
 }
 
@@ -453,6 +495,12 @@ export async function* processGameTurn(input: GameActionInput, signal?: AbortSig
   options?: GameOption[];
   newEntities?: GameEntity[];
   itemChanges?: { operation: string; name: string; quantity: number }[];
+  /** 称号：进「名号」分类，不进背包（"天下第一"不是一件东西） */
+  titles?: string[];
+  /** 本轮好感变化，界面直接读 */
+  relationChanges?: RelationChange[];
+  /** 发现提示：物品 / 称号 / 关系 / 伏笔 / 世界卡 / 里程碑 / 时辰。章末可归档，不归档则消失 */
+  discoveries?: Array<{ kind: DiscoveryKind; text: string }>;
   plotProgress?: number;
   wordCount?: number;
   /** P0-4 跑团检定：骰面事件（含检定官明细） */
@@ -498,6 +546,12 @@ async function* runLockedTurn(
   options?: GameOption[];
   newEntities?: GameEntity[];
   itemChanges?: { operation: string; name: string; quantity: number }[];
+  /** 称号：进「名号」分类，不进背包（"天下第一"不是一件东西） */
+  titles?: string[];
+  /** 本轮好感变化，界面直接读 */
+  relationChanges?: RelationChange[];
+  /** 发现提示：物品 / 称号 / 关系 / 伏笔 / 世界卡 / 里程碑 / 时辰。章末可归档，不归档则消失 */
+  discoveries?: Array<{ kind: DiscoveryKind; text: string }>;
   plotProgress?: number;
   wordCount?: number;
   /** P0-4 跑团检定：骰面事件（含检定官明细） */
@@ -508,6 +562,26 @@ async function* runLockedTurn(
   reasons?: string[];
   error?: string;
 }> {
+  // R9 声明事实：玩家行使「作者权」直接确立一条世界事实。
+  // 时机必须在组装提示词**之前**入账——否则本轮 AI 写的仍是「没有这条事实」的世界，
+  // 玩家会看到自己刚声明的设定被无视，这比没有这个功能更伤。
+  if (input.actionType === "declare") {
+    const text = (input.declareText || input.actionText || "").trim();
+    const prev = parseExtensions(session.extensions);
+    const res = addDeclaredFact(prev.declaredFacts, text, session.currentRound);
+    if (res.error) {
+      yield { type: "error", error: res.error };
+      return;
+    }
+    const next = { ...prev, declaredFacts: res.facts };
+    await prisma.gameSession.update({
+      where: { id: session.id },
+      data: { extensions: serializeExtensions(next) as any },
+    });
+    // 会话对象是本地副本：同步过去，本轮上下文立即生效
+    session.extensions = next;
+  }
+
   const ctx = await loadGameContext(session);
 
   // 2. 组装提示词
@@ -645,8 +719,8 @@ async function* runLockedTurn(
       model: llmConfig.writerModel,
       messages,
       temperature: 0.85,
-      // N1 修复：推理模型思考链吃预算，抬到 2500 保证正文非空（与 game/start 对齐）
-      maxTokens: 2500,
+      // 轻回合只写过场：预算压到 900（推理链仍吃预算）；正戏保留 4096
+      maxTokens: input.light ? 900 : 4096,
       signal, // 阿游 P1-1：把前端透传的 abort 信号转发到底层 fetch，停止后 LLM 真正中断、灭 token 浪费
     });
     for await (const chunk of stream) {
@@ -697,8 +771,24 @@ async function* runLockedTurn(
   const acceptedItemChanges = proposal.accepted.itemChanges as ItemChangeRequest[];
   const acceptedNewEntities = proposal.accepted.newEntities;
 
+  // 拾取门槛：无价值杂物不进背包（捡树枝生火只该发生在正文里），称号进 titles 不进 items。
+  // 只拦 gain——消耗/丢弃/损毁必须照常过闸，否则背包里的东西删不掉。
+  const lootGate = gateLoot(acceptedItemChanges);
+  const keptSet = new Set(lootGate.keep);
+  const storedItemChanges = acceptedItemChanges.filter((c) => keptSet.has(c));
+
   const newRound = session.currentRound + 1;
-  const updatedItems = applyItemChanges(ctx.items, acceptedItemChanges, newRound);
+
+  // R9 因果链：AI 本轮埋下的「因」入库，明确兑现的「果」销账。
+  // 与 states 放在同一个事务里写，避免「正文进去了、因果丢了」的半截态。
+  const extBefore = parseExtensions(session.extensions);
+  const plantedSeeds = extractCausalitySeeds(parsed.causality, newRound);
+  const causalityChanged = plantedSeeds.length > 0 || parsed.causalityDone.length > 0;
+  const settledSeeds = causalityChanged
+    ? markSeedTriggered(mergeSeeds(extBefore.causality, plantedSeeds), parsed.causalityDone, newRound)
+    : extBefore.causality;
+  const extNext = { ...extBefore, causality: settledSeeds };
+  const updatedItems = applyItemChanges(ctx.items, storedItemChanges, newRound);
 
   // 合并实体
   const existingEntities = ctx.entities;
@@ -722,7 +812,7 @@ async function* runLockedTurn(
 
   // 6.5 世界卡物品联动：游戏新获得的物品，若无对应 item 类世界书词条则自动补充（保留已有物品词条）
   // 批量查询去重（FIX-10 低风险项）：把循环内 N 次 findMany 合并为 1 次。
-  const gainItems = acceptedItemChanges
+  const gainItems = storedItemChanges
     .filter((c) => c.operation === "gain")
     .map((c) => ({ name: c.name, owner: (c as any).owner || "主角" }));
   if (gainItems.length > 0) {
@@ -776,9 +866,47 @@ async function* runLockedTurn(
         currentRound: newRound,
         totalWords: newTotalWords,
         plotProgress: finalProgress,
+        // 只有真的动了因果才写 extensions，避免每回合无谓写库
+        ...(causalityChanged ? { extensions: serializeExtensions(extNext) as any } : {}),
       },
     }),
   ]);
+
+  // R9 跨章：游戏本同步存一份因果到 saga.causality，下一章开局继承
+  // （章节会话各自独立，不同步就等于每章因果清零）。
+  //
+  // 2026-11-14 叙事系统移植：这里从「整列覆盖为裸数组」改成「读旧信封 → 协同推进 → 写回」。
+  // 原来直接写 settledSeeds 会冲掉同一个信封里的叙事账本（故事线/伏笔/世界卡/编年），
+  // 也会让非因果变化轮的跨章种子丢失。现在每轮都推进一次账本，五套系统共用这次演算。
+  let narrativeDiscoveries: NarrativeDiscovery[] = [];
+  if (session.sagaId) {
+    const prevSaga = await prisma.gameSaga.findUnique({
+      where: { id: session.sagaId },
+      select: { causality: true },
+    });
+    const prevRaw = prevSaga?.causality;
+    // 胶水逻辑抽成纯函数（toRoundSignals），可单测，不需跑 LLM 回合验证
+    const sync = syncRound(readNarrative(prevRaw), toRoundSignals({
+      round: newRound,
+      narrative: parsed.narrative,
+      playerAction: input.actionText || "",
+      newEntities,
+      gainedItemNames: storedItemChanges
+        .filter((c) => c.operation === "gain")
+        .map((c) => c.name),
+      titleNames: lootGate.titles.map((c) => c.name),
+      plantedSeeds,
+      settledSeeds,
+      meta: ctx.sagaMeta,
+    }));
+    narrativeDiscoveries = capDiscoveries(sync.discoveries);
+    // 信封写回：保留因果种子 + 叙事账本，老存档的其它键也原样保留
+    const envelope = writeEnvelope(prevRaw, settledSeeds, sync.ledger);
+    await prisma.gameSaga.update({
+      where: { id: session.sagaId },
+      data: { causality: envelope as any },
+    });
+  }
 
   // P1 暗账：TRICK 合并写入 saga.secretLedger（跨章持久的伏笔账，仅 AI 可见）。
   // 按 name+owner 去重：同一伪装重复输出只记一次；REVEAL 销账（真相已揭露，移除该条避免重复注入/重复揭露）。
@@ -803,6 +931,46 @@ async function* runLockedTurn(
     }
   }
 
+  // 好感度账：把"关系会变"真正写进 saga.relations。
+  // 此前该字段只有 saga-map 在读、全仓无人写，所以地图上的关系线永远是空的。
+  // 规则全确定性（见 relation-ledger.ts）：四动词 × 三结果查表，目击者按 0.3 折算，上下限 ±100。
+  let relationChanges: RelationChange[] = [];
+  if (session.sagaId) {
+    // 目标：优先用显式 target；否则从行动文本里认一个在场人名（认不出就不记，不瞎猜）
+    let target = (input.target || "").trim();
+    if (!target) {
+      const text = input.actionText || "";
+      const hit = (ctx.entities || []).find(
+        (e) => e.type === "character" && e.name && e.name !== ctx.playAsName && text.includes(e.name)
+      );
+      if (hit) target = hit.name;
+    }
+    if (target) {
+      const verb = inferVerb(input.actionType, input.actionText || "");
+      const outcome = outcomeFromTurn({
+        actionType: input.actionType,
+        preRolledSuccess:
+          input.preRolled && Number.isFinite(input.preRolled.successRate)
+            ? input.preRolled.d100 <= input.preRolled.successRate
+            : undefined,
+      });
+      const sagaRel = await prisma.gameSaga.findUnique({
+        where: { id: session.sagaId },
+        select: { relations: true },
+      });
+      const applied = applyRelations((sagaRel?.relations || null) as RelationMap | null, [
+        { verb, outcome, target },
+      ]);
+      if (applied.changes.length > 0) {
+        await prisma.gameSaga.update({
+          where: { id: session.sagaId },
+          data: { relations: applied.next as any },
+        });
+        relationChanges = applied.changes;
+      }
+    }
+  }
+
   // P1 世界卡联动（回合路径补齐，与开局路径 ensureItemLorebook 对齐）：
   // 回合内获得/转移的物品同步建/更新世界书词条（归属随剧情流动），长期资产跨模式共享。
   if (session.projectId) {
@@ -822,7 +990,25 @@ async function* runLockedTurn(
     narrative: parsed.narrative,
     options: finalOptions,
     newEntities,
-    itemChanges: parsed.itemChanges,
+    // 只回传真正入库的变动：杂物不进背包，前端也就不会弹"获得 树枝"
+    itemChanges: storedItemChanges.map((c) => ({
+      operation: c.operation,
+      name: c.name,
+      quantity: c.quantity ?? 1,
+    })),
+    // 称号与"发现"提示：让玩家看见被系统读出去的东西（章末可归档，不归档则消失）
+    titles: lootGate.titles.map((t) => t.name),
+    relationChanges,
+    discoveries: [
+      ...lootGate.keep
+        .filter((c) => c.operation === "gain")
+        .map((c) => ({ kind: "item" as const, text: lootNotice(c, "item") })),
+      ...lootGate.titles.map((c) => ({ kind: "title" as const, text: lootNotice(c, "title") })),
+      ...relationChanges.map((c) => ({ kind: "relation" as const, text: describeChange(c) })),
+      // 叙事系统协同产出：伏笔种下/回收、世界卡登记、里程碑、跨阶段。
+      // 与物品/称号/关系一样逐条上屏，不同颜色、错开出现、不用点确定。
+      ...narrativeDiscoveries.map((d) => ({ kind: d.kind, text: d.text })),
+    ],
     plotProgress: finalProgress,
     wordCount,
   };
@@ -931,6 +1117,12 @@ export async function* processGameStart(
   options?: GameOption[];
   newEntities?: GameEntity[];
   itemChanges?: { operation: string; name: string; quantity: number }[];
+  /** 称号：进「名号」分类，不进背包（"天下第一"不是一件东西） */
+  titles?: string[];
+  /** 本轮好感变化，界面直接读，不必再算一遍 */
+  relationChanges?: RelationChange[];
+  /** 发现提示：物品 / 称号 / 关系 / 伏笔 / 世界卡 / 里程碑 / 时辰。章末可归档，不归档则消失 */
+  discoveries?: Array<{ kind: DiscoveryKind; text: string }>;
   items?: GameItem[];
   plotProgress?: number;
   wordCount?: number;
@@ -1033,6 +1225,10 @@ export async function* processGameStart(
     plotProgress: 0,
     narrativeMode: sagaNarrativeMode,
     playAsName: sagaPlayAs?.playAsName ?? null,
+    // R9：开场时还没有因果种子/声明事实/目标（玩家进入后可随时声明）
+    causalitySeeds: [],
+    declaredFacts: [],
+    goals: [],
   };
 
   const systemPromptBase = buildGameSystemPrompt(ctx);
@@ -1112,7 +1308,7 @@ export async function* processGameStart(
       model: llmConfig.writerModel,
       messages,
       temperature: 0.85,
-      maxTokens: 2500,
+      maxTokens: 4096,
       signal,
     });
     for await (const chunk of stream) {
@@ -1353,7 +1549,7 @@ export async function endGameAndExport(sessionId: string): Promise<{
       messages,
       temperature: 0.8,
       // N1 修复：章尾收束段在推理模型下 400 预算会全被思考链吃光，抬到 2500
-      maxTokens: 2500,
+      maxTokens: 4096,
     });
     for await (const chunk of stream) {
       if (chunk.content) {

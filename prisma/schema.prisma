@@ -540,6 +540,8 @@ model GameSession {
   node        StoryNode?       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   saga        GameSaga?        @relation(fields: [sagaId], references: [id], onDelete: Cascade)
   sagaChapter GameSagaChapter? @relation(fields: [sagaChapterId], references: [id], onDelete: Cascade)
+  // R9 游戏模式扩展态：{ causality: 因果种子库[], declaredFacts: 玩家声明事实[], goals: 玩家目标[] }——跨轮持久，node 会话主路径承载
+  extensions  Json?
   states      GameState[]
 
   @@unique([projectId, nodeId]) // 一个章节同一时间只有一个活跃游戏会话
@@ -585,6 +587,7 @@ model GameSaga {
   characterSheets   Json?
   gameTime          String? // 游戏内时间
   longTermGoals     Json? // 长期目标（跨章主线）
+  causality         Json? // R9 跨章因果种子库（游戏本持久）：[{ id, type, subject, description, plantedRound, triggered }]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
