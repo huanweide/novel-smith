@@ -112,7 +112,7 @@ jobs:
 
       # 发布 Release + 上传三件套资产。GITHUB_TOKEN 由 Actions 自动注入（无需任何 secret 配置）。
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
