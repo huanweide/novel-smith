@@ -73,7 +73,7 @@ jobs:
       # step 日志匿名拉不到（需 admin），失败时把完整构建日志存成 artifact（匿名可下载）以便诊断
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-log
           path: build-log.txt
